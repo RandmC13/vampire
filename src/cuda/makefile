@@ -31,8 +31,8 @@ CUDA_OBJECTS= \
 	obj/cuda/transfer.o
 
 CUDA_ARCH=\
--gencode arch=compute_50,code=sm_50 \
--gencode arch=compute_50,code=compute_50 \
+# -gencode arch=compute_50,code=sm_50 \
+# -gencode arch=compute_50,code=compute_50 \
 -gencode arch=compute_61,code=sm_61 \
 -gencode arch=compute_61,code=compute_61 \
 -gencode arch=compute_70,code=compute_70 \
@@ -56,7 +56,7 @@ CUDA_MATRIX_TYPE = CSR
 #CUDA 8.0+
 #CUDA_CFLAGS= -O3 -I./hdr -DCUDA $(CUDA_ARCH) --use_fast_math -ftz=true -std=c++11 -Wno-deprecated-gpu-targets
 #CUDA 10.0 +
-CUDA_CFLAGS= -O3 -I./hdr -DCUDA $(CUDA_ARCH) --use_fast_math -ftz=true -std=c++14 -Wno-deprecated-gpu-targets -diag-suppress 549 -Wno-deprecated-declarations
+CUDA_CFLAGS= -O3 -I./hdr -DCUDA $(CUDA_ARCH) --use_fast_math -ftz=true -std=c++17 -Wno-deprecated-gpu-targets -diag-suppress 549 -Wno-deprecated-declarations
 
 $(CUDA_OBJECTS): obj/%.o: src/%.cu
 	$(NVCC) $< -dc -o $@ $(CUDA_CFLAGS) $(CUDA_PR) -DCUDA_MATRIX=$(CUDA_MATRIX_TYPE)
