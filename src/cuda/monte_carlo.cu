@@ -221,8 +221,6 @@ namespace vcuda
 
                 cudaMemcpy(d_sl_atoms, h_sl_atoms.data(), ::atoms::num_atoms * sizeof(int), cudaMemcpyHostToDevice);
 
-                std::cout << "Trying a step..."<< std::endl;
-
                 cudaDeviceSynchronize();
                 cudaError_t error = cudaGetLastError();
                 if(error != cudaSuccess)
@@ -231,9 +229,6 @@ namespace vcuda
                     exit(-1);
                 }
 
-                __mc_step();
-                std::cout << "Done"<< std::endl;
-
                 initialised = true;
 
                 return 0;
@@ -241,6 +236,9 @@ namespace vcuda
 
             void finalise()
             {
+
+                // nothing to free if Monte Carlo was never used
+                if (!initialised) return;
 
                 curandDestroyGenerator(gen);
 
