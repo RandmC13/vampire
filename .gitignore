@@ -106,5 +106,7 @@ run/unit-cell-creator
 temp/*
 #EOF
 
-# validation suite scratch results
+# validation suite: scratch results ignored; case definitions and reference outputs tracked
 test/validation/results/
+!test/validation/cases/**/case.json
+!test/validation/reference/**

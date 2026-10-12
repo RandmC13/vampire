@@ -36,7 +36,8 @@ def load_case(name):
 
 def case_names(selection):
    names = sorted(d for d in os.listdir(CASES) if os.path.isfile(os.path.join(CASES, d, "case.json")))
-   if selection:
+   if not selection: return [n for n in names if load_case(n)["kind"] != "benchmark"]   # benchmarks only on request
+   else:
       wanted = selection.split(",")
       missing = [w for w in wanted if w not in names]
       if missing: sys.exit("Unknown case(s): " + ", ".join(missing))
@@ -45,7 +46,7 @@ def case_names(selection):
 
 def run_names(case):
    # seeded cases get one run per seed, deterministic cases a single run
-   if case["kind"] == "deterministic" or case.get("model") == "precession": return ["run"]
+   if case["kind"] in ("deterministic", "benchmark") or case.get("model") == "precession": return ["run"]
    return ["seed%d" % s for s in range(1, case["seeds"] + 1)]
 
 def read_output(path):
@@ -94,6 +95,7 @@ def cmd_run(args):
 
    jobs = [(c, r) for c in names for r in run_names(load_case(c))]
    failed = []
+   for c in names: os.makedirs(os.path.join(base, c), exist_ok=True)   # before threads, avoids makedirs races
    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
       futures = [pool.submit(run_one, exe, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
       for fut in concurrent.futures.as_completed(futures):
@@ -136,12 +138,12 @@ def thermal_mz(p):
 # compare
 #------------------------------------------------------------------------------
 def seed_means(case, d):
-   # time average of each quantity per seed, then mean and standard error over seeds
+   # time average (or per-row value) of each quantity per seed, then mean and standard error over seeds
    per = {q: [] for q in case["quantities"]}
    for r in run_names(case):
       for q, v in quantities(case, os.path.join(d, r, "output")).items():
-         per[q].append(v[case["skip_rows"]:].mean())
-   return {q: (np.mean(v), np.std(v, ddof=1) / np.sqrt(len(v))) for q, v in per.items()}
+         per[q].append(v if case.get("per_row") else v[case["skip_rows"]:].mean())
+   return {q: (np.mean(v, axis=0), np.std(v, ddof=1, axis=0) / np.sqrt(len(v))) for q, v in per.items()}
 
 def compare_case(name, case, test_dir, ref_dir, precision):
    """Returns list of (quantity, passed, description)."""
@@ -169,12 +171,21 @@ def compare_case(name, case, test_dir, ref_dir, precision):
          ok = bool(np.all(diff <= tol["atol"] + tol["rtol"] * np.abs(r[k])))
          desc = "identical" if not diff.any() else "max |diff| = %.3e, max rel = %.3e" % (diff.max(), (diff / np.maximum(np.abs(r[k]), 1e-300)).max())
          rows.append((k, ok, desc))
+   elif case["kind"] == "benchmark":
+      with open(os.path.join(test_dir, "run", "stdout")) as f:
+         times = [l.split()[-1] for l in f if l.startswith("Simulation run time")]
+      rows.append(("time", bool(times), "simulation run time %s s" % (times[0] if times else "not found")))
    elif case["kind"] == "statistical":
       t, r = seed_means(case, test_dir), seed_means(case, ref_dir)
       for k in case["quantities"]:
-         (mt, st), (mr, sr) = t[k], r[k]
-         lim = case["k"] * np.hypot(st, sr)
-         rows.append((k, abs(mt - mr) <= lim, "%.6g +/- %.2g vs ref %.6g +/- %.2g" % (mt, st, mr, sr)))
+         (mt, st), (mr, sr) = (np.atleast_1d(x) for x in t[k]), (np.atleast_1d(x) for x in r[k])
+         if mt.shape != mr.shape:
+            rows.append((k, False, "row count %d vs %d" % (len(mt), len(mr)))); continue
+         z = np.abs(mt - mr) / np.maximum(np.hypot(st, sr), 1e-300)
+         i = int(np.argmax(z))   # report the worst row
+         desc = "%.6g +/- %.2g vs ref %.6g +/- %.2g" % (mt[i], st[i], mr[i], sr[i])
+         if len(mt) > 1: desc = "worst of %d rows (row %d): " % (len(mt), i) + desc
+         rows.append((k, bool(z[i] <= case["k"]), desc))
    return rows
 
 def cmd_compare(args):
@@ -191,8 +202,12 @@ def cmd_compare(args):
          rows = compare_case(name, case, td, rd, precision)
       except (OSError, ValueError, KeyError) as e:
          rows = [("-", False, "error: %s" % e)]
+      if not args.verbose and all(ok for _, ok, _ in rows):
+         same = all(d == "identical" for _, _, d in rows)
+         print("%-30s %-12s OK   %d quantities%s" % (name, case["kind"], len(rows), ", all identical" if same else ""))
+         continue
       for q, ok, desc in rows:
-         print("%-30s %-10s %-4s %s" % (name, q, "OK" if ok else "FAIL", desc))
+         print("%-30s %-12s %-4s %s" % (name, q, "OK" if ok else "FAIL", desc))
          failures += 0 if ok else 1
    print("%s: %d failure(s)" % ("OVERALL PASS" if failures == 0 else "OVERALL FAIL", failures))
    return 1 if failures else 0
@@ -214,6 +229,7 @@ def main():
    c.add_argument("--test", required=True)
    c.add_argument("--ref", required=True)
    c.add_argument("--cases")
+   c.add_argument("--verbose", action="store_true", help="show every quantity, not just failures")
    args = p.parse_args()
    sys.exit(cmd_run(args) if args.cmd == "run" else cmd_compare(args))
 
