@@ -1,10 +1,10 @@
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 # Output file for vampire simulation
-#   time       : 2026-10-12 15:45:24     process id : 25548
+#   time       : 2026-10-12 17:01:25     process id : 39004
 #   hostname   : claude-vampire-multigpu
 #   path       : /home/sam/Uni/VAMPIRE/vampire-multigpu/test/validation/reference/cpu/analytic-precession/run
 #   version    : 7.0.0
-#   githash    : 660f9ecff0772bf808fd1a97fa2e3df33d169ac8
+#   githash    : c3152c06ba1723b9d27c386655389922a94fc93d
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 Real_time  	s0M_norm_x 	s0M_norm_y 	s0M_norm_z 	s0M_norm_l 	
 0          	1          	0          	0          	1          	

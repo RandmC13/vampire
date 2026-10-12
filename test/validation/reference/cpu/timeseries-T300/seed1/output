@@ -1,10 +1,10 @@
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 # Output file for vampire simulation
-#   time       : 2026-10-12 15:46:20     process id : 25858
+#   time       : 2026-10-12 17:02:26     process id : 39274
 #   hostname   : claude-vampire-multigpu
 #   path       : /home/sam/Uni/VAMPIRE/vampire-multigpu/test/validation/reference/cpu/timeseries-T300/seed1
 #   version    : 7.0.0
-#   githash    : 660f9ecff0772bf808fd1a97fa2e3df33d169ac8
+#   githash    : c3152c06ba1723b9d27c386655389922a94fc93d
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 Real_time  	s0M_norm_x 	s0M_norm_y 	s0M_norm_z 	s0M_norm_l 	s0_E1_Energy	s0_E2_Energy	
 0          	0          	0          	1          	1          	-1.058400095865279e-16	-3.375000305693096e-21	

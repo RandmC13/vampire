@@ -1,10 +1,10 @@
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 # Output file for vampire simulation
-#   time       : 2026-10-12 15:45:42     process id : 25711
+#   time       : 2026-10-12 17:01:45     process id : 39176
 #   hostname   : claude-vampire-multigpu
 #   path       : /home/sam/Uni/VAMPIRE/vampire-multigpu/test/validation/reference/cpu/curie-mc/seed6
 #   version    : 7.0.0
-#   githash    : 660f9ecff0772bf808fd1a97fa2e3df33d169ac8
+#   githash    : c3152c06ba1723b9d27c386655389922a94fc93d
 #----------------------------------------------------------------------------------------------------------------------------------------------------------
 Temperature	s0M_norm_mean_l	
 200        	0.921429227959828	
