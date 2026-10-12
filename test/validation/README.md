@@ -13,6 +13,13 @@ python3 test/validation/vtest.py compare --test gpu-dp --ref cpu
 - `compare` exits non-zero on any failure; passing cases are summarised in one line (`--verbose` shows every quantity). Labels are looked up in `results/` first, then `reference/`.
 - `./tests.sh -v` runs `vampire-serial` and compares against `reference/cpu`.
 
+## GPU validation
+
+`test/validation/run_gpu_suite.sh [label-prefix]` builds the CUDA version in double and single precision, runs the
+suite with each build (and the `hamr-perf` benchmark), checks that the CUDA binary with `gpu:acceleration=off`
+reproduces the serial references exactly, and packs results, build logs and system information into
+`test/validation/results/gpu-suite-<host>-<date>.tar.gz`. It runs `make clean` before each build and at the end.
+
 ## Case format (`cases/<case>/case.json`)
 
 All case inputs use `output:column-headers` and `output:precision=16`
