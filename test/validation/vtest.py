@@ -149,6 +149,9 @@ def compare_case(name, case, test_dir, ref_dir, precision):
    """Returns list of (quantity, passed, description)."""
    rows = []
    tol = case.get("tolerance", {}).get(precision, {})
+   missing = [r for r in run_names(case) if not os.path.isfile(os.path.join(test_dir, r, "output"))]
+   if missing:
+      return [("-", False, "no output for %s: run failed (see stdout in the run directory)" % ", ".join(missing))]
    if case["kind"] == "analytic" and case["model"] == "precession":
       cols = read_output(os.path.join(test_dir, "run", "output"))
       q = quantities(case, os.path.join(test_dir, "run", "output"))
@@ -167,8 +170,9 @@ def compare_case(name, case, test_dir, ref_dir, precision):
       for k in case["quantities"]:
          if t[k].shape != r[k].shape:
             rows.append((k, False, "row count %d vs %d" % (len(t[k]), len(r[k])))); continue
+         # atol is relative to the largest reference magnitude, so it applies equally to unit vectors and energies (J)
          diff = np.abs(t[k] - r[k])
-         ok = bool(np.all(diff <= tol["atol"] + tol["rtol"] * np.abs(r[k])))
+         ok = bool(np.all(diff <= tol["atol"] * np.abs(r[k]).max() + tol["rtol"] * np.abs(r[k])))
          desc = "identical" if not diff.any() else "max |diff| = %.3e, max rel = %.3e" % (diff.max(), (diff / np.maximum(np.abs(r[k]), 1e-300)).max())
          rows.append((k, ok, desc))
    elif case["kind"] == "benchmark":
