@@ -46,8 +46,11 @@ bool integrator_test(const std::string dir, double rx, double ry, double rz, con
    std::ifstream ifile;
    ifile.open("output");
 
-   // read value after header
-   for(int i=0; i<983; i++) getline(ifile, line);
+   // read 975th data row (t = 9.74e-11 s), skipping header lines so header changes don't have an effect
+   int row = 0;
+   while(row < 975 && getline(ifile, line)){
+      if(line.size() > 0 && line[0] != '#') row++;
+   }
    std::stringstream liness(line);
    double v1 = 0.0;
    double vx = 0.0;

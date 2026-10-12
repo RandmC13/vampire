@@ -3,18 +3,20 @@
 # simple bash script to run unit and integration tests
 #------------------------------------------------------
 
-while getopts ::aiu flag
+while getopts ::aiuv flag
 do
     case "${flag}" in
         a) all=true;;
         i) integration=true;;
         u) unit=true;;
+        v) validation=true;;
     esac
 done
 
 if [ "$all" = true ]; then
     integration=true
     unit=true
+    validation=true
 fi
 
 if [ "$integration" = true ]; then
@@ -27,4 +29,11 @@ if [ "$integration" = true ]; then
 fi
 if [ "$unit" = true ]; then
     echo "Running unit tests"
+fi
+if [ "$validation" = true ]; then
+    echo "====================================================================="
+    echo "      Running validation tests (serial vs CPU references)"
+    echo "====================================================================="
+    python3 test/validation/vtest.py run --exe ./vampire-serial --label serial
+    python3 test/validation/vtest.py compare --test serial --ref cpu
 fi
