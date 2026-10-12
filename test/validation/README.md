@@ -28,7 +28,7 @@ All case inputs use `output:column-headers` and `output:precision=16`
 | ------ | ------ | ---------------- |
 | `analytic` / `precession` | 1 | max abs error vs analytic damped precession <= `tolerance[precision].atol` |
 | `analytic` / `thermal` | `seeds` | seed-mean of time-averaged <mz> (after `skip_rows`) within `k`*stderr + `atol` of the Boltzmann average |
-| `deterministic` (T=0) | 1 | every row: abs(test-ref) <= atol + rtol*abs(ref) (`tolerance[precision]`); reports "identical" when bit-equal |
+| `deterministic` (T=0) | 1 | every row: abs(test-ref) <= atol*max(abs(ref)) + rtol*abs(ref) (`tolerance[precision]`); reports "identical" when bit-equal |
 | `statistical` (T>0) | `seeds` | abs(mean_test - mean_ref) <= `k` * sqrt(se_test^2 + se_ref^2) over seed time-averages (after `skip_rows`); with `"per_row": true` every output row is compared separately (e.g. one row per temperature) |
 | `benchmark` | 1 | not compared, reports simulation run time; only run when named with `--cases` (e.g. `hamr-perf` for profiling) |
 
