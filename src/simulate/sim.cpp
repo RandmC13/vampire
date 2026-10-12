@@ -240,6 +240,9 @@ int run(){
 	// Check for load spin configurations from checkpoint
    if(sim::load_checkpoint_flag) load_checkpoint();
 
+   // Initialize GPU acceleration if enabled
+   if(gpu::acceleration) gpu::initialize();
+
    // Precalculate initial statistics and then reset averages if not continuing a previous simulation
    // RE technically this double counts the last data point in the statistics, need to implement a reset_counter to fix.
    stats::update();
@@ -248,8 +251,6 @@ int run(){
    // For continuous checkpoints inform user about I/O
    if(sim::save_checkpoint_continuous_flag) zlog << zTs() << "Continuously writing checkpoints to disk throughout simulation." << std::endl;
 
-   // Initialize GPU acceleration if enabled
-   if(gpu::acceleration) gpu::initialize();
 
 	if (micromagnetic::discretisation_type > 0 || micromagnetic::internal::bias_magnets == true)
 	micromagnetic::initialize(cells::num_local_cells,

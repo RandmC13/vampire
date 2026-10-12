@@ -149,9 +149,6 @@ namespace vcuda{
          success = false;
       }
 
-
-      cu::mc::initialise();
-
       // Successful initialization
       return success;
 
