@@ -34,6 +34,6 @@ if [ "$validation" = true ]; then
     echo "====================================================================="
     echo "      Running validation tests (serial vs CPU references)"
     echo "====================================================================="
-    python3 test/validation/vtest.py run --exe ./vampire-serial --label serial
+    python3 test/validation/vtest.py run --exe ./vampire-serial --label serial --jobs 4
     python3 test/validation/vtest.py compare --test serial --ref cpu
 fi

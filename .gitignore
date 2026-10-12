@@ -105,3 +105,6 @@ run/unit-cell-creator
 
 temp/*
 #EOF
+
+# validation suite scratch results
+test/validation/results/
