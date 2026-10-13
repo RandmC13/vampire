@@ -425,6 +425,8 @@ namespace vcuda
          __device__ cu_real_t exchange_field_component(int *csr_cols, int* csr_rows, cu_real_t *vals, cu_real_t *s, const int i)
          {
              cu_real_t hx = 0.0;
+             // hx is not allocated when there are no exchange interactions
+             if (csr_rows == nullptr) return hx;
              for (int n = csr_rows[i]; n < csr_rows[i+1]; n++){
                  int j = csr_cols[n];
                  cu_real_t val = vals[n];
