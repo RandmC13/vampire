@@ -15,6 +15,9 @@
 #      (CUDA API/kernels/memory copies, OS runtime calls and CPU sampling);
 #      the run is stopped when the window ends
 #   4. exports summary tables (csv) and an sqlite database of the window
+#   5. optionally (NCU=1) profiles a few launches of the main kernels with
+#      Nsight Compute, which shows whether each kernel is limited by memory
+#      bandwidth, memory latency or arithmetic
 #
 # Usage (from anywhere):  test/validation/profile_gpu.sh [case] [dp|sp]
 #
@@ -24,6 +27,16 @@
 #   JOBS           parallel build jobs (default: number of cores)
 #   EXTRA          line appended to the input file, for example
 #                  EXTRA="gpu:calculate-statistics-on-cpu=true"
+#   NCU            set to 1 to add the Nsight Compute step
+#   NCU_KERNELS    kernel name regular expression (default: the field, Heun,
+#                  thermal and statistics kernels)
+#   NCU_SKIP       matching launches to skip first (default 15000, past the
+#                  hamr-perf equilibration)
+#   NCU_COUNT      matching launches to profile (default 12)
+#
+# Nsight Compute needs access to the GPU performance counters; if it reports
+# ERR_NVGPUCTRPERM, run the script with sudo or enable counter access for
+# all users in the NVIDIA driver.
 #
 # Results are packed into test/validation/results/profile-<case>-<pr>-<host>-<date>.tar.gz
 #
@@ -88,6 +101,17 @@ echo "=== Exporting reports ==="
 nsys stats --report cuda_gpu_kern_sum,cuda_gpu_mem_time_sum,cuda_gpu_mem_size_sum,cuda_api_sum,osrt_sum,cuda_gpu_trace \
    --format csv --output $out/stats $out/report.nsys-rep > $out/stats.log 2>&1
 nsys export --type sqlite --output $out/report.sqlite --force-overwrite=true $out/report.nsys-rep >> $out/stats.log 2>&1
+
+if [ -n "${NCU:-}" ]; then
+   echo "=== Nsight Compute (kernels: ${NCU_KERNELS:-default}) ==="
+   command -v ncu > /dev/null || { echo "ncu not found in PATH"; exit 1; }
+   run_dir ncu
+   ( cd $out/ncu && ncu --kernel-name "regex:${NCU_KERNELS:-update_isotropic|apply_local_temperature|apply_global_temperature|llg_heun|sum_magnetization}" \
+        --launch-skip ${NCU_SKIP:-15000} --launch-count ${NCU_COUNT:-12} --set detailed --kill yes \
+        -o $abs_out/kernels -f $exe > log.txt 2>&1 )
+   ncu --import $out/kernels.ncu-rep --page details --csv > $out/ncu_details.csv 2> $out/ncu_export.log
+   tail -n 3 $out/ncu/log.txt
+fi
 
 # pack results (atomic configuration files are excluded to keep the archive small)
 tar czf $results/$name.tar.gz --exclude='*.data' --exclude='*.meta' -C $results $name
