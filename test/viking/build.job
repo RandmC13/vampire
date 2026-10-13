@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-build
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --partition=nodes
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=16G
+#SBATCH --time=0-01:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Builds the CUDA version of each benchmarked commit (listed in
+# $WORK/commits.txt) in double and single precision for A40 and H100:
+#    $WORK/bin/vampire-cuda-<version>-<dp|sp>
+#------------------------------------------------------------------------------
+source $REPO/test/viking/common.sh
+set -e
+mkdir -p $WORK/bin
+{ module list; nvcc --version; g++ --version; } 2>&1
+
+while read version commit; do
+   src=$WORK/src-$version
+   rm -rf $src; mkdir -p $src
+   git -C $REPO archive $commit | tar -x -C $src
+   for pr in dp sp; do
+      echo "=== $version ($commit) $pr ==="
+      make -C $src clean > /dev/null
+      make -C $src -j$SLURM_CPUS_PER_TASK cuda CUDA_PR="-DCUDA_${pr^^}" CUDA_ARCH="$GPU_ARCH" > $WORK/bin/build-$version-$pr.log 2>&1 \
+         || { tail -n 30 $WORK/bin/build-$version-$pr.log; exit 1; }
+      mv $src/vampire-cuda $WORK/bin/vampire-cuda-$version-$pr
+   done
+   make -C $src clean > /dev/null
+done < $WORK/commits.txt
+ls -l $WORK/bin
