@@ -170,10 +170,6 @@ namespace vcuda{
 			const cu_real_t deny = 2.0 * laser_sigma_y2;
 			const cu_real_t one_over_deny = 1.0/deny;
 
-			// The laser profile is centred on the head position stored at the previous update
-			const cu_real_t px = cu::hamr::d_head_position_x;
-			const cu_real_t py = cu::hamr::d_head_position_y;
-
 			const cu_real_t Hx_app = sim::H_vec[0]*sim::H_applied;
 			const cu_real_t Hy_app = sim::H_vec[1]*sim::H_applied;
 			const cu_real_t Hz_app = sim::H_vec[2]*sim::H_applied;
@@ -181,6 +177,10 @@ namespace vcuda{
 			// Update head position - updated in src/hamr/hamr_continuous.cpp
 			cu::hamr::d_head_position_x = ::hamr::get_head_position_x();
 			cu::hamr::d_head_position_y = ::hamr::get_head_position_y();
+
+			// The laser profile and the field box are centred on the current head position, as in the CPU code
+			const cu_real_t px = cu::hamr::d_head_position_x;
+			const cu_real_t py = cu::hamr::d_head_position_y;
 
 			// Determine bounding box for local applied field
 			const cu_real_t Hloc_min_x = cu::hamr::d_head_position_x - 0.5*cu::hamr::d_H_bounds_x - cu::hamr::d_NPS;
