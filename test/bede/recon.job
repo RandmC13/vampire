@@ -1,0 +1,29 @@
+#!/bin/bash
+#SBATCH --job-name=vampire-recon
+#SBATCH --account=BEDE_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=0:15:0
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Records the software and hardware available on a GPU node (submit with
+# --partition=test or ghtest): modules, GPU topology, interconnect, CUDA-aware
+# MPI and profiler counter access. Writes $WORK/recon/<partition>.txt.
+#------------------------------------------------------------------------------
+source $REPO/test/bede/common.sh
+set +u
+mkdir -p $WORK/recon
+exec > $WORK/recon/$SLURM_JOB_PARTITION.txt 2>&1
+
+section(){ echo; echo "=== $* ==="; }
+section host;          hostname; uname -m; cat /etc/os-release; lscpu | head -n 20; free -g; nproc
+section gpus;          nvidia-smi; nvidia-smi topo -m; nvidia-smi nvlink --status
+section counters;      grep -i profiling /proc/driver/nvidia/params
+section cuda;          module list; nvcc --version; which nsys ncu; g++ --version
+section modules;       module avail 2>&1
+section interconnect;  ls /sys/class/infiniband; ibstat 2> /dev/null | head -n 30
+section openmpi;       module load openmpi && { module list; ompi_info | grep -i -E 'version|cuda|ucx' | head -n 20; which bede-mpirun; }
