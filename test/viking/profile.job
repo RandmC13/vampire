@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-profile
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:1
+#SBATCH --time=0-01:30:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Profiles hamr-perf with test/validation/profile_gpu.sh (Nsight Systems plus
+# an Nsight Compute attempt) in double and single precision for the "after"
+# version, on the GPU of the partition it is submitted to (--partition=gpu or
+# gpuplus). Archives go to $WORK/profiles/<partition>/.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/common.sh
+
+partition=$SLURM_JOB_PARTITION
+dest=$WORK/profiles/$partition
+mkdir -p $dest
+
+# private copy of the sources: profile_gpu.sh builds and cleans in place
+src=${TMPDIR:-/tmp}/vampire-profile-$SLURM_JOB_ID
+rm -rf $src; cp -r $WORK/src-after $src
+echo "commit: $(awk '$1 == "after" { print $2 }' $WORK/commits.txt)" | tee $dest/commit.txt
+
+# build for the GPU in this node (the variable is passed to make as an override)
+export MAKEFLAGS="CUDA_ARCH=-arch=native"
+for pr in dp sp; do
+   NCU=1 JOBS=$SLURM_CPUS_PER_TASK $src/test/validation/profile_gpu.sh hamr-perf $pr
+done
+mv $src/test/validation/results/*.tar.gz $dest/
+rm -rf $src
+ls -l $dest
