@@ -22,6 +22,8 @@
 #   NSYS_DELAY     seconds to wait before capturing (default 30, skips set-up)
 #   NSYS_DURATION  length of the captured window in seconds (default 20)
 #   JOBS           parallel build jobs (default: number of cores)
+#   EXTRA          line appended to the input file, for example
+#                  EXTRA="gpu:calculate-statistics-on-cpu=true"
 #
 # Results are packed into test/validation/results/profile-<case>-<pr>-<host>-<date>.tar.gz
 #
@@ -48,7 +50,7 @@ command -v nsys > /dev/null || { echo "nsys not found in PATH"; exit 1; }
 [ -d test/validation/cases/$case ] || { echo "unknown case: $case"; exit 1; }
 
 # record system information
-{ nvidia-smi; nvcc --version; nsys --version; g++ --version; echo "git: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
+{ echo "extra input: ${EXTRA:-none}"; nvidia-smi; nvcc --version; nsys --version; g++ --version; echo "git: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
 
 echo "=== Building CUDA version ($pr, $jobs jobs) ==="
 make clean > /dev/null
@@ -61,7 +63,10 @@ mv vampire-cuda $exe
 make clean > /dev/null
 
 # each run gets a fresh copy of the case directory
-run_dir(){ rm -rf $out/$1; cp -r test/validation/cases/$case $out/$1; rm -f $out/$1/case.json; }
+run_dir(){
+   rm -rf $out/$1; cp -r test/validation/cases/$case $out/$1; rm -f $out/$1/case.json
+   if [ -n "${EXTRA:-}" ]; then echo "$EXTRA" >> $out/$1/input; fi
+}
 
 echo "=== Unprofiled run (wall time and GPU utilisation) ==="
 run_dir plain

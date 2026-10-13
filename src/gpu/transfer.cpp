@@ -34,6 +34,23 @@ void transfer_spin_positions_from_gpu_to_cpu(){
 }
 
 //------------------------------------------------------------------------------
+// Wrapper function to invalidate spin data on the CPU when it is not kept up
+// to date by the GPU (statistics calculated on the GPU)
+//------------------------------------------------------------------------------
+void invalidate_host_spins(){
+
+   // check for gpu functions and data initialised
+   if( !gpu::initialized ) return;
+
+   #ifdef CUDA
+      vcuda::invalidate_host_spins();
+   #endif
+
+   return;
+
+}
+
+//------------------------------------------------------------------------------
 // Wrapper function to transfer dipole field data from CPU to GPU
 //------------------------------------------------------------------------------
 void transfer_dipole_fields_from_cpu_to_gpu(){

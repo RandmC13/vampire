@@ -202,6 +202,9 @@ namespace vcuda{
 
       namespace stats{
          extern bool use_cpu;
+         extern bool device_owns_spins;
+         extern bool host_spins_current;
+         void finalise();
       }
 
    } // end of iternal namespace

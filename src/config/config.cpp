@@ -166,12 +166,18 @@ void output(){ // should include variables for data to be outputted, eg spins, c
       // Print only at the end of simulation
       if(config::internal::output_cells_config_end && (sim::time ==  sim::total_time+sim::equilibration_time))
       {
+         // If using GPU acceleration then synchonise spins from device
+         gpu::config::synchronise();
+
          config::internal::legacy_cells_coords();
          config::internal::legacy_cells();
       }
       // Otherwise print cells configurations during simulation
       else if (config::internal::output_cells_config_continuous  && (sim::output_rate_counter % config::internal::output_cells_config_rate == 0))
       {
+         // If using GPU acceleration then synchonise spins from device
+         gpu::config::synchronise();
+
          // for all programs except hysteresis(=2), static-hysteresis(=3) and partial-hysteresis(=12)
          if ((program::program != 2) && (program::program != 3) && (program::program != 12))
          {

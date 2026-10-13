@@ -42,6 +42,7 @@ namespace vcuda{
       vcuda::internal::__finalize ();
 
       vcuda::internal::mc::finalise();
+      vcuda::internal::stats::finalise();
       cudaProfilerStop();
 #endif
 

@@ -429,7 +429,15 @@ namespace vout{
 		config::output();
 
 		// optionally save checkpoint file
-		if(sim::save_checkpoint_flag==true && sim::save_checkpoint_continuous_flag==true && sim::time%sim::save_checkpoint_rate==0) save_checkpoint();
+		if(sim::save_checkpoint_flag==true && sim::save_checkpoint_continuous_flag==true && sim::time%sim::save_checkpoint_rate==0){
+			// spins on the host are not kept up to date when statistics are calculated on the GPU
+			if(gpu::acceleration) gpu::transfer_spin_positions_from_gpu_to_cpu();
+			save_checkpoint();
+		}
+
+		// spins on the host are only valid during configuration and checkpoint output when
+		// statistics are calculated on the GPU
+		if(gpu::acceleration) gpu::invalidate_host_spins();
      // }
       if (micromagnetic::discretisation_type ==1){
          micromagnetic::outputs();
