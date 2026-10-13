@@ -167,6 +167,8 @@ def compare_case(name, case, test_dir, ref_dir, precision):
    elif case["kind"] == "deterministic":
       t = quantities(case, os.path.join(test_dir, "run", "output"))
       r = quantities(case, os.path.join(ref_dir, "run", "output"))
+      n = tol.get("rows")   # optionally compare only the first n rows (before round-off amplification dominates)
+      if n: t, r = ({k: v[:n] for k, v in x.items()} for x in (t, r))
       for k in case["quantities"]:
          if t[k].shape != r[k].shape:
             rows.append((k, False, "row count %d vs %d" % (len(t[k]), len(r[k])))); continue
@@ -174,6 +176,7 @@ def compare_case(name, case, test_dir, ref_dir, precision):
          diff = np.abs(t[k] - r[k])
          ok = bool(np.all(diff <= tol["atol"] * np.abs(r[k]).max() + tol["rtol"] * np.abs(r[k])))
          desc = "identical" if not diff.any() else "max |diff| = %.3e, max rel = %.3e" % (diff.max(), (diff / np.maximum(np.abs(r[k]), 1e-300)).max())
+         if n: desc += " (first %d rows)" % n
          rows.append((k, ok, desc))
    elif case["kind"] == "benchmark":
       with open(os.path.join(test_dir, "run", "stdout")) as f:
