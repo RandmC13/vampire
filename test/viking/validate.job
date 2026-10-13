@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-validate
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:1
+#SBATCH --time=0-03:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Runs the physics validation suite (test/validation/run_gpu_suite.sh: double
+# and single precision, statistics on GPU and CPU, CPU code path, NaN scan) on
+# the GPU of the partition it is submitted to (--partition=gpu or gpuplus),
+# built for that GPU, using the "after" sources from submit.sh.
+# Archives go to $WORK/validation/<partition>/.
+#
+#   PY_MODULE  module providing python3 with numpy (default below; its GCC must
+#              be supported by the CUDA compiler)
+#------------------------------------------------------------------------------
+source $REPO/test/viking/common.sh
+set +u
+module load ${PY_MODULE:-SciPy-bundle/2023.07-gfbf-2023a} || { module -t spider SciPy-bundle; exit 1; }
+set -u
+{ module list; python3 -c "import sys, numpy; print(sys.version, 'numpy', numpy.__version__)"; g++ --version | head -n 1; } 2>&1
+
+partition=$SLURM_JOB_PARTITION
+dest=$WORK/validation/$partition
+mkdir -p $dest
+echo "commit: $(awk '$1 == "after" { print $2 }' $WORK/commits.txt)" | tee $dest/commit.txt
+
+# private copy of the sources: the suite builds and cleans in place
+src=$WORK/validate-$SLURM_JOB_ID
+rm -rf $src; cp -r $WORK/src-after $src
+export MAKEFLAGS="CUDA_ARCH=-arch=native"   # passed to make as an override
+$src/test/validation/run_gpu_suite.sh viking-$partition
+mv $src/test/validation/results/gpu-suite-*.tar.gz $dest/
+rm -rf $src
+ls -l $dest

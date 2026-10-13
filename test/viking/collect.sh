@@ -15,5 +15,5 @@ cd $WORK
 echo "$(($(wc -l < bench.csv) - 1)) of 144 benchmark runs recorded; non-zero exit codes:"
 awk -F, 'NR > 1 && $11 != 0' bench.csv
 archive=$WORK/viking-benchmarks-$(date +%Y%m%d-%H%M).tar.gz
-tar czf $archive $(ls -d commits.txt bench.csv results logs profiles recon bin/*.log 2> /dev/null)
+tar czf $archive $(ls -d commits.txt bench.csv results logs profiles recon validation topology bin/*.log 2> /dev/null)
 echo "Archive: $archive"
