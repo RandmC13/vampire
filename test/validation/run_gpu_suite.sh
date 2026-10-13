@@ -38,7 +38,7 @@ for pr in dp sp; do
 
    echo "=== Building CUDA version ($pr) ==="
    make clean
-   if ! make cuda CUDA_PR=-DCUDA_$(echo $pr | tr a-z A-Z) > $out/build-$pr.log 2>&1; then
+   if ! make -j$(nproc) cuda CUDA_PR=-DCUDA_$(echo $pr | tr a-z A-Z) > $out/build-$pr.log 2>&1; then
       echo "Build failed, see $out/build-$pr.log"
       continue
    fi
