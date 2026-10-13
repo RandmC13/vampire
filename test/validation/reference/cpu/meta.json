@@ -1,11 +1,11 @@
 {
    "label": "cpu",
    "exe": "/home/sam/Uni/VAMPIRE/vampire-multigpu/vampire-serial",
-   "version": "vampire version 7.0.0\nGithash c3152c06ba1723b9d27c386655389922a94fc93d\n\nThis is free software; see the source for licence information.",
+   "version": "vampire version 7.0.0\nGithash c405692ed83dbb6a915fc08859df15e10fdd0a78\n\nThis is free software; see the source for licence information.",
    "precision": "dp",
    "extra": [],
    "seed_offset": 0,
-   "date": "2026-10-12T17:03:27",
+   "date": "2026-10-12T17:57:02",
    "host": "claude-vampire-multigpu",
    "gpu": ""
 }
