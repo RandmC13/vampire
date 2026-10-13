@@ -16,7 +16,7 @@
 ARCH=$(uname -m)
 case $ARCH in
    ppc64le) modules="gcc/12.2 cuda/12.4.1"; GPU_ARCH="-gencode arch=compute_70,code=sm_70" ;;
-   aarch64) modules="gcc/12.2 cuda/12.6.1"; GPU_ARCH="-gencode arch=compute_90,code=sm_90" ;;
+   aarch64) modules="gcc/12.2 cuda"; GPU_ARCH="-gencode arch=compute_90,code=sm_90" ;;
    *) echo "unexpected architecture $ARCH"; exit 1 ;;
 esac
 module purge
