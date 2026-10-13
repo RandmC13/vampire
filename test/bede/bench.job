@@ -1,0 +1,63 @@
+#!/bin/bash
+#SBATCH --job-name=vampire-bench
+#SBATCH --account=BEDE_ACCOUNT
+#SBATCH --gres=gpu:1
+#SBATCH --nodes=1
+#SBATCH --time=0:45:0
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# One benchmark run per array task (submit with --partition=gpu or gh and
+# --array=0-71, see submit.sh). The task index selects
+#    version (before/after) x repeat (3) x precision (dp/sp) x case (6),
+# with the two versions adjacent so they run under similar node conditions.
+#
+# Cases are the validation benchmarks; "thermal-perf@L" is thermal-perf with
+# a lateral size of L x L nm (6 nm thick) instead of 41 x 30 nm.
+#
+# Appends one line to $WORK/results/<partition>/<run>.csv:
+#    partition,gpu,version,commit,precision,case,atoms,repeat,wall_s,sim_s,exit
+#------------------------------------------------------------------------------
+source $REPO/test/bede/common.sh
+
+cases=(hamr-perf thermal-perf thermal-perf@5 thermal-perf@10 thermal-perf@20 thermal-perf@100)
+precisions=(dp sp)
+repeats=3
+
+i=$SLURM_ARRAY_TASK_ID
+version=${VERSIONS[i % 2]}
+repeat=$(( i / 2 % repeats ))
+pr=${precisions[i / (2 * repeats) % 2]}
+case=${cases[i / (4 * repeats)]}
+
+commit=$(awk -v v=$version '$1 == v { print $2 }' $WORK/commits.txt)
+partition=$SLURM_JOB_PARTITION
+run=$case-$version-$pr-r$repeat
+dir=$WORK/runs/$partition/$run
+mkdir -p $WORK/results/$partition
+rm -rf $dir; mkdir -p $dir
+
+# inputs always come from the newer checkout so both versions run the same case
+cp $REPO/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
+if [[ $case == *@* ]]; then
+   size=${case#*@}
+   sed -i -e "s/^dimensions:system-size-x.*/dimensions:system-size-x = $size !nm/" \
+          -e "s/^dimensions:system-size-y.*/dimensions:system-size-y = $size !nm/" $dir/input
+fi
+
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+echo "$run on $(hostname) ($gpu), commit $commit"
+cd $dir
+start=$(date +%s.%N)
+$WORK/bin/$ARCH/vampire-cuda-$version-$pr > log.txt 2>&1
+status=$?
+end=$(date +%s.%N)
+rm -f *.data *.meta   # atomic configurations are not needed
+
+atoms=$(awk '/Number of atoms generated/ { print $NF }' log.txt)
+sim=$(awk -F': *' '/Simulation run time \[s\]/ { print $2 }' log.txt)
+wall=$(awk -v s=$start -v e=$end 'BEGIN { printf "%.2f", e - s }')
+echo "$partition,$gpu,$version,$commit,$pr,$case,$atoms,$repeat,$wall,$sim,$status" | tee $WORK/results/$partition/$run.csv

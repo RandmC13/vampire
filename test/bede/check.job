@@ -1,0 +1,56 @@
+#!/bin/bash
+#SBATCH --job-name=bede-check
+#SBATCH --account=BEDE_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=0:10:0
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Quick check that jobs, modules, nvcc and the GPU work on a Bede node:
+#    sbatch  --partition=test   test/bede/check.job    (POWER9 + V100)
+#    ghbatch --partition=ghtest test/bede/check.job    (Grace + GH200)
+# Compiles and runs a small double precision CUDA program and prints
+# "CHECK PASSED" at the end if everything works.
+#------------------------------------------------------------------------------
+set -e
+echo "node $(hostname), $(uname -m), $(nproc) cores, partition $SLURM_JOB_PARTITION"
+nvidia-smi
+
+case $(uname -m) in
+   ppc64le) module load gcc/12.2 cuda/12.4.1 ;;
+   aarch64) module load gcc/12.2 cuda/12.6.1 ;;
+esac
+module list 2>&1
+nvcc --version | tail -n 2
+
+dir=$(mktemp -d)
+cat > $dir/check.cu << 'EOF'
+#include <cstdio>
+// sums 1..n in double precision on the GPU and compares with n(n+1)/2
+__global__ void sum(int n, double * total){
+   for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x)
+      atomicAdd(total, double(i + 1));
+}
+int main(){
+   cudaDeviceProp p;
+   if(cudaGetDeviceProperties(&p, 0) != cudaSuccess){ printf("no CUDA device\n"); return 1; }
+   printf("device: %s, compute capability %d.%d, %.1f GB\n", p.name, p.major, p.minor, p.totalGlobalMem / 1e9);
+   const int n = 1 << 20;
+   double * d_total, total = 0.0;
+   cudaMalloc(&d_total, sizeof(double));
+   cudaMemcpy(d_total, &total, sizeof(double), cudaMemcpyHostToDevice);
+   sum<<<256, 256>>>(n, d_total);
+   cudaMemcpy(&total, d_total, sizeof(double), cudaMemcpyDeviceToHost);
+   const double expected = 0.5 * double(n) * double(n + 1);
+   printf("GPU sum %.1f, expected %.1f\n", total, expected);
+   return (cudaGetLastError() == cudaSuccess && total == expected) ? 0 : 1;
+}
+EOF
+nvcc -O2 -arch=native -o $dir/check $dir/check.cu
+$dir/check
+rm -rf $dir
+echo "CHECK PASSED"

@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH --job-name=vampire-build
+#SBATCH --account=BEDE_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=0:30:0
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Builds the CUDA version of each benchmarked commit in double and single
+# precision for the node type it runs on (submit to test or ghtest):
+#    $WORK/bin/<arch>/vampire-cuda-<version>-<dp|sp>
+# The sources are exported to $WORK/src-<version> by submit.sh.
+#------------------------------------------------------------------------------
+source $REPO/test/bede/common.sh
+set -e
+mkdir -p $WORK/bin/$ARCH
+{ module list; nvcc --version; g++ --version; } 2>&1
+
+for version in ${VERSIONS[@]}; do
+   src=$WORK/src-$ARCH-$version
+   rm -rf $src; cp -r $WORK/src-$version $src
+   for pr in dp sp; do
+      echo "=== $version $pr ($ARCH) ==="
+      log=$WORK/bin/$ARCH/build-$version-$pr.log
+      make -C $src clean > /dev/null
+      make -C $src -j$(nproc) cuda CUDA_PR="-DCUDA_${pr^^}" CUDA_ARCH="$GPU_ARCH" > $log 2>&1 \
+         || { tail -n 30 $log; exit 1; }
+      mv $src/vampire-cuda $WORK/bin/$ARCH/vampire-cuda-$version-$pr
+   done
+   make -C $src clean > /dev/null
+done
+ls -l $WORK/bin/$ARCH
