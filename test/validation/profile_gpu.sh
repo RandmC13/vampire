@@ -109,8 +109,10 @@ if [ -n "${NCU:-}" ]; then
    ( cd $out/ncu && ncu --kernel-name "regex:${NCU_KERNELS:-update_isotropic|apply_local_temperature|apply_global_temperature|llg_heun|sum_magnetization}" \
         --launch-skip ${NCU_SKIP:-15000} --launch-count ${NCU_COUNT:-12} --set detailed --kill yes \
         -o $abs_out/kernels -f $exe > log.txt 2>&1 )
-   ncu --import $out/kernels.ncu-rep --page details --csv > $out/ncu_details.csv 2> $out/ncu_export.log
+   ncu --import $(ls $out/kernels.ncu-rep*) --page details --csv > $out/ncu_details.csv 2> $out/ncu_export.log
    tail -n 3 $out/ncu/log.txt
+   # ncu reports failures (e.g. no counter permission) in the run log, not via its exit code
+   grep -h '==ERROR==' $out/ncu/log.txt $out/ncu_export.log && echo "WARNING: Nsight Compute step failed (see above)"
 fi
 
 # pack results (atomic configuration files are excluded to keep the archive small)
