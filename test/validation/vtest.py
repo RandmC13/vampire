@@ -145,6 +145,11 @@ def seed_means(case, d):
          per[q].append(v if case.get("per_row") else v[case["skip_rows"]:].mean())
    return {q: (np.mean(v, axis=0), np.std(v, ddof=1, axis=0) / np.sqrt(len(v))) for q, v in per.items()}
 
+def noise_ok(se_test, se_ref):
+   # a statistical match is meaningless if the test results are non-finite or far noisier than the reference
+   se_test, se_ref = np.atleast_1d(se_test), np.atleast_1d(se_ref)
+   return bool(np.all(np.isfinite(se_test)) and np.all(se_test <= 10.0 * se_ref + 1e-300))
+
 def compare_case(name, case, test_dir, ref_dir, precision):
    """Returns list of (quantity, passed, description)."""
    rows = []
@@ -162,8 +167,10 @@ def compare_case(name, case, test_dir, ref_dir, precision):
    elif case["kind"] == "analytic" and case["model"] == "thermal":
       exact = thermal_mz(case["params"])
       m, se = seed_means(case, test_dir)["mz"]
+      sr = seed_means(case, ref_dir)["mz"][1]
       lim = case["k"] * se + tol["atol"]
-      rows.append(("mz", abs(m - exact) <= lim, "%.5f +/- %.5f vs exact %.5f (limit %.1e)" % (m, se, exact, lim)))
+      ok = abs(m - exact) <= lim and noise_ok(se, sr)
+      rows.append(("mz", ok, "%.5f +/- %.5f vs exact %.5f (limit %.1e, reference +/- %.5f)" % (m, se, exact, lim, sr)))
    elif case["kind"] == "deterministic":
       t = quantities(case, os.path.join(test_dir, "run", "output"))
       r = quantities(case, os.path.join(ref_dir, "run", "output"))
@@ -192,7 +199,7 @@ def compare_case(name, case, test_dir, ref_dir, precision):
          i = int(np.argmax(z))   # report the worst row
          desc = "%.6g +/- %.2g vs ref %.6g +/- %.2g" % (mt[i], st[i], mr[i], sr[i])
          if len(mt) > 1: desc = "worst of %d rows (row %d): " % (len(mt), i) + desc
-         rows.append((k, bool(z[i] <= case["k"]), desc))
+         rows.append((k, bool(z[i] <= case["k"]) and noise_ok(st, sr), desc))
    return rows
 
 def cmd_compare(args):
