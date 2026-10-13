@@ -410,6 +410,10 @@ namespace vcuda
                 //cudaMemcpy(cu::d_z_spin_field, d_field3n + 2 * ::atoms::num_atoms, 	::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
 
             }
+            else {
+                // No exchange interactions: zero the spin field directly, since the other spin field kernels add to it
+                cudaMemset(cu::d_spin_field, 0, 3 * ::atoms::num_atoms * sizeof(cu_real_t));
+            }
 
 
             check_cuda_errors(__FILE__,__LINE__);
