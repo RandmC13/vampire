@@ -75,6 +75,10 @@ namespace vcuda{
 				)
 		{
 			int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+			// Load the curand state into local memory once for all atoms of this thread
+			curandState local_state = rand_states[tid];
+
 			for (int i = tid; 
 				i < n_atoms; 
 				i += blockDim.x * gridDim.x){
@@ -83,9 +87,6 @@ namespace vcuda{
 				int mid = material[i];
 				// Load parameters from memory
 				cu::material_parameters_t mat = material_params[mid];
-
-				// Load the curand state into local memory
-				curandState local_state = rand_states[tid];
 
 				cu_real_t field_x = 0.0;
 				cu_real_t field_y = 0.0;
@@ -105,25 +106,22 @@ namespace vcuda{
       		   float rsigma = sigma*sqrtf(resc_temp);
       		#endif
 
-      		#ifdef CUDA_DP
-      		   field_x = rsigma * curand_normal_double (&local_state);
-      		   field_y = rsigma * curand_normal_double (&local_state);
-      		   field_z = rsigma * curand_normal_double (&local_state);
-      		#else
-      		   field_x = rsigma * curand_normal(&local_state);
-      		   field_y = rsigma * curand_normal(&local_state);
-      		   field_z = rsigma * curand_normal(&local_state);
-      		#endif
+      		// Gaussian random numbers are generated in single precision in both builds, since double
+      		// precision generation is slow on GPUs with reduced double precision throughput
+      		field_x = rsigma * curand_normal(&local_state);
+      		field_y = rsigma * curand_normal(&local_state);
+      		field_z = rsigma * curand_normal(&local_state);
       		// if(i<10){printf("         %d  %lf  %lf  %lf\n",i,field_x,field_y,field_z);}
 
       		x_field_array[i] = field_x;
       		y_field_array[i] = field_y;
       		z_field_array[i] = field_z;
 
-      		// Write local curand state back to global memory
-      		rand_states[tid] = local_state;
-
 			}
+
+			// Write local curand state back to global memory
+			rand_states[tid] = local_state;
+
 			return;
 		} // end apply_global_temperature_kernel
 

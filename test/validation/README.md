@@ -20,6 +20,19 @@ suite with each build (and the `hamr-perf` benchmark), checks that the CUDA bina
 reproduces the serial references exactly, and packs results, build logs and system information into
 `test/validation/results/gpu-suite-<host>-<date>.tar.gz`. It runs `make clean` before each build and at the end.
 
+`test/validation/profile_gpu.sh [case] [dp|sp]` profiles one case (default `hamr-perf`) with Nsight Systems.
+
+`test/validation/ab_compare.sh [ref-commit] [dp|sp] [seeds]` compares the CUDA build of a reference commit
+(default `HEAD`) with the working tree, for changes expected to give statistically equivalent rather than identical
+results (for example a different random number sequence): it runs every finite temperature LLG case with both builds
+using more seeds (default 32), compares them with each other and with the CPU references, and times the
+`hamr-perf` and `thermal-perf` benchmarks with both builds.
+
+`run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
+of all statistical comparisons pooled together: when test and reference sample the same distribution they are
+approximately standard normal (mean ~0, rms ~1, ~4.6 % beyond 2), which is a sharper test than the per-quantity
+pass/fail. Rows of a per-row case are correlated, so judge the pooled values rather than a single case.
+
 ## Case format (`cases/<case>/case.json`)
 
 All case inputs use `output:column-headers` and `output:precision=16`
@@ -42,4 +55,4 @@ Statistical checks fail spuriously ~0.1 % of the time per quantity: re-run with 
   and `cubic-rotated` are not implemented in the CUDA module, so they are expected to fail on GPU until fixed.
 - `timeseries-T300`, `curie-llg`, `curie-mc`: thermal statistics (LLG and Monte Carlo are each compared only with
   the same integrator).
-- `hamr-small` (statistical), `hamr-t0` (deterministic), `hamr-perf` (benchmark, ~168k atoms).
+- `hamr-small` (statistical), `hamr-t0` (deterministic), `hamr-perf` (benchmark, ~168k atoms); `thermal-perf` (benchmark, the same system as a 300 K time series).

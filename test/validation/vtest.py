@@ -10,8 +10,8 @@ VAMPIRE validation suite: runs reference cases with any vampire binary and
 compares the results against analytic solutions or reference outputs.
 
    vtest.py run --exe ./vampire-cuda --label gpu-dp [--precision sp] [--cases a,b]
-                [--extra "gpu:acceleration=off"] [--seed-offset N] [--jobs N] [--reference]
-   vtest.py compare --test gpu-dp --ref cpu [--cases a,b]
+                [--extra "gpu:acceleration=off"] [--seed-offset N] [--seeds N] [--jobs N] [--reference]
+   vtest.py compare --test gpu-dp --ref cpu [--cases a,b] [--verbose] [--summary]
 
 See README.md for case.json format and tolerance policy.
 """
@@ -44,10 +44,15 @@ def case_names(selection):
       names = wanted
    return names
 
-def run_names(case):
-   # seeded cases get one run per seed, deterministic cases a single run
+def run_names(case, seeds=None):
+   # seeded cases get one run per seed (default: the case's own seed count), deterministic cases a single run
    if case["kind"] in ("deterministic", "benchmark") or case.get("model") == "precession": return ["run"]
-   return ["seed%d" % s for s in range(1, case["seeds"] + 1)]
+   return ["seed%d" % s for s in range(1, (seeds or case["seeds"]) + 1)]
+
+def seed_runs(case, d):
+   # all seeds present in a result directory (the case's own seed count, or more when run with --seeds)
+   runs = [r for r in os.listdir(d) if r.startswith("seed") and r[4:].isdigit()]
+   return sorted(runs, key=lambda r: int(r[4:])) if len(runs) > case["seeds"] else run_names(case)
 
 def read_output(path):
    """Returns dict column name -> numpy array (requires output:column-headers)."""
@@ -93,7 +98,7 @@ def cmd_run(args):
    try: gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], capture_output=True, text=True).stdout.strip()
    except OSError: pass
 
-   jobs = [(c, r) for c in names for r in run_names(load_case(c))]
+   jobs = [(c, r) for c in names for r in run_names(load_case(c), args.seeds)]
    failed = []
    for c in names: os.makedirs(os.path.join(base, c), exist_ok=True)   # before threads, avoids makedirs races
    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
@@ -140,7 +145,7 @@ def thermal_mz(p):
 def seed_means(case, d):
    # time average (or per-row value) of each quantity per seed, then mean and standard error over seeds
    per = {q: [] for q in case["quantities"]}
-   for r in run_names(case):
+   for r in seed_runs(case, d):
       for q, v in quantities(case, os.path.join(d, r, "output")).items():
          per[q].append(v if case.get("per_row") else v[case["skip_rows"]:].mean())
    return {q: (np.mean(v, axis=0), np.std(v, ddof=1, axis=0) / np.sqrt(len(v))) for q, v in per.items()}
@@ -149,6 +154,8 @@ def noise_ok(se_test, se_ref):
    # a statistical match is meaningless if the test results are non-finite or far noisier than the reference
    se_test, se_ref = np.atleast_1d(se_test), np.atleast_1d(se_ref)
    return bool(np.all(np.isfinite(se_test)) and np.all(se_test <= 10.0 * se_ref + 1e-300))
+
+Z_SCORES = []   # (case, quantity, signed z, noise ratio) of every statistical comparison, for --summary
 
 def compare_case(name, case, test_dir, ref_dir, precision):
    """Returns list of (quantity, passed, description)."""
@@ -167,7 +174,8 @@ def compare_case(name, case, test_dir, ref_dir, precision):
    elif case["kind"] == "analytic" and case["model"] == "thermal":
       exact = thermal_mz(case["params"])
       m, se = seed_means(case, test_dir)["mz"]
-      sr = seed_means(case, ref_dir)["mz"][1]
+      mr, sr = seed_means(case, ref_dir)["mz"]
+      Z_SCORES.append((name, "mz", np.atleast_1d((m - mr) / max(np.hypot(se, sr), 1e-300)), np.atleast_1d(se / max(sr, 1e-300))))
       lim = case["k"] * se + tol["atol"]
       ok = abs(m - exact) <= lim and noise_ok(se, sr)
       rows.append(("mz", ok, "%.5f +/- %.5f vs exact %.5f (limit %.1e, reference +/- %.5f)" % (m, se, exact, lim, sr)))
@@ -195,6 +203,7 @@ def compare_case(name, case, test_dir, ref_dir, precision):
          (mt, st), (mr, sr) = (np.atleast_1d(x) for x in t[k]), (np.atleast_1d(x) for x in r[k])
          if mt.shape != mr.shape:
             rows.append((k, False, "row count %d vs %d" % (len(mt), len(mr)))); continue
+         Z_SCORES.append((name, k, (mt - mr) / np.maximum(np.hypot(st, sr), 1e-300), st / np.maximum(sr, 1e-300)))
          z = np.abs(mt - mr) / np.maximum(np.hypot(st, sr), 1e-300)
          i = int(np.argmax(z))   # report the worst row
          desc = "%.6g +/- %.2g vs ref %.6g +/- %.2g" % (mt[i], st[i], mr[i], sr[i])
@@ -223,8 +232,21 @@ def cmd_compare(args):
       for q, ok, desc in rows:
          print("%-30s %-12s %-4s %s" % (name, q, "OK" if ok else "FAIL", desc))
          failures += 0 if ok else 1
+   if args.summary and Z_SCORES: print_summary()
    print("%s: %d failure(s)" % ("OVERALL PASS" if failures == 0 else "OVERALL FAIL", failures))
    return 1 if failures else 0
+
+def print_summary():
+   # If test and reference sample the same distribution, the signed z-scores of all statistical
+   # comparisons are approximately standard normal: mean ~0, rms ~1, ~4.6 % beyond 2 and ~0.3 % beyond 3,
+   # and the ratio of test to reference standard errors is ~1 (for equal numbers of seeds).
+   print("Summary of statistical comparisons (signed z = (test - ref) / combined standard error):")
+   print("   %-26s %-14s %5s %7s %6s %7s %11s" % ("case", "quantity", "n", "mean z", "rms z", "max |z|", "noise ratio"))
+   for name, q, z, ratio in Z_SCORES:
+      print("   %-26s %-14s %5d %7.2f %6.2f %7.2f %11.2f" % (name, q, len(z), z.mean(), np.sqrt((z**2).mean()), np.abs(z).max(), np.median(ratio)))
+   z = np.concatenate([x[2] for x in Z_SCORES]); ratio = np.concatenate([x[3] for x in Z_SCORES])
+   print("   %-41s %5d %7.2f %6.2f %7.2f %11.2f" % ("all", len(z), z.mean(), np.sqrt((z**2).mean()), np.abs(z).max(), np.median(ratio)))
+   print("   fraction |z| > 2: %.1f %% (expected 4.6 %%), |z| > 3: %.1f %% (expected 0.3 %%)" % (100 * np.mean(np.abs(z) > 2), 100 * np.mean(np.abs(z) > 3)))
 
 #------------------------------------------------------------------------------
 def main():
@@ -237,6 +259,7 @@ def main():
    r.add_argument("--cases")
    r.add_argument("--extra", action="append", default=[], help="extra input line (repeatable)")
    r.add_argument("--seed-offset", type=int, default=0, help="shift seeds, e.g. to re-run a statistical failure with fresh seeds")
+   r.add_argument("--seeds", type=int, help="number of seeds for statistical cases (default: each case's own)")
    r.add_argument("--jobs", type=int, default=1, help="concurrent runs (keep 1 for GPU)")
    r.add_argument("--reference", action="store_true", help="store as committed reference")
    c = sub.add_parser("compare")
@@ -244,6 +267,7 @@ def main():
    c.add_argument("--ref", required=True)
    c.add_argument("--cases")
    c.add_argument("--verbose", action="store_true", help="show every quantity, not just failures")
+   c.add_argument("--summary", action="store_true", help="pooled z-score statistics of all statistical comparisons")
    args = p.parse_args()
    sys.exit(cmd_run(args) if args.cmd == "run" else cmd_compare(args))
 
