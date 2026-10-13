@@ -124,6 +124,14 @@ namespace vcuda{
             int num_atoms
             );
 
+      __global__ void update_isotropic_exchange_and_anisotropy_fields_kernel (
+            const int * material, const material_parameters_t * material_params,
+            const int * nbr_start, const int * nbr_atom, const cu_real_t * nbr_J,
+            const cu_real_t * x_spin, const cu_real_t * y_spin, const cu_real_t * z_spin,
+            cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
+            int num_atoms
+            );
+
       __global__ void update_external_fields_kernel (
             cu_real_t * x_dip_field, cu_real_t * y_dip_field, cu_real_t * z_dip_field,
             cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,

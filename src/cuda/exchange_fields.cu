@@ -7,6 +7,7 @@
 #include "internal.hpp"
 #include "data.hpp"
 
+#include <algorithm>
 #include <vector>
 
 #include "cusparse.h"
@@ -40,6 +41,12 @@ namespace vcuda
 
          cusparseDnVecDescr_t vecX, vecY;
          cu_exch_mat_t  J_matrix_d;
+
+         // Neighbour list of each atom for isotropic exchange
+         bool use_isotropic_kernel = false;
+         int *d_nbr_start = nullptr;
+         int *d_nbr_atom = nullptr;
+         cu_real_t *d_nbr_J = nullptr;
 
          // Arrays to store the coo and csr matrix
         int *d_csr_rows;
@@ -195,6 +202,39 @@ namespace vcuda
 
             zlog << zTs() << "Expanded CPU nbr list to 3N by 3N format, no. of non-zeros is :" << vals.size() << " with a tol = " << tol << std::endl;
 
+            // For isotropic exchange also store the neighbour list of each atom, with neighbours in the
+            // same (sorted) order as the rows of the exchange matrix, for the combined spin field kernel
+            if( ::exchange::get_exchange_type() == 0 ){
+               std::vector<int> nbr_start(Natoms + 1, 0);
+               std::vector<int> nbr_atom;
+               std::vector<cu_real_t> nbr_J;
+               std::vector< std::pair<int, cu_real_t> > row;
+               for(int atom = 0; atom < Natoms; ++atom){
+                  row.clear();
+                  for(int nn = ::atoms::neighbour_list_start_index[atom]; nn <= ::atoms::neighbour_list_end_index[atom]; ++nn){
+                     const int iid = ::atoms::neighbour_interaction_type_array[nn];
+                     const cu_real_t J = ::atoms::i_exchange_list[iid].Jij;
+                     if( fabs(J) > tol ) row.push_back( std::make_pair(::atoms::neighbour_list_array[nn], J) );
+                  }
+                  std::sort( row.begin(), row.end() );
+                  for(size_t n = 0; n < row.size(); ++n){
+                     nbr_atom.push_back(row[n].first);
+                     nbr_J.push_back(row[n].second);
+                  }
+                  nbr_start[atom + 1] = nbr_atom.size();
+               }
+               cudaMalloc((void**)&d_nbr_start, nbr_start.size() * sizeof(int));
+               cudaMemcpy(d_nbr_start, nbr_start.data(), nbr_start.size() * sizeof(int), cudaMemcpyHostToDevice);
+               if( nbr_atom.size() > 0 ){
+                  cudaMalloc((void**)&d_nbr_atom, nbr_atom.size() * sizeof(int));
+                  cudaMalloc((void**)&d_nbr_J, nbr_J.size() * sizeof(cu_real_t));
+                  cudaMemcpy(d_nbr_atom, nbr_atom.data(), nbr_atom.size() * sizeof(int), cudaMemcpyHostToDevice);
+                  cudaMemcpy(d_nbr_J, nbr_J.data(), nbr_J.size() * sizeof(cu_real_t), cudaMemcpyHostToDevice);
+               }
+               use_isotropic_kernel = true;
+               zlog << zTs() << "Isotropic exchange: spin fields calculated from the neighbour list of each atom" << std::endl;
+            }
+
             Ncols = 3 * Natoms;
             Nrows = 3 * Natoms;
             Nnz = vals.size();
@@ -272,7 +312,7 @@ namespace vcuda
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
                                     &alpha, J_matrix_d, vecX, &beta, vecY,
                                     CUSPARSE_REAL,
-                                    CUSPARSE_SPMV_CSR_ALG1,
+                                    CUSPARSE_SPMV_CSR_ALG2,
                                     &buffer_size);
 
                 cudaMalloc(&spmv_buffer_d, buffer_size);
@@ -333,6 +373,11 @@ namespace vcuda
 
          int finalise_exchange()
          {
+
+            cudaFree(d_nbr_start);
+            cudaFree(d_nbr_atom);
+            cudaFree(d_nbr_J);
+            use_isotropic_kernel = false;
             //cudaFree(d_spin3n);
             //cudaFree(d_field3n);
             //spin3N.cu_real_array_t::~cu_real_array_t();
@@ -386,7 +431,7 @@ namespace vcuda
                 //cudaMemcpy(d_spin3n + 2 * ::atoms::num_atoms, 	cu::atoms::d_z_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
                 check_cuda_errors(__FILE__,__LINE__);
 
-                // cusparseSpMV using CSR algorithm 1
+                // cusparseSpMV using CSR algorithm 2 (deterministic, no per-call preprocessing)
                 status = cusparseSpMV(  handle,
                                         CUSPARSE_OPERATION_NON_TRANSPOSE,
                                         &alpha,
@@ -395,7 +440,7 @@ namespace vcuda
                                         &beta,
                                         vecY,
                                         CUSPARSE_REAL,
-                                        CUSPARSE_SPMV_CSR_ALG1,
+                                        CUSPARSE_SPMV_CSR_ALG2,
                                         spmv_buffer_d);
 
                 if (status != CUSPARSE_STATUS_SUCCESS) {

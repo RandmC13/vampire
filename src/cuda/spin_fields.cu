@@ -40,6 +40,28 @@ namespace internal{
 void update_spin_fields ()
 {
 
+   if(!cu::exchange::exchange_initialised) cu::exchange::initialise_exchange();
+
+   // Isotropic exchange: exchange and anisotropy fields in one kernel, which overwrites the spin field
+   if(cu::exchange::use_isotropic_kernel){
+      cu::update_isotropic_exchange_and_anisotropy_fields_kernel <<< cu::grid_size, cu::block_size >>> (
+            cu::atoms::d_materials, cu::mp::d_material_params,
+            cu::exchange::d_nbr_start, cu::exchange::d_nbr_atom, cu::exchange::d_nbr_J,
+            cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
+            cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
+            ::atoms::num_atoms);
+
+      check_cuda_errors (__FILE__, __LINE__);
+
+      //If neel fields are enabled, execute the kernel
+      if (anisotropy::is_neel_enabled()) cu::update_neel_fields();
+
+      //If rotational fields are enabled, execute the kernel
+      if (anisotropy::is_rotational_enabled()) cu::update_rotational_fields();
+
+      return;
+   }
+
    // This exchange field zero out stuff, so they should come first
    cu::exchange::calculate_exchange_fields ();
 
@@ -97,30 +119,17 @@ __device__ cu_real_t uniaxial_anisotropy_energy(cu::material_parameters_t &mater
 
 
 
-__global__ void update_non_exchange_spin_fields_kernel (
-      int * material,
-      cu::material_parameters_t * material_params,
-      cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin,
-      cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
-      int n_atoms
-      )
+//------------------------------------------------------------------------------
+// Device function to calculate the uniaxial and cubic anisotropy field of a spin
+//------------------------------------------------------------------------------
+__device__ __forceinline__ void anisotropy_field(const cu::material_parameters_t &material,
+      const cu_real_t sx, const cu_real_t sy, const cu_real_t sz,
+      cu_real_t &field_x, cu_real_t &field_y, cu_real_t &field_z)
 {
-   for ( int i = blockIdx.x * blockDim.x + threadIdx.x;
-         i < n_atoms;
-         i += blockDim.x * gridDim.x){
 
-      int mid = material[i];
-      // Load parameters from memory
-      cu::material_parameters_t material = material_params[mid];
-
-      // Initialise register to hold total spin field
-      cu_real_t field_x = 0.0;
-      cu_real_t field_y = 0.0;
-      cu_real_t field_z = 0.0;
-
-      const cu_real_t sx = x_spin[i];
-      const cu_real_t sy = y_spin[i];
-      const cu_real_t sz = z_spin[i];
+      field_x = 0.0;
+      field_y = 0.0;
+      field_z = 0.0;
 
       const cu_real_t ex = material.anisotropy_unit_x;
       const cu_real_t ey = material.anisotropy_unit_y;
@@ -144,7 +153,7 @@ __global__ void update_non_exchange_spin_fields_kernel (
       const cu_real_t ek2 = k2 * 3.0 * sdote;
       const cu_real_t ek4 = k4 * (6.0 * sdote3 - ((18.0/7.0) * sdote));
       const cu_real_t ek6 = k6 * (3.0/11.0) * (((33.0)*sdote5) - (30.0 * sdote3) + (5.0*sdote));
-      
+
       field_x += scale * ex * (ek2 + ek4 + ek6);
       field_y += scale * ey * (ek2 + ek4 + ek6);
       field_z += scale * ez * (ek2 + ek4 + ek6);
@@ -192,13 +201,69 @@ __global__ void update_non_exchange_spin_fields_kernel (
        * TODO: Lagrange multipliers?
        */
 
-      /*
-       * Write back to main memory
-       */
+}
+
+__global__ void update_non_exchange_spin_fields_kernel (
+      int * material,
+      cu::material_parameters_t * material_params,
+      cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin,
+      cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
+      int n_atoms
+      )
+{
+
+   for ( int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < n_atoms;
+         i += blockDim.x * gridDim.x){
+
+      cu_real_t field_x, field_y, field_z;
+      anisotropy_field(material_params[material[i]], x_spin[i], y_spin[i], z_spin[i], field_x, field_y, field_z);
 
       x_sp_field[i] += field_x;
       y_sp_field[i] += field_y;
       z_sp_field[i] += field_z;
+
+   }
+}
+
+//------------------------------------------------------------------------------
+// Kernel calculating isotropic exchange and anisotropy fields in one pass,
+// overwriting the spin field. Neighbours of each atom are summed in increasing
+// atom order, as in the rows of the exchange matrix.
+//------------------------------------------------------------------------------
+__global__ void update_isotropic_exchange_and_anisotropy_fields_kernel (
+      const int * material,
+      const cu::material_parameters_t * material_params,
+      const int * nbr_start, const int * nbr_atom, const cu_real_t * nbr_J,
+      const cu_real_t * x_spin, const cu_real_t * y_spin, const cu_real_t * z_spin,
+      cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
+      int n_atoms
+      )
+{
+
+   for ( int i = blockIdx.x * blockDim.x + threadIdx.x;
+         i < n_atoms;
+         i += blockDim.x * gridDim.x){
+
+      // exchange field
+      cu_real_t hx = 0.0;
+      cu_real_t hy = 0.0;
+      cu_real_t hz = 0.0;
+      const int end = nbr_start[i + 1];
+      for(int n = nbr_start[i]; n < end; n++){
+         const int j = nbr_atom[n];
+         const cu_real_t J = nbr_J[n];
+         hx += J * x_spin[j];
+         hy += J * y_spin[j];
+         hz += J * z_spin[j];
+      }
+
+      cu_real_t field_x, field_y, field_z;
+      anisotropy_field(material_params[material[i]], x_spin[i], y_spin[i], z_spin[i], field_x, field_y, field_z);
+
+      x_sp_field[i] = hx + field_x;
+      y_sp_field[i] = hy + field_y;
+      z_sp_field[i] = hz + field_z;
 
    }
 }
