@@ -21,5 +21,15 @@ Benchmark runs are the validation cases `hamr-perf` and `thermal-perf` (~168k at
 in double and single precision with 3 repeats. `bench.csv` lists, per run, the wall time and
 the simulation time reported by vampire (which excludes system generation).
 
+After `submit.sh` has run (it exports the sources), two further jobs can be submitted from the
+checkout with `REPO` and `WORK` exported (`export REPO=$PWD WORK=~/scratch/vampire-benchmarks`):
+
+    # physics validation suite on each GPU type (under an hour each)
+    sbatch --partition=gpu     --output=$WORK/logs/%x-gpu-%j.log     test/viking/validate.job
+    sbatch --partition=gpuplus --output=$WORK/logs/%x-gpuplus-%j.log test/viking/validate.job
+    # GPU interconnect and copy bandwidth of a full node
+    sbatch --partition=gpu     --gres=gpu:3 --output=$WORK/logs/%x-gpu-%j.log     test/viking/topology.job
+    sbatch --partition=gpuplus --gres=gpu:2 --output=$WORK/logs/%x-gpuplus-%j.log test/viking/topology.job
+
 Everything is written to `$WORK` (default `~/scratch/vampire-benchmarks`). The CUDA module
 can be chosen with `CUDA_MODULE` (default: the module system's default `CUDA`).

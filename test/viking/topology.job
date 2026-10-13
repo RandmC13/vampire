@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-topology
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=16G
+#SBATCH --time=0-00:15:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Records how the GPUs of one node are connected, for multi-GPU halo exchange:
+#    sbatch --partition=gpu     --gres=gpu:3 test/viking/topology.job   (A40)
+#    sbatch --partition=gpuplus --gres=gpu:2 test/viking/topology.job   (H100)
+# Prints nvidia-smi topology/NVLink status, then measures peer access and
+# GPU<->GPU and pinned host<->GPU copy bandwidth for every pair.
+# Writes $WORK/topology/<partition>.txt.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/common.sh
+mkdir -p $WORK/topology
+exec > $WORK/topology/$SLURM_JOB_PARTITION.txt 2>&1
+set -e
+hostname; nvidia-smi -L; nvidia-smi topo -m; nvidia-smi nvlink --status || true
+
+dir=$(mktemp -d)
+cat > $dir/bandwidth.cu << 'EOF'
+#include <cstdio>
+// copy bandwidth in GB/s of 'bytes' from src to dst (devices or host), averaged over 10 copies
+float bandwidth(void * dst, int dst_dev, void * src, int src_dev, size_t bytes){
+   cudaEvent_t start, stop; float ms;
+   cudaSetDevice(src_dev < 0 ? dst_dev : src_dev);
+   cudaEventCreate(&start); cudaEventCreate(&stop);
+   cudaEventRecord(start);
+   for(int i = 0; i < 10; i++){
+      if(src_dev >= 0 && dst_dev >= 0) cudaMemcpyPeerAsync(dst, dst_dev, src, src_dev, bytes);
+      else cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault);
+   }
+   cudaEventRecord(stop); cudaEventSynchronize(stop);
+   cudaEventElapsedTime(&ms, start, stop);
+   return 10.0 * bytes / (ms * 1e6);
+}
+int main(){
+   const size_t bytes = 256 << 20;
+   int n; cudaGetDeviceCount(&n);
+   void * d[8]; void * h;
+   cudaMallocHost(&h, bytes);
+   for(int i = 0; i < n; i++){ cudaSetDevice(i); cudaMalloc(&d[i], bytes); }
+   printf("host <-> device (pinned, 256 MB):\n");
+   for(int i = 0; i < n; i++)
+      printf("   GPU%d  H2D %6.1f GB/s   D2H %6.1f GB/s\n", i, bandwidth(d[i], i, h, -1, bytes), bandwidth(h, -1, d[i], i, bytes));
+   printf("device -> device (256 MB), peer access in brackets:\n");
+   for(int i = 0; i < n; i++) for(int j = 0; j < n; j++){
+      if(i == j) continue;
+      int peer; cudaDeviceCanAccessPeer(&peer, i, j);
+      cudaSetDevice(i); if(peer) cudaDeviceEnablePeerAccess(j, 0);
+      printf("   GPU%d -> GPU%d  %6.1f GB/s  (peer %s)\n", j, i, bandwidth(d[i], i, d[j], j, bytes), peer ? "yes" : "no");
+   }
+   cudaError_t e = cudaGetLastError();
+   printf("%s\n", e == cudaSuccess ? "done" : cudaGetErrorString(e));
+   return e != cudaSuccess;
+}
+EOF
+nvcc -O2 -arch=native -o $dir/bandwidth $dir/bandwidth.cu
+$dir/bandwidth
+rm -rf $dir
