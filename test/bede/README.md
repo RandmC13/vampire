@@ -30,4 +30,4 @@ Binaries are built separately for each node type (`$WORK/bin/<arch>/`).
 
 The benchmark cases are the same as on Viking (see `test/viking/README.md`). Everything is
 written to `$WORK` (default `~/vampire-benchmarks`, under 1 GB). Modules default to
-`gcc/12.2` with `cuda/12.4.1` (ppc64le) or `cuda/12.6.1` (aarch64); override with `MODULES`.
+`gcc/12.2` with `cuda/12.4.1` (ppc64le) or the default `cuda` (aarch64); override with `MODULES`.
