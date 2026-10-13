@@ -23,6 +23,9 @@ namespace gpu{
       //-------------------------------------------------------------------------------
       void synchronise(){
 
+         // check for gpu functions and data initialised
+         if( !gpu::initialized ) return;
+
          #ifdef CUDA
             vcuda::config::synchronise();
          #elif OPENCL

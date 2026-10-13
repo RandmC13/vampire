@@ -611,8 +611,12 @@ int run(){
 
 	//program::LLB_Boltzmann();
 
-   // De-initialize GPU
-   if(gpu::acceleration) gpu::finalize();
+   // De-initialize GPU, copying the final spin configuration to the host first
+   // (not kept up to date on the host when statistics are calculated on the GPU)
+   if(gpu::acceleration){
+      gpu::transfer_spin_positions_from_gpu_to_cpu();
+      gpu::finalize();
+   }
 
    // optionally save checkpoint file
    if(sim::save_checkpoint_flag && !sim::save_checkpoint_continuous_flag) save_checkpoint();

@@ -167,6 +167,13 @@ namespace vcuda{
          bool use_cpu = false;
          long counter(0L);
 
+         // true when statistics are calculated on the device, so that the spins on the host
+         // are only valid directly after an explicit transfer
+         bool device_owns_spins = false;
+
+         // true when the spins on the host hold the current spins from the device
+         bool host_spins_current = true;
+
       } /* stats */
 
    } // end of internal namespace
