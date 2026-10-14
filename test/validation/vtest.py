@@ -76,7 +76,7 @@ def result_dir(label):
 #------------------------------------------------------------------------------
 # run
 #------------------------------------------------------------------------------
-def run_one(exe, case_name, run, out_dir, extra, seed_offset):
+def run_one(cmd, case_name, run, out_dir, extra, seed_offset):
    src = os.path.join(CASES, case_name)
    if os.path.isdir(out_dir): shutil.rmtree(out_dir)
    shutil.copytree(src, out_dir, ignore=shutil.ignore_patterns("case.json"))
@@ -85,7 +85,7 @@ def run_one(exe, case_name, run, out_dir, extra, seed_offset):
       for line in extra: f.write(line + "\n")
       if run.startswith("seed"): f.write("sim:integrator-random-seed = %d\n" % (int(run[4:]) + seed_offset))
    with open(os.path.join(out_dir, "stdout"), "w") as so:
-      rc = subprocess.call([exe], cwd=out_dir, stdout=so, stderr=subprocess.STDOUT)
+      rc = subprocess.call(cmd, cwd=out_dir, stdout=so, stderr=subprocess.STDOUT)
    ok = rc == 0 and os.path.isfile(os.path.join(out_dir, "output"))
    return case_name, run, ok
 
@@ -94,6 +94,8 @@ def cmd_run(args):
    base = os.path.join(REFERENCE if args.reference else RESULTS, args.label)
    names = case_names(args.cases)
    version = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout.strip()
+   # MPI versions are started with mpirun (command from the MPIRUN environment variable)
+   cmd = os.environ.get("MPIRUN", "mpirun").split() + ["-np", str(args.ranks), exe] if args.ranks else [exe]
    gpu = ""
    try: gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], capture_output=True, text=True).stdout.strip()
    except OSError: pass
@@ -102,7 +104,7 @@ def cmd_run(args):
    failed = []
    for c in names: os.makedirs(os.path.join(base, c), exist_ok=True)   # before threads, avoids makedirs races
    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-      futures = [pool.submit(run_one, exe, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
+      futures = [pool.submit(run_one, cmd, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
       for fut in concurrent.futures.as_completed(futures):
          c, r, ok = fut.result()
          print("%-30s %-8s %s" % (c, r, "done" if ok else "FAILED (see stdout in run directory)"), flush=True)
@@ -117,7 +119,7 @@ def cmd_run(args):
                p = os.path.join(d, f)
                shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
 
-   meta = {"label": args.label, "exe": exe, "version": version, "precision": args.precision,
+   meta = {"label": args.label, "exe": exe, "ranks": args.ranks, "version": version, "precision": args.precision,
            "extra": args.extra, "seed_offset": args.seed_offset, "date": datetime.datetime.now().isoformat(timespec="seconds"),
            "host": socket.gethostname(), "gpu": gpu}
    with open(os.path.join(base, "meta.json"), "w") as f: json.dump(meta, f, indent=3)
@@ -261,6 +263,7 @@ def main():
    r.add_argument("--seed-offset", type=int, default=0, help="shift seeds, e.g. to re-run a statistical failure with fresh seeds")
    r.add_argument("--seeds", type=int, help="number of seeds for statistical cases (default: each case's own)")
    r.add_argument("--jobs", type=int, default=1, help="concurrent runs (keep 1 for GPU)")
+   r.add_argument("--ranks", type=int, help="run with mpirun -np RANKS (MPI versions)")
    r.add_argument("--reference", action="store_true", help="store as committed reference")
    c = sub.add_parser("compare")
    c.add_argument("--test", required=True)
