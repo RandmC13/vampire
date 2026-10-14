@@ -40,6 +40,9 @@ namespace mgpu{
       // full halo update of the spins on the device
       void swap_halo();
 
+      // orders the neighbours of each atom in the device exchange list by atom key (kernels.cu)
+      void sort_neighbours_by_key();
+
    } // end of internal namespace
 
 } // end of mgpu namespace

@@ -13,6 +13,7 @@
 // Vampire headers
 #include "errors.hpp"
 #include "gpu.hpp"
+#include "mgpu.hpp"
 #include "vio.hpp"
 
 namespace gpu{
@@ -52,6 +53,28 @@ namespace gpu{
             err::vexit();
          }
       }
+      //--------------------------------------------------------------------
+      // multi-GPU version only: sum exchange contributions in atom key order, so
+      // that results are bit for bit identical on any number of GPUs (testing)
+      #ifdef CUDA_MULTIGPU
+      test="decomposition-independent-order";
+      if(word==test){
+         if(value=="" || value=="true"){
+            mgpu::decomposition_independent_order = true;
+            return true;
+         }
+         if(value=="false"){
+            mgpu::decomposition_independent_order = false;
+            return true;
+         }
+         terminaltextcolor(RED);
+         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"true\"" << std::endl;
+         std::cerr << "\t\"false\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      #endif
       //--------------------------------------------------------------------
       test="calculate-statistics-on-cpu";
       if(word==test){

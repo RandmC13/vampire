@@ -46,7 +46,7 @@ namespace gpu{
       }
 
       #ifdef CUDA_MULTIGPU
-         mgpu::initialize_halo();
+         mgpu::initialize_device();
       #endif
 
       return;

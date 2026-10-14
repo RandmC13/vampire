@@ -63,10 +63,15 @@ namespace internal{
 
 } // end of internal namespace
 
+bool decomposition_independent_order = false;
+
 //------------------------------------------------------------------------------
-// Function to set up halo exchange on the device
+// Function to set up halo exchange on the device and, if requested, to order
+// the exchange neighbours of each atom by atom key
 //------------------------------------------------------------------------------
-void initialize_halo(){
+void initialize_device(){
+
+   if(decomposition_independent_order) internal::sort_neighbours_by_key();
 
    internal::num_send = vmpi::send_atom_translation_array.size();
    internal::num_recv = vmpi::recv_atom_translation_array.size();

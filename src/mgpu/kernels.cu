@@ -6,7 +6,9 @@
 //-----------------------------------------------------------------------------
 
 // C++ standard library headers
+#include <algorithm>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 // Vampire headers
@@ -22,6 +24,7 @@
 // CUDA module headers
 #include "../cuda/cuda_utils.hpp"
 #include "../cuda/data.hpp"
+#include "../cuda/exchange_fields.hpp"
 #include "../cuda/internal.hpp"
 #include "../cuda/llg_heun.hpp"
 #include "../cuda/typedefs.hpp"
@@ -117,6 +120,49 @@ namespace internal{
       unpack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_recv_atoms, num_recv, d_recv_buffer,
          cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin);
       check_cuda_errors(__FILE__, __LINE__);
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to order the neighbours of each atom in the exchange list of the
+   // CUDA module (built in local atom order) by atom key, so that the exchange
+   // field of every atom is summed in the same order for any decomposition.
+   // The list is only reordered: neighbours and exchange constants are unchanged.
+   //---------------------------------------------------------------------------
+   void sort_neighbours_by_key(){
+
+      if(!cu::exchange::use_isotropic_kernel){
+         zlog << zTs() << "Warning: exchange is not isotropic, so the order of exchange sums depends on the decomposition" << std::endl;
+         return;
+      }
+
+      const int num_atoms = ::atoms::num_atoms;
+      std::vector<int> start(num_atoms + 1);
+      cudaMemcpy(start.data(), cu::exchange::d_nbr_start, start.size() * sizeof(int), cudaMemcpyDeviceToHost);
+      const int num_nbrs = start[num_atoms];
+      if(num_nbrs == 0) return;
+
+      std::vector<int> nbr(num_nbrs);
+      std::vector<cu::cu_real_t> J(num_nbrs);
+      cudaMemcpy(nbr.data(), cu::exchange::d_nbr_atom, num_nbrs * sizeof(int), cudaMemcpyDeviceToHost);
+      cudaMemcpy(J.data(), cu::exchange::d_nbr_J, num_nbrs * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
+
+      std::vector< std::pair<uint64_t, int> > order;
+      std::vector<int> sorted_nbr(num_nbrs);
+      std::vector<cu::cu_real_t> sorted_J(num_nbrs);
+      for(int atom = 0; atom < num_atoms; atom++){
+         order.clear();
+         for(int i = start[atom]; i < start[atom + 1]; i++) order.push_back(std::make_pair(atom_key[nbr[i]], i));
+         std::sort(order.begin(), order.end());
+         for(size_t n = 0; n < order.size(); n++){
+            sorted_nbr[start[atom] + n] = nbr[order[n].second];
+            sorted_J[start[atom] + n] = J[order[n].second];
+         }
+      }
+
+      cudaMemcpy(cu::exchange::d_nbr_atom, sorted_nbr.data(), num_nbrs * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(cu::exchange::d_nbr_J, sorted_J.data(), num_nbrs * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice);
+      zlog << zTs() << "Exchange neighbours of each atom ordered by atom key" << std::endl;
+
    }
 
 } // end of internal namespace
