@@ -350,11 +350,11 @@ namespace vout{
       if(header && !vout::header_option){
          header = false;
       };
+      // For gpu acceleration get statistics from device (on all processes)
+      if(gpu::acceleration) gpu::stats::get();
+
       // Output data to output
       if(vmpi::my_rank==0){
-
-         // For gpu acceleration get statistics from device
-         if(gpu::acceleration) gpu::stats::get();
 
          for(unsigned int item=0;item<list.size();item++){
             output_switch(stream,list[item],header);
