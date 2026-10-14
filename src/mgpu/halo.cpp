@@ -72,6 +72,7 @@ bool decomposition_independent_order = false;
 void initialize_device(){
 
    if(decomposition_independent_order) internal::sort_neighbours_by_key();
+   internal::initialize_noise();
 
    internal::num_send = vmpi::send_atom_translation_array.size();
    internal::num_recv = vmpi::recv_atom_translation_array.size();
@@ -87,6 +88,7 @@ void initialize_device(){
 //------------------------------------------------------------------------------
 void finalize(){
    internal::free_device_halo();
+   internal::free_noise();
 }
 
 } // end of mgpu namespace

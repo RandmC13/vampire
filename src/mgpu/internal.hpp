@@ -43,6 +43,11 @@ namespace mgpu{
       // orders the neighbours of each atom in the device exchange list by atom key (kernels.cu)
       void sort_neighbours_by_key();
 
+      // thermal noise from the atom keys (thermal.cu)
+      void initialize_noise();
+      void free_noise();
+      void update_external_fields(); // external fields of one time step, incl. thermal and HAMR fields
+
    } // end of internal namespace
 
 } // end of mgpu namespace

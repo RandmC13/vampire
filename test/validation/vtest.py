@@ -276,7 +276,10 @@ def cmd_configs(args):
    for c in case_names(args.cases):
       for r in sorted(os.listdir(os.path.join(test_dir, c))) if os.path.isdir(os.path.join(test_dir, c)) else []:
          t, f = os.path.join(test_dir, c, r), os.path.join(ref_dir, c, r)
-         if not os.path.isfile(os.path.join(t, "atoms-coords.data")): continue
+         if not os.path.isdir(t): continue
+         missing = [d for d in (t, f) if not os.path.isfile(os.path.join(d, "atoms-coords.data"))]
+         if missing:
+            print("%-30s %-8s FAIL no binary configuration in %s" % (c, r, ", ".join(missing))); failures += 1; continue
          tc, ts, tname = read_config(t)
          rc, rs, rname = read_config(f)
          if tc.shape != rc.shape or not np.array_equal(tc, rc):

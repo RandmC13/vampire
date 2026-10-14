@@ -15,7 +15,8 @@ MGPU_HOST_OBJECTS=$(OBJECTS:.o=_mgpu.o) \
 	obj/mgpu/keys_mgpu.o
 
 MGPU_CUDA_OBJECTS=$(CUDA_OBJECTS:.o=_mgpu.o) \
-	obj/mgpu/kernels_mgpu.o
+	obj/mgpu/kernels_mgpu.o \
+	obj/mgpu/thermal_mgpu.o
 
 $(MGPU_HOST_OBJECTS): obj/%_mgpu.o: src/%.cpp
 	$(MPICC) -c -o $@ $(GCC_CFLAGS) -DCUDA -DCUDA_MULTIGPU $(OPTIONS) $<
