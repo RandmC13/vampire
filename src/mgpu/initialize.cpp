@@ -11,15 +11,12 @@
 #include <vector>
 
 // Vampire headers
-#include "dipole.hpp"
 #include "environment.hpp"
 #include "errors.hpp"
+#include "exchange.hpp"
 #include "gpu.hpp"
 #include "mgpu.hpp"
 #include "micromagnetic.hpp"
-#include "sim.hpp"
-#include "spintorque.hpp"
-#include "spintransport.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
 
@@ -52,13 +49,11 @@ void unsupported(const std::string& feature){
 //------------------------------------------------------------------------------
 void initialize(){
 
-   // simulation features handled on the host or not yet distributed
+   // simulation features not yet distributed over several GPUs (features the GPU
+   // version does not support at all are checked in gpu::initialize). Remove an
+   // entry once the multi-GPU version supports it and a test confirms it.
    if(vmpi::mpi_mode != 0) unsupported("MPI modes other than geometric decomposition");
-   if(sim::integrator != sim::llg_heun) unsupported("Integrators other than llg-heun");
-   if(::dipole::activated) unsupported("The dipole field");
-   if(::st::is_enabled()) unsupported("Spin torque");
-   if(::spin_transport::is_enabled()) unsupported("Spin transport");
-   if(sim::lagrange_multiplier) unsupported("The Lagrange multiplier");
+   if(::exchange::get_exchange_type() != 0) unsupported("Vectorial and tensorial exchange");
    if(micromagnetic::discretisation_type > 0) unsupported("Micromagnetic discretisation");
    if(environment::enabled) unsupported("The environment module");
 

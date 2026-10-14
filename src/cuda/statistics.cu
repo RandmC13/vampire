@@ -9,12 +9,14 @@
 
 // C++ standard library headers
 #include <algorithm>
+#include <iostream>
 #include <vector>
 
 // Vampire headers
 #include "atoms.hpp"
 #include "cuda.hpp"
 #include "dipole.hpp"
+#include "errors.hpp"
 #include "program.hpp"
 #include "spintorque.hpp"
 #include "spintransport.hpp"
@@ -74,6 +76,20 @@ namespace {
    bool device_statistics_initialised = false;
    bool fallback_logged = false;
    int pending_steps = 0; // steps summed on the device but not yet processed on the host
+
+   //---------------------------------------------------------------------------
+   // Function to stop if a kernel has failed. Release builds do not check each
+   // kernel, so this is called after copies from the device, which wait for all
+   // earlier kernels and so report their errors without an extra synchronisation.
+   //---------------------------------------------------------------------------
+   void check_device_errors(){
+      const cudaError_t error = cudaGetLastError();
+      if(error != cudaSuccess){
+         std::cerr << "Error: CUDA error on the GPU: " << cudaGetErrorString(error) << std::endl;
+         zlog << zTs() << "Error: CUDA error on the GPU: " << cudaGetErrorString(error) << std::endl;
+         ::err::vexit();
+      }
+   }
 
    //---------------------------------------------------------------------------
    // Kernel summing spin moments of each chunk
@@ -167,20 +183,10 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
-   // Function to determine whether the host needs an up to date copy of the
-   // spins at every statistics update, in which case all statistics are
-   // calculated on the CPU
+   // Function to determine whether the program may read the spins on the host
+   // directly during the simulation
    //---------------------------------------------------------------------------
-   bool host_spins_required(){
-
-      // statistics needing the spins themselves
-      if(::stats::calculate_system_energy || ::stats::calculate_grain_energy || ::stats::calculate_material_energy) return true;
-
-      // modules reading the spins on the host every time step
-      if(::dipole::activated || ::st::is_enabled() || ::spin_transport::is_enabled() || ::sim::lagrange_multiplier) return true;
-
-      // only the GPU integrators keep the spins on the device up to date
-      if(::sim::integrator != ::sim::llg_heun && ::sim::integrator != ::sim::monte_carlo) return true;
+   bool program_reads_host_spins(){
 
       // programs which only use statistics of the spins during the simulation
       switch(::program::program){
@@ -196,6 +202,26 @@ namespace {
          default:
             return true;
       }
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to determine whether the host needs an up to date copy of the
+   // spins at every statistics update, in which case all statistics are
+   // calculated on the CPU
+   //---------------------------------------------------------------------------
+   bool host_spins_required(){
+
+      // statistics needing the spins themselves
+      if(::stats::calculate_system_energy || ::stats::calculate_grain_energy || ::stats::calculate_material_energy) return true;
+
+      // modules reading the spins on the host every time step
+      if(::dipole::activated || ::st::is_enabled() || ::spin_transport::is_enabled() || ::sim::lagrange_multiplier) return true;
+
+      // only the GPU integrators keep the spins on the device up to date
+      if(::sim::integrator != ::sim::llg_heun && ::sim::integrator != ::sim::monte_carlo) return true;
+
+      return program_reads_host_spins();
 
    }
 
@@ -235,6 +261,7 @@ namespace {
       for(device_magnetization_t& dm : device_statistics){
          if(dm.num_chunks > 0) cudaMemcpy(dm.h_partial.data(), dm.d_partial, pending_steps * 4 * dm.num_chunks * sizeof(double), cudaMemcpyDeviceToHost);
       }
+      check_device_errors();
 
       for(int step = 0; step < pending_steps; step++){
          for(device_magnetization_t& dm : device_statistics){
@@ -289,6 +316,14 @@ namespace {
 
 } // end of anonymous namespace
 
+//------------------------------------------------------------------------------
+// Function to copy the spins to the host after integration if the program may
+// read them there directly (programs that do not use the GPU statistics)
+//------------------------------------------------------------------------------
+void update_host_spins(){
+   if(program_reads_host_spins()) transfer_spin_positions_from_gpu_to_cpu();
+}
+
 namespace stats{
    void update (){
 
@@ -305,6 +340,7 @@ namespace stats{
          cudaMemcpy(internal::h_x_spin_transfer_buffer, internal::atoms::d_x_spin, ::atoms::num_atoms * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
          cudaMemcpy(internal::h_y_spin_transfer_buffer, internal::atoms::d_y_spin, ::atoms::num_atoms * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
          cudaMemcpy(internal::h_z_spin_transfer_buffer, internal::atoms::d_z_spin, ::atoms::num_atoms * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
+         check_device_errors();
 
          std::copy(internal::h_x_spin_transfer_buffer, internal::h_x_spin_transfer_buffer + ::atoms::num_atoms, ::atoms::x_spin_array.begin());
          std::copy(internal::h_y_spin_transfer_buffer, internal::h_y_spin_transfer_buffer + ::atoms::num_atoms, ::atoms::y_spin_array.begin());
