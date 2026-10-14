@@ -42,6 +42,18 @@ namespace internal{
    cu::cu_real_t* d_send_buffer = nullptr;
    cu::cu_real_t* d_recv_buffer = nullptr;
 
+   // events timing the halo copies on the GPU; the unpack of one update is
+   // added after the next update has been packed, when it has surely finished
+   cudaEvent_t pack_start, pack_end, unpack_start, unpack_end;
+   bool unpack_pending = false;
+   double copy_time = 0.0;
+
+   double elapsed(cudaEvent_t start, cudaEvent_t end){
+      float ms = 0.0f;
+      cudaEventElapsedTime(&ms, start, end);
+      return 1.0e-3 * ms;
+   }
+
    //----------------------------------------------------------------
    // Kernels to pack and unpack spins of listed atoms into buffers
    //----------------------------------------------------------------
@@ -72,6 +84,10 @@ namespace internal{
       return n;
    }
 
+   void device_pci_id(int device, char* id, int size){
+      if(cudaDeviceGetPCIBusId(id, size, device) != cudaSuccess) id[0] = '\0';
+   }
+
    void allocate_device_halo(const std::vector<int>& send_atoms, const std::vector<int>& recv_atoms){
 
       real_size = sizeof(cu::cu_real_t);
@@ -83,6 +99,10 @@ namespace internal{
       cudaMallocHost(&h_recv_buffer, std::max<size_t>(3 * recv_atoms.size(), 1) * sizeof(cu::cu_real_t));
       cudaMemcpy(d_send_atoms, send_atoms.data(), send_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(d_recv_atoms, recv_atoms.data(), recv_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaEventCreate(&pack_start);
+      cudaEventCreate(&pack_end);
+      cudaEventCreate(&unpack_start);
+      cudaEventCreate(&unpack_end);
 
       if(cudaGetLastError() != cudaSuccess){
          std::cerr << "Error: unable to allocate multi-GPU halo buffers on rank " << vmpi::my_rank << std::endl;
@@ -93,6 +113,10 @@ namespace internal{
    }
 
    void free_device_halo(){
+      cudaEventDestroy(pack_start);
+      cudaEventDestroy(pack_end);
+      cudaEventDestroy(unpack_start);
+      cudaEventDestroy(unpack_end);
       cudaFree(d_send_atoms);
       cudaFree(d_recv_atoms);
       cudaFree(d_send_buffer);
@@ -106,18 +130,36 @@ namespace internal{
 
    void pack_halo(){
       if(num_send == 0) return;
+      cudaEventRecord(pack_start);
       pack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_send_atoms, num_send,
          cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, d_send_buffer);
       check_cuda_errors(__FILE__, __LINE__);
       cudaMemcpy(h_send_buffer, d_send_buffer, 3 * num_send * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
+      cudaEventRecord(pack_end);
+      cudaEventSynchronize(pack_end);
+      copy_time += elapsed(pack_start, pack_end);
+      if(unpack_pending) copy_time += elapsed(unpack_start, unpack_end);
+      unpack_pending = false;
    }
 
    void unpack_halo(){
       if(num_recv == 0) return;
+      cudaEventRecord(unpack_start);
       cudaMemcpy(d_recv_buffer, h_recv_buffer, 3 * num_recv * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice);
       unpack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_recv_atoms, num_recv, d_recv_buffer,
          cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin);
       check_cuda_errors(__FILE__, __LINE__);
+      cudaEventRecord(unpack_end);
+      unpack_pending = true;
+   }
+
+   double halo_copy_time(){
+      if(unpack_pending){
+         cudaEventSynchronize(unpack_end);
+         copy_time += elapsed(unpack_start, unpack_end);
+         unpack_pending = false;
+      }
+      return copy_time;
    }
 
    //---------------------------------------------------------------------------

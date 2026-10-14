@@ -6,6 +6,10 @@
 //-----------------------------------------------------------------------------
 
 // C++ standard library headers
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 #include <vector>
 
 // Vampire headers
@@ -26,12 +30,16 @@ namespace internal{
    void* h_recv_buffer = nullptr;
    int real_size = 8;
 
+   uint64_t num_swaps = 0; // number of halo updates
+   double mpi_time = 0.0;  // wall time in seconds spent in MPI, including waiting for other ranks
+
    //---------------------------------------------------------------------------
    // Function to exchange the packed halo spins with the other ranks, with the
    // same messages as the MPI version (vmpi::mpi_init/complete_halo_swap)
    //---------------------------------------------------------------------------
    void exchange_halo(){
 
+      const double start = MPI_Wtime();
       const MPI_Datatype type = (real_size == sizeof(double)) ? MPI_DOUBLE : MPI_FLOAT;
       char* send = static_cast<char*>(h_send_buffer);
       char* recv = static_cast<char*>(h_recv_buffer);
@@ -48,6 +56,7 @@ namespace internal{
          }
       }
       MPI_Waitall(requests.size(), requests.data(), MPI_STATUSES_IGNORE);
+      mpi_time += MPI_Wtime() - start;
 
    }
 
@@ -59,6 +68,32 @@ namespace internal{
       pack_halo();
       exchange_halo();
       unpack_halo();
+      num_swaps++;
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to write the atom counts and halo exchange times of every rank.
+   // The GPU is idle during the exchange, so these times add to the run time.
+   //---------------------------------------------------------------------------
+   void report_halo_times(){
+
+      const int n = 6;
+      const double mine[n] = {double(vmpi::num_core_atoms + vmpi::num_bdry_atoms), double(num_recv), double(num_send),
+                              double(num_swaps), halo_copy_time(), mpi_time};
+      std::vector<double> all(n * vmpi::num_processors);
+      MPI_Gather(mine, n, MPI_DOUBLE, all.data(), n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+      if(vmpi::my_rank != 0) return;
+
+      std::ostringstream report;
+      report << std::fixed << std::setprecision(3);
+      for(int p = 0; p < vmpi::num_processors; p++){
+         const double* r = &all[n * p];
+         report << "Multi-GPU rank " << p << ": " << uint64_t(r[0]) << " local atoms, " << uint64_t(r[1]) << " halo atoms received, "
+                << uint64_t(r[2]) << " sent; " << uint64_t(r[3]) << " halo updates: GPU copies " << r[4] << " s, MPI " << r[5] << " s\n";
+      }
+      std::cout << report.str() << std::flush;
+      zlog << zTs() << "Halo exchange times\n" << report.str() << std::flush;
+
    }
 
 } // end of internal namespace
@@ -87,6 +122,7 @@ void initialize_device(){
 // Function to free buffers of the module
 //------------------------------------------------------------------------------
 void finalize(){
+   internal::report_halo_times();
    internal::free_device_halo();
    internal::free_noise();
 }

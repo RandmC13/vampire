@@ -33,12 +33,16 @@ namespace mgpu{
       void free_device_halo();
       void pack_halo();   // device spins -> h_send_buffer
       void unpack_halo(); // h_recv_buffer -> device spins
+      double halo_copy_time(); // GPU time in seconds spent packing, unpacking and copying halo spins
 
       // host side (halo.cpp): exchanges h_send_buffer and h_recv_buffer with the other ranks
       void exchange_halo();
 
       // full halo update of the spins on the device
       void swap_halo();
+
+      // writes the halo exchange times of every rank to the log and screen (halo.cpp)
+      void report_halo_times();
 
       // orders the neighbours of each atom in the device exchange list by atom key (kernels.cu)
       void sort_neighbours_by_key();
