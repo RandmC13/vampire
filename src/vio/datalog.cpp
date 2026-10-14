@@ -353,9 +353,6 @@ namespace vout{
       // Output data to output
       if(vmpi::my_rank==0){
 
-         // For gpu acceleration get statistics from device
-         if(gpu::acceleration) gpu::stats::get();
-
          for(unsigned int item=0;item<list.size();item++){
             output_switch(stream,list[item],header);
          }
@@ -399,6 +396,11 @@ namespace vout{
 			vmpi::TotalWaitTime=0.0;
 		}
 		#endif
+
+      // For gpu acceleration get statistics from device when output is due. Called on all
+      // processes, since it may reduce statistics over processes (write_out also writes the
+      // column headers on the root process only, which need no statistics)
+      if(gpu::acceleration && sim::time%vout::output_rate==0) gpu::stats::get();
 
       // check for open ofstream on root process only
       if(vmpi::my_rank == 0){

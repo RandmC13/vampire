@@ -60,6 +60,9 @@ namespace vcuda{
          // De-allocate the exchange fields
          cu::exchange::finalise_exchange();
 
+         // De-allocate the llg integration buffers
+         cu::llg::__llg_finalise();
+
          check_cuda_errors (__FILE__, __LINE__);
          // Free all device memory
 
@@ -111,9 +114,7 @@ namespace vcuda{
          cudaFree(d_z_external_field);
          cudaFree(d_y_external_field);
          cudaFree(d_x_external_field);
-         cudaFree(d_z_spin_field);
-         cudaFree(d_y_spin_field);
-         cudaFree(d_x_spin_field);
+         // the x, y and z spin field arrays point into d_spin_field
          cudaFree(d_spin_field);
          // Free atom variables
          cudaFree(atoms::d_cells);
@@ -123,13 +124,11 @@ namespace vcuda{
          cudaFree(atoms::d_y_coord);
          cudaFree(atoms::d_x_coord);
          // Free spin transfer buffers
-         cudaFree(h_z_spin_transfer_buffer);
-         cudaFree(h_y_spin_transfer_buffer);
-         cudaFree(h_x_spin_transfer_buffer);
+         cudaFreeHost(h_z_spin_transfer_buffer);
+         cudaFreeHost(h_y_spin_transfer_buffer);
+         cudaFreeHost(h_x_spin_transfer_buffer);
          // Free atom spins
-         cudaFree(atoms::d_z_spin);
-         cudaFree(atoms::d_y_spin);
-         cudaFree(atoms::d_x_spin);
+         // the x, y and z spin arrays point into d_spin
          cudaFree(atoms::d_spin);
          /*
          cu::atoms::x_spin_array.cu_real_array_t::~cu_real_array_t ();

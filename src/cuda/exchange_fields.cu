@@ -395,7 +395,9 @@ namespace vcuda
             //coo_vals_d.cu_real_array_t::~cu_real_array_t();
 
             if( !empty_exchange ) {
-                // destroy vector and matrix descriptors
+                // free the SpMV work buffer and destroy vector and matrix descriptors
+                cudaFree(spmv_buffer_d);
+                spmv_buffer_d = NULL;
                 cusparseDestroyDnVec(vecX);
                 cusparseDestroyDnVec(vecY);
                 status = cusparseDestroySpMat(J_matrix_d);

@@ -41,12 +41,20 @@ namespace vcuda
           * Private data
           */
          extern bool initialized;
+         extern heun_parameters_t * d_heun_params;
+         extern cu_real_t * d_x_spin_buffer;
+         extern cu_real_t * d_y_spin_buffer;
+         extern cu_real_t * d_z_spin_buffer;
+         extern cu_real_t * d_ds_x;
+         extern cu_real_t * d_ds_y;
+         extern cu_real_t * d_ds_z;
 
          /*
           * Internal functions
           */
          void __llg_init ();
          void __llg_step ();
+         void __llg_finalise ();
 
          /*
           * Internal kernels

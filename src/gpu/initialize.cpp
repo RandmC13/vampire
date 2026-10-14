@@ -14,6 +14,7 @@
 #include "gpu.hpp"
 #include "cuda.hpp"
 #include "errors.hpp"
+#include "mgpu.hpp"
 #include "vio.hpp"
 #include "vopencl.hpp"
 
@@ -23,6 +24,11 @@ namespace gpu{
    // Function to call correct initialization function depending on cuda,opencl etc
    //-------------------------------------------------------------------------------
    void initialize(){
+
+      // multi-GPU version: select the GPU of this rank first
+      #ifdef CUDA_MULTIGPU
+         mgpu::initialize();
+      #endif
 
       #ifdef CUDA
          initialized = vcuda::initialize(gpu::cpu_stats);
@@ -38,6 +44,10 @@ namespace gpu{
          zlog << zTs() << "Error: no support for GPU acceleration, please recompile using -D CUDA compile time flag with cuda development libraries v6.0 or greater." << std::endl;
          err::vexit();
       }
+
+      #ifdef CUDA_MULTIGPU
+         mgpu::initialize_device();
+      #endif
 
       return;
    }

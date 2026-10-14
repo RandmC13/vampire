@@ -76,7 +76,7 @@ def result_dir(label):
 #------------------------------------------------------------------------------
 # run
 #------------------------------------------------------------------------------
-def run_one(exe, case_name, run, out_dir, extra, seed_offset):
+def run_one(cmd, case_name, run, out_dir, extra, seed_offset):
    src = os.path.join(CASES, case_name)
    if os.path.isdir(out_dir): shutil.rmtree(out_dir)
    shutil.copytree(src, out_dir, ignore=shutil.ignore_patterns("case.json"))
@@ -85,7 +85,7 @@ def run_one(exe, case_name, run, out_dir, extra, seed_offset):
       for line in extra: f.write(line + "\n")
       if run.startswith("seed"): f.write("sim:integrator-random-seed = %d\n" % (int(run[4:]) + seed_offset))
    with open(os.path.join(out_dir, "stdout"), "w") as so:
-      rc = subprocess.call([exe], cwd=out_dir, stdout=so, stderr=subprocess.STDOUT)
+      rc = subprocess.call(cmd, cwd=out_dir, stdout=so, stderr=subprocess.STDOUT)
    ok = rc == 0 and os.path.isfile(os.path.join(out_dir, "output"))
    return case_name, run, ok
 
@@ -94,6 +94,8 @@ def cmd_run(args):
    base = os.path.join(REFERENCE if args.reference else RESULTS, args.label)
    names = case_names(args.cases)
    version = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout.strip()
+   # MPI versions are started with mpirun (command from the MPIRUN environment variable)
+   cmd = os.environ.get("MPIRUN", "mpirun").split() + ["-np", str(args.ranks), exe] if args.ranks else [exe]
    gpu = ""
    try: gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], capture_output=True, text=True).stdout.strip()
    except OSError: pass
@@ -102,7 +104,7 @@ def cmd_run(args):
    failed = []
    for c in names: os.makedirs(os.path.join(base, c), exist_ok=True)   # before threads, avoids makedirs races
    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-      futures = [pool.submit(run_one, exe, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
+      futures = [pool.submit(run_one, cmd, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
       for fut in concurrent.futures.as_completed(futures):
          c, r, ok = fut.result()
          print("%-30s %-8s %s" % (c, r, "done" if ok else "FAILED (see stdout in run directory)"), flush=True)
@@ -117,7 +119,7 @@ def cmd_run(args):
                p = os.path.join(d, f)
                shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
 
-   meta = {"label": args.label, "exe": exe, "version": version, "precision": args.precision,
+   meta = {"label": args.label, "exe": exe, "ranks": args.ranks, "version": version, "precision": args.precision,
            "extra": args.extra, "seed_offset": args.seed_offset, "date": datetime.datetime.now().isoformat(timespec="seconds"),
            "host": socket.gethostname(), "gpu": gpu}
    with open(os.path.join(base, "meta.json"), "w") as f: json.dump(meta, f, indent=3)
@@ -187,9 +189,10 @@ def compare_case(name, case, test_dir, ref_dir, precision):
       for k in case["quantities"]:
          if t[k].shape != r[k].shape:
             rows.append((k, False, "row count %d vs %d" % (len(t[k]), len(r[k])))); continue
-         # atol is relative to the largest reference magnitude, so it applies equally to unit vectors and energies (J)
+         # atol is relative to the largest reference magnitude, so it applies equally to unit vectors and energies (J);
+         # the optional absolute floor "abs" covers quantities that are close to zero in all compared rows
          diff = np.abs(t[k] - r[k])
-         ok = bool(np.all(diff <= tol["atol"] * np.abs(r[k]).max() + tol["rtol"] * np.abs(r[k])))
+         ok = bool(np.all(diff <= tol.get("abs", 0.0) + tol["atol"] * np.abs(r[k]).max() + tol["rtol"] * np.abs(r[k])))
          desc = "identical" if not diff.any() else "max |diff| = %.3e, max rel = %.3e" % (diff.max(), (diff / np.maximum(np.abs(r[k]), 1e-300)).max())
          if n: desc += " (first %d rows)" % n
          rows.append((k, ok, desc))
@@ -249,6 +252,45 @@ def print_summary():
    print("   fraction |z| > 2: %.1f %% (expected 4.6 %%), |z| > 3: %.1f %% (expected 0.3 %%)" % (100 * np.mean(np.abs(z) > 2), 100 * np.mean(np.abs(z) > 3)))
 
 #------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# configs: final spin configurations of two result sets, atom by atom
+#------------------------------------------------------------------------------
+def read_config(d):
+   # binary config files (config:output-format=binary): atoms-coords.data holds
+   # n, n types, n categories, 3n coordinates; spins-*.data holds n, 3n spins
+   with open(os.path.join(d, "atoms-coords.data"), "rb") as f:
+      n = int(np.frombuffer(f.read(8), dtype=np.uint64)[0])
+      f.seek(8 + 8 * n)
+      coords = np.frombuffer(f.read(24 * n), dtype=np.float64).reshape(n, 3)
+   spin_files = sorted(f for f in os.listdir(d) if f.startswith("spins-") and f.endswith(".data"))
+   with open(os.path.join(d, spin_files[-1]), "rb") as f:
+      m = int(np.frombuffer(f.read(8), dtype=np.uint64)[0])
+      spins = np.frombuffer(f.read(24 * m), dtype=np.float64).reshape(m, 3)
+   if m != n: sys.exit("Coordinate and spin files of %s have different atom counts" % d)
+   order = np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0]))   # files list atoms in rank order
+   return coords[order], spins[order], spin_files[-1]
+
+def cmd_configs(args):
+   test_dir, ref_dir = result_dir(args.test), result_dir(args.ref)
+   failures = 0
+   for c in case_names(args.cases):
+      for r in sorted(os.listdir(os.path.join(test_dir, c))) if os.path.isdir(os.path.join(test_dir, c)) else []:
+         t, f = os.path.join(test_dir, c, r), os.path.join(ref_dir, c, r)
+         if not os.path.isdir(t): continue
+         missing = [d for d in (t, f) if not os.path.isfile(os.path.join(d, "atoms-coords.data"))]
+         if missing:
+            print("%-30s %-8s FAIL no binary configuration in %s" % (c, r, ", ".join(missing))); failures += 1; continue
+         tc, ts, tname = read_config(t)
+         rc, rs, rname = read_config(f)
+         if tc.shape != rc.shape or not np.array_equal(tc, rc):
+            print("%-30s %-8s FAIL atoms differ (%d vs %d atoms or coordinates)" % (c, r, len(tc), len(rc))); failures += 1; continue
+         same = np.all(ts.view(np.uint64) == rs.view(np.uint64), axis=1)
+         status = "IDENTICAL" if same.all() else "DIFFERENT"
+         if not same.all(): failures += 1
+         print("%-30s %-8s %-9s %s: %d atoms, %d bit-identical spins, max |diff| = %.3e" % (c, r, status, tname, len(tc), same.sum(), np.abs(ts - rs).max()))
+   print("OVERALL", "PASS" if failures == 0 else "FAIL: %d run(s) differ" % failures)
+   return 1 if failures else 0
+
 def main():
    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
    sub = p.add_subparsers(dest="cmd", required=True)
@@ -261,6 +303,7 @@ def main():
    r.add_argument("--seed-offset", type=int, default=0, help="shift seeds, e.g. to re-run a statistical failure with fresh seeds")
    r.add_argument("--seeds", type=int, help="number of seeds for statistical cases (default: each case's own)")
    r.add_argument("--jobs", type=int, default=1, help="concurrent runs (keep 1 for GPU)")
+   r.add_argument("--ranks", type=int, help="run with mpirun -np RANKS (MPI versions)")
    r.add_argument("--reference", action="store_true", help="store as committed reference")
    c = sub.add_parser("compare")
    c.add_argument("--test", required=True)
@@ -268,8 +311,12 @@ def main():
    c.add_argument("--cases")
    c.add_argument("--verbose", action="store_true", help="show every quantity, not just failures")
    c.add_argument("--summary", action="store_true", help="pooled z-score statistics of all statistical comparisons")
+   k = sub.add_parser("configs", help="compare the final binary spin configurations of two result sets atom by atom (bit for bit)")
+   k.add_argument("--test", required=True)
+   k.add_argument("--ref", required=True)
+   k.add_argument("--cases")
    args = p.parse_args()
-   sys.exit(cmd_run(args) if args.cmd == "run" else cmd_compare(args))
+   sys.exit({"run": cmd_run, "compare": cmd_compare, "configs": cmd_configs}[args.cmd](args))
 
 if __name__ == "__main__":
    main()
