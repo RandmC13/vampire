@@ -44,25 +44,36 @@ namespace {
    // chunk_size atoms. Each chunk is summed by one thread block in a fixed
    // order, so results are reproducible from run to run, and only the partial
    // sums of each chunk are copied to the host.
+   //
+   // The partial sums of each time step are kept on the device in one of
+   // ring_slots slots and copied to the host in one transfer when all slots
+   // are used or when the statistics are read (gpu::stats::get, reset, config
+   // and checkpoint output). The host then processes the steps in order with
+   // the same arithmetic as a per-step update, so the statistics are
+   // unchanged, but the host does not wait for the device at every step.
+   // Code reading the statistics during a simulation must call
+   // gpu::stats::get() first.
    //---------------------------------------------------------------------------
    const int chunk_size = 2048;
    const int reduction_block_size = 256;
+   const int ring_slots = 64;
 
    struct device_magnetization_t{
       ::stats::magnetization_statistic_t* statistic;
       int num_chunks;
       std::vector<int> chunk_mask_id; // mask id of each chunk
-      std::vector<double> h_partial;  // partial sums (mx, my, mz, m) of each chunk
+      std::vector<double> h_partial;  // partial sums (mx, my, mz, m) of each chunk for each slot
       std::vector<double> sums;       // sums (mx, my, mz, m) of each mask id
       int* d_atom;                    // atom indices ordered by mask id
       double* d_moment;               // moments of ordered atoms
       int* d_chunk_start;             // first ordered atom of each chunk (num_chunks + 1 entries)
-      double* d_partial;
+      double* d_partial;              // ring_slots slots of 4 * num_chunks partial sums
    };
 
    std::vector<device_magnetization_t> device_statistics;
    bool device_statistics_initialised = false;
    bool fallback_logged = false;
+   int pending_steps = 0; // steps summed on the device but not yet processed on the host
 
    //---------------------------------------------------------------------------
    // Kernel summing spin moments of each chunk
@@ -138,7 +149,7 @@ namespace {
       }
       chunk_start.push_back(num_atoms);
       dm.num_chunks = dm.chunk_mask_id.size();
-      dm.h_partial.resize(4 * dm.num_chunks);
+      dm.h_partial.resize(ring_slots * 4 * dm.num_chunks);
       dm.sums.resize(4 * num_mask_ids);
 
       cudaMalloc((void**)&dm.d_atom, num_atoms * sizeof(int));
@@ -189,9 +200,66 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
-   // Function to calculate magnetisation statistics on the device
+   // Function to update statistics derived from the magnetisation and energy
    //---------------------------------------------------------------------------
-   void calculate_device_magnetization(){
+   void update_derived_statistics(){
+
+      // update torque statistics
+      //if(stats::calculate_system_torque)          stats::system_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
+      //if(stats::calculate_grain_torque)           stats::grain_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
+      //if(stats::calculate_material_torque)        stats::material_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
+
+      // update specific heat statistics
+      if(::stats::calculate_system_specific_heat)         ::stats::system_specific_heat.calculate(::stats::system_energy.get_total_energy());
+      if(::stats::calculate_grain_specific_heat)          ::stats::grain_specific_heat.calculate(::stats::grain_energy.get_total_energy());
+      if(::stats::calculate_material_specific_heat)       ::stats::material_specific_heat.calculate(::stats::material_energy.get_total_energy());
+
+      // standard deviation in time-step
+      if(::stats::calculate_material_standard_deviation)  ::stats::material_standard_deviation.update(::stats::system_magnetization.get_magnetization());
+
+      // update susceptibility statistics
+      if(::stats::calculate_system_susceptibility)        ::stats::system_susceptibility.calculate(::stats::system_magnetization.get_magnetization());
+      if(::stats::calculate_grain_susceptibility)         ::stats::grain_susceptibility.calculate(::stats::grain_magnetization.get_magnetization());
+      if(::stats::calculate_material_susceptibility)      ::stats::material_susceptibility.calculate(::stats::material_magnetization.get_magnetization());
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to process, in order, the steps summed on the device since the
+   // last call, as a per-step update would have done
+   //---------------------------------------------------------------------------
+   void process_pending_steps(){
+
+      if(pending_steps == 0) return;
+
+      for(device_magnetization_t& dm : device_statistics){
+         if(dm.num_chunks > 0) cudaMemcpy(dm.h_partial.data(), dm.d_partial, pending_steps * 4 * dm.num_chunks * sizeof(double), cudaMemcpyDeviceToHost);
+      }
+
+      for(int step = 0; step < pending_steps; step++){
+         for(device_magnetization_t& dm : device_statistics){
+
+            // add chunks in a fixed order
+            const double* partial = dm.h_partial.data() + step * 4 * dm.num_chunks;
+            std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
+            for(int c = 0; c < dm.num_chunks; c++){
+               for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += partial[4 * c + k];
+            }
+
+            dm.statistic->calculate_magnetization_from_sums(dm.sums);
+
+         }
+         update_derived_statistics();
+      }
+
+      pending_steps = 0;
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to sum the magnetisation of the current step on the device
+   //---------------------------------------------------------------------------
+   void sum_device_magnetization(){
 
       if(!device_statistics_initialised){
          if(::stats::calculate_system_magnetization)          add_device_statistic(::stats::system_magnetization);
@@ -205,25 +273,17 @@ namespace {
       }
 
       for(device_magnetization_t& dm : device_statistics){
-
          if(dm.num_chunks > 0){
             sum_magnetization_kernel <<< dm.num_chunks, reduction_block_size >>> (
                dm.d_atom, dm.d_moment, dm.d_chunk_start,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
-               dm.d_partial);
+               dm.d_partial + pending_steps * 4 * dm.num_chunks);
             check_cuda_errors(__FILE__, __LINE__);
-            cudaMemcpy(dm.h_partial.data(), dm.d_partial, dm.h_partial.size() * sizeof(double), cudaMemcpyDeviceToHost);
          }
-
-         // add chunks in a fixed order
-         std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
-         for(int c = 0; c < dm.num_chunks; c++){
-            for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += dm.h_partial[4 * c + k];
-         }
-
-         dm.statistic->calculate_magnetization_from_sums(dm.sums);
-
       }
+      pending_steps++;
+
+      if(pending_steps == ring_slots) process_pending_steps();
 
    }
 
@@ -270,35 +330,16 @@ namespace stats{
          if(::stats::calculate_material_grain_magnetization)  ::stats::material_grain_magnetization.calculate_magnetization(::atoms::x_spin_array, ::atoms::y_spin_array, ::atoms::z_spin_array, ::atoms::m_spin_array);
          if(::stats::calculate_material_grain_height_magnetization) ::stats::material_grain_height_magnetization.calculate_magnetization(::atoms::x_spin_array, ::atoms::y_spin_array, ::atoms::z_spin_array, ::atoms::m_spin_array);
 
+         // statistics derived from the magnetisation and energy
+         update_derived_statistics();
+
       }
       else{
-         calculate_device_magnetization();
+         sum_device_magnetization();
          // the spins on the host are not updated from now on
          cu::stats::device_owns_spins = true;
          vcuda::invalidate_host_spins();
       }
-
-      //---------------------------------------------------------------
-      // statistics derived from the magnetisation and energy
-      //---------------------------------------------------------------
-
-      // update torque statistics
-      //if(stats::calculate_system_torque)          stats::system_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
-      //if(stats::calculate_grain_torque)           stats::grain_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
-      //if(stats::calculate_material_torque)        stats::material_torque.calculate_torque(sx,sy,sz,bxs,bys,bzs,bxe,bye,bze,mm);
-
-      // update specific heat statistics
-      if(::stats::calculate_system_specific_heat)         ::stats::system_specific_heat.calculate(::stats::system_energy.get_total_energy());
-      if(::stats::calculate_grain_specific_heat)          ::stats::grain_specific_heat.calculate(::stats::grain_energy.get_total_energy());
-      if(::stats::calculate_material_specific_heat)       ::stats::material_specific_heat.calculate(::stats::material_energy.get_total_energy());
-
-      // standard deviation in time-step
-      if(::stats::calculate_material_standard_deviation)  ::stats::material_standard_deviation.update(::stats::system_magnetization.get_magnetization());
-
-      // update susceptibility statistics
-      if(::stats::calculate_system_susceptibility)        ::stats::system_susceptibility.calculate(::stats::system_magnetization.get_magnetization());
-      if(::stats::calculate_grain_susceptibility)         ::stats::grain_susceptibility.calculate(::stats::grain_magnetization.get_magnetization());
-      if(::stats::calculate_material_susceptibility)      ::stats::material_susceptibility.calculate(::stats::material_magnetization.get_magnetization());
 
       // increase the counter
       cu::stats::counter++;
@@ -307,11 +348,15 @@ namespace stats{
 
    void get (){
 
-      // If CPU stats calculation do nothing
-      if(vcuda::internal::stats::use_cpu) return;
+      // process steps summed on the device but not yet on the host
+      process_pending_steps();
+
    }
 
    void reset (){
+
+      // steps before the reset must not be counted after it
+      process_pending_steps();
 
       // reset statistics (calculated or accumulated on the CPU for both CPU and GPU statistics)
       {
@@ -363,6 +408,7 @@ namespace stats{
       namespace stats
       {
          void finalise(){
+            process_pending_steps();
             for(device_magnetization_t& dm : device_statistics){
                cudaFree(dm.d_atom);
                cudaFree(dm.d_moment);
@@ -370,6 +416,7 @@ namespace stats{
                cudaFree(dm.d_partial);
             }
             device_statistics.clear();
+            pending_steps = 0;
             device_statistics_initialised = false;
          }
       } /* stats */

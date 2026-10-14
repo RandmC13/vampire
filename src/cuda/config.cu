@@ -29,6 +29,9 @@ namespace vcuda{
          // copy spin data to CPU (via the transfer buffers, which also converts single precision spins)
          vcuda::transfer_spin_positions_from_gpu_to_cpu();
 
+         // configuration files include the magnetisation statistics
+         vcuda::stats::get();
+
          return;
 
       }

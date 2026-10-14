@@ -16,6 +16,7 @@
 // Program headers
 #include "atoms.hpp"
 #include "errors.hpp"
+#include "gpu.hpp"
 #include "random.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
@@ -27,6 +28,9 @@
 // Function to save checkpoint file
 //-----------------------------------------------------------------------------
 void save_checkpoint(){
+
+   // For gpu acceleration get statistics from device
+   if(gpu::acceleration) gpu::stats::get();
 
    // convert number of atoms, rank and time to standard long int
    uint64_t natoms64 = uint64_t(atoms::num_atoms-vmpi::num_halo_atoms);
