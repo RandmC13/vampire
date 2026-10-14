@@ -22,6 +22,7 @@
 #include "sld.hpp"
 #include "stats.hpp"
 #include "vio.hpp"
+#include "vmpi.hpp"
 #include "program.hpp"
 
 //-----------------------------------------------------------------------------
@@ -123,6 +124,13 @@ void save_checkpoint(){
    stats::system_susceptibility.save_checkpoint(chkfile);
    stats::grain_susceptibility.save_checkpoint(chkfile);
    stats::material_susceptibility.save_checkpoint(chkfile);
+
+   // write the decomposition (number of processes and region of this process): spins are
+   // stored in local atom order, so they can only be loaded into the same decomposition
+   const int64_t num_processors64 = vmpi::num_processors;
+   chkfile.write(reinterpret_cast<const char*>(&num_processors64),sizeof(int64_t));
+   chkfile.write(reinterpret_cast<const char*>(&vmpi::min_dimensions[0]),sizeof(double)*3);
+   chkfile.write(reinterpret_cast<const char*>(&vmpi::max_dimensions[0]),sizeof(double)*3);
 
    // close checkpoint file
    chkfile.close();
@@ -262,6 +270,27 @@ void load_checkpoint(){
    stats::system_susceptibility.load_checkpoint(chkfile,sim::load_checkpoint_continue_flag);
    stats::grain_susceptibility.load_checkpoint(chkfile,sim::load_checkpoint_continue_flag);
    stats::material_susceptibility.load_checkpoint(chkfile,sim::load_checkpoint_continue_flag);
+
+   // check the decomposition (not stored in older checkpoint files, which end here)
+   int64_t num_processors64 = 0;
+   double min_dimensions[3] = {0.0, 0.0, 0.0};
+   double max_dimensions[3] = {0.0, 0.0, 0.0};
+   chkfile.read((char*)&num_processors64,sizeof(int64_t));
+   chkfile.read((char*)&min_dimensions[0],sizeof(double)*3);
+   chkfile.read((char*)&max_dimensions[0],sizeof(double)*3);
+   if(chkfile){
+      bool same = (num_processors64 == vmpi::num_processors);
+      for(int i = 0; i < 3; i++) same = same && (min_dimensions[i] == vmpi::min_dimensions[i]) && (max_dimensions[i] == vmpi::max_dimensions[i]);
+      if(!same){
+         terminaltextcolor(RED);
+         std::cerr << "Error: Checkpoint file " << chkfilename << " was written with a different decomposition (" << num_processors64
+                   << " processes). Restart with the same number of processes as the simulation that wrote it. Exiting." << std::endl;
+         terminaltextcolor(WHITE);
+         zlog << zTs() << "Error: Checkpoint file " << chkfilename << " was written with a different decomposition (" << num_processors64
+              << " processes). Restart with the same number of processes as the simulation that wrote it. Exiting." << std::endl;
+         err::vexit();
+      }
+   }
 
    // close checkpoint file
    chkfile.close();
