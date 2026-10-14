@@ -30,6 +30,7 @@ namespace mgpu{
 
 namespace internal{
    int device_count(); // kernels.cu
+   void device_pci_id(int device, char* id, int size);
 }
 
 //------------------------------------------------------------------------------
@@ -67,7 +68,6 @@ void initialize(){
    int node_rank, node_size;
    MPI_Comm_rank(node, &node_rank);
    MPI_Comm_size(node, &node_size);
-   MPI_Comm_free(&node);
 
    const int num_devices = internal::device_count();
    if(num_devices < 1){
@@ -79,11 +79,21 @@ void initialize(){
    // the CUDA module sets the device chosen here (unless set in the input file)
    if(gpu::device == -1) gpu::device = node_rank % num_devices;
 
+   // ranks may see different devices (e.g. one each), so compare PCI addresses
+   const int id_size = 32;
+   std::vector<char> ids(id_size * node_size, 0);
+   internal::device_pci_id(gpu::device, &ids[id_size * node_rank], id_size);
+   MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ids.data(), id_size, MPI_CHAR, node);
+   MPI_Comm_free(&node);
+   const std::string my_id(&ids[id_size * node_rank]);
+   int sharing = 0;
+   for(int r = 0; r < node_size; r++) if(my_id == std::string(&ids[id_size * r])) sharing++;
+
    zlog << zTs() << "Rank " << vmpi::my_rank << " is rank " << node_rank << " of " << node_size
-        << " on this node and uses GPU " << gpu::device << " of " << num_devices << std::endl;
-   if(node_size > num_devices && vmpi::my_rank == 0){
-      std::cout << "Warning: " << node_size << " ranks share " << num_devices << " GPU(s) on a node" << std::endl;
-      zlog << zTs() << "Warning: " << node_size << " ranks share " << num_devices << " GPU(s) on a node" << std::endl;
+        << " on this node and uses GPU " << gpu::device << " of " << num_devices << " (PCI " << my_id << ")" << std::endl;
+   if(sharing > 1){
+      if(vmpi::my_rank == 0) std::cout << "Warning: rank 0 shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
+      zlog << zTs() << "Warning: this rank shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
    }
 
    return;
