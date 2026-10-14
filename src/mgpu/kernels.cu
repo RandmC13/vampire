@@ -1,0 +1,252 @@
+//-----------------------------------------------------------------------------
+//
+// This source file is part of the VAMPIRE open source package under the
+// GNU GPL (version 2) licence (see licence file for details).
+//
+//-----------------------------------------------------------------------------
+
+// C++ standard library headers
+#include <algorithm>
+#include <iostream>
+#include <utility>
+#include <vector>
+
+// Vampire headers
+#include "atoms.hpp"
+#include "errors.hpp"
+#include "material.hpp"
+#include "mgpu.hpp"
+#include "vio.hpp"
+#include "vmpi.hpp"
+
+// CUDA module headers
+#include "../cuda/cuda_utils.hpp"
+#include "../cuda/data.hpp"
+#include "../cuda/exchange_fields.hpp"
+#include "../cuda/internal.hpp"
+#include "../cuda/llg_heun.hpp"
+#include "../cuda/typedefs.hpp"
+
+// mgpu module headers
+#include "internal.hpp"
+
+namespace cu = ::vcuda::internal;
+
+namespace mgpu{
+
+namespace internal{
+
+   // device copies of the halo atom lists and packed spins
+   int* d_send_atoms = nullptr;
+   int* d_recv_atoms = nullptr;
+   cu::cu_real_t* d_send_buffer = nullptr;
+   cu::cu_real_t* d_recv_buffer = nullptr;
+
+   // events timing the halo copies on the GPU; the unpack of one update is
+   // added after the next update has been packed, when it has surely finished
+   cudaEvent_t pack_start, pack_end, unpack_start, unpack_end;
+   bool unpack_pending = false;
+   double copy_time = 0.0;
+
+   double elapsed(cudaEvent_t start, cudaEvent_t end){
+      float ms = 0.0f;
+      cudaEventElapsedTime(&ms, start, end);
+      return 1.0e-3 * ms;
+   }
+
+   //----------------------------------------------------------------
+   // Kernels to pack and unpack spins of listed atoms into buffers
+   //----------------------------------------------------------------
+   __global__ void pack_spins_kernel(const int* atoms, const int n,
+                                     const cu::cu_real_t* x, const cu::cu_real_t* y, const cu::cu_real_t* z,
+                                     cu::cu_real_t* buffer){
+      for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x){
+         const int atom = atoms[i];
+         buffer[3 * i + 0] = x[atom];
+         buffer[3 * i + 1] = y[atom];
+         buffer[3 * i + 2] = z[atom];
+      }
+   }
+
+   __global__ void unpack_spins_kernel(const int* atoms, const int n, const cu::cu_real_t* buffer,
+                                       cu::cu_real_t* x, cu::cu_real_t* y, cu::cu_real_t* z){
+      for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n; i += blockDim.x * gridDim.x){
+         const int atom = atoms[i];
+         x[atom] = buffer[3 * i + 0];
+         y[atom] = buffer[3 * i + 1];
+         z[atom] = buffer[3 * i + 2];
+      }
+   }
+
+   int device_count(){
+      int n = 0;
+      if(cudaGetDeviceCount(&n) != cudaSuccess) return 0;
+      return n;
+   }
+
+   void device_pci_id(int device, char* id, int size){
+      if(cudaDeviceGetPCIBusId(id, size, device) != cudaSuccess) id[0] = '\0';
+   }
+
+   void allocate_device_halo(const std::vector<int>& send_atoms, const std::vector<int>& recv_atoms){
+
+      real_size = sizeof(cu::cu_real_t);
+      cudaMalloc((void**)&d_send_atoms, std::max<size_t>(send_atoms.size(), 1) * sizeof(int));
+      cudaMalloc((void**)&d_recv_atoms, std::max<size_t>(recv_atoms.size(), 1) * sizeof(int));
+      cudaMalloc((void**)&d_send_buffer, std::max<size_t>(3 * send_atoms.size(), 1) * sizeof(cu::cu_real_t));
+      cudaMalloc((void**)&d_recv_buffer, std::max<size_t>(3 * recv_atoms.size(), 1) * sizeof(cu::cu_real_t));
+      cudaMallocHost(&h_send_buffer, std::max<size_t>(3 * send_atoms.size(), 1) * sizeof(cu::cu_real_t));
+      cudaMallocHost(&h_recv_buffer, std::max<size_t>(3 * recv_atoms.size(), 1) * sizeof(cu::cu_real_t));
+      cudaMemcpy(d_send_atoms, send_atoms.data(), send_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(d_recv_atoms, recv_atoms.data(), recv_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaEventCreate(&pack_start);
+      cudaEventCreate(&pack_end);
+      cudaEventCreate(&unpack_start);
+      cudaEventCreate(&unpack_end);
+
+      if(cudaGetLastError() != cudaSuccess){
+         std::cerr << "Error: unable to allocate multi-GPU halo buffers on rank " << vmpi::my_rank << std::endl;
+         zlog << zTs() << "Error: unable to allocate multi-GPU halo buffers" << std::endl;
+         err::vexit();
+      }
+
+   }
+
+   void free_device_halo(){
+      cudaEventDestroy(pack_start);
+      cudaEventDestroy(pack_end);
+      cudaEventDestroy(unpack_start);
+      cudaEventDestroy(unpack_end);
+      cudaFree(d_send_atoms);
+      cudaFree(d_recv_atoms);
+      cudaFree(d_send_buffer);
+      cudaFree(d_recv_buffer);
+      cudaFreeHost(h_send_buffer);
+      cudaFreeHost(h_recv_buffer);
+      d_send_atoms = d_recv_atoms = nullptr;
+      d_send_buffer = d_recv_buffer = nullptr;
+      h_send_buffer = h_recv_buffer = nullptr;
+   }
+
+   void pack_halo(){
+      if(num_send == 0) return;
+      cudaEventRecord(pack_start);
+      pack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_send_atoms, num_send,
+         cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, d_send_buffer);
+      check_cuda_errors(__FILE__, __LINE__);
+      cudaMemcpy(h_send_buffer, d_send_buffer, 3 * num_send * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
+      cudaEventRecord(pack_end);
+      cudaEventSynchronize(pack_end);
+      copy_time += elapsed(pack_start, pack_end);
+      if(unpack_pending) copy_time += elapsed(unpack_start, unpack_end);
+      unpack_pending = false;
+   }
+
+   void unpack_halo(){
+      if(num_recv == 0) return;
+      cudaEventRecord(unpack_start);
+      cudaMemcpy(d_recv_buffer, h_recv_buffer, 3 * num_recv * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice);
+      unpack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_recv_atoms, num_recv, d_recv_buffer,
+         cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin);
+      check_cuda_errors(__FILE__, __LINE__);
+      cudaEventRecord(unpack_end);
+      unpack_pending = true;
+   }
+
+   double halo_copy_time(){
+      if(unpack_pending){
+         cudaEventSynchronize(unpack_end);
+         copy_time += elapsed(unpack_start, unpack_end);
+         unpack_pending = false;
+      }
+      return copy_time;
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to order the neighbours of each atom in the exchange list of the
+   // CUDA module (built in local atom order) by atom key, so that the exchange
+   // field of every atom is summed in the same order for any decomposition.
+   // The list is only reordered: neighbours and exchange constants are unchanged.
+   //---------------------------------------------------------------------------
+   void sort_neighbours_by_key(){
+
+      if(!cu::exchange::use_isotropic_kernel){
+         zlog << zTs() << "Warning: exchange is not isotropic, so the order of exchange sums depends on the decomposition" << std::endl;
+         return;
+      }
+
+      const int num_atoms = ::atoms::num_atoms;
+      std::vector<int> start(num_atoms + 1);
+      cudaMemcpy(start.data(), cu::exchange::d_nbr_start, start.size() * sizeof(int), cudaMemcpyDeviceToHost);
+      const int num_nbrs = start[num_atoms];
+      if(num_nbrs == 0) return;
+
+      std::vector<int> nbr(num_nbrs);
+      std::vector<cu::cu_real_t> J(num_nbrs);
+      cudaMemcpy(nbr.data(), cu::exchange::d_nbr_atom, num_nbrs * sizeof(int), cudaMemcpyDeviceToHost);
+      cudaMemcpy(J.data(), cu::exchange::d_nbr_J, num_nbrs * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
+
+      std::vector< std::pair<uint64_t, int> > order;
+      std::vector<int> sorted_nbr(num_nbrs);
+      std::vector<cu::cu_real_t> sorted_J(num_nbrs);
+      for(int atom = 0; atom < num_atoms; atom++){
+         order.clear();
+         for(int i = start[atom]; i < start[atom + 1]; i++) order.push_back(std::make_pair(atom_key[nbr[i]], i));
+         std::sort(order.begin(), order.end());
+         for(size_t n = 0; n < order.size(); n++){
+            sorted_nbr[start[atom] + n] = nbr[order[n].second];
+            sorted_J[start[atom] + n] = J[order[n].second];
+         }
+      }
+
+      cudaMemcpy(cu::exchange::d_nbr_atom, sorted_nbr.data(), num_nbrs * sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(cu::exchange::d_nbr_J, sorted_J.data(), num_nbrs * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice);
+      zlog << zTs() << "Exchange neighbours of each atom ordered by atom key" << std::endl;
+
+   }
+
+} // end of internal namespace
+
+//------------------------------------------------------------------------------
+// Function to perform a single LLG Heun step: Only the local (core and boundary)
+// atoms, which come first, are integrated; halo atoms only change when they are
+// received, so after a step they hold the predicted spins of the last update,
+// as in the CPU-only MPI version.
+//------------------------------------------------------------------------------
+void llg_heun(){
+
+   if(!cu::llg::initialized) cu::llg::__llg_init();
+
+   const size_t num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
+
+   // fields at the start of the step
+   internal::swap_halo();
+   cu::update_spin_fields();
+   internal::update_external_fields(); // thermal noise from the atom keys (thermal.cu)
+
+   cu::llg::llg_heun_predictor_step <<< cu::grid_size, cu::block_size >>> (
+      cu::atoms::d_materials, cu::llg::d_heun_params,
+      cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
+      cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
+      cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
+      cu::llg::d_ds_x, cu::llg::d_ds_y, cu::llg::d_ds_z,
+      ::mp::dt, num_local_atoms);
+   check_cuda_errors(__FILE__, __LINE__);
+
+   // fields of the predicted spins
+   internal::swap_halo();
+   cu::update_spin_fields();
+
+   cu::llg::llg_heun_corrector_step <<< cu::grid_size, cu::block_size >>> (
+      cu::atoms::d_materials, cu::llg::d_heun_params,
+      cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
+      cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
+      cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
+      cu::llg::d_x_spin_buffer, cu::llg::d_y_spin_buffer, cu::llg::d_z_spin_buffer,
+      cu::llg::d_ds_x, cu::llg::d_ds_y, cu::llg::d_ds_z,
+      ::mp::dt, num_local_atoms);
+   check_cuda_errors(__FILE__, __LINE__);
+
+}
+
+} // end of mgpu namespace

@@ -17,6 +17,7 @@
 #include "dipole.hpp"
 #include "errors.hpp"
 #include "exchange.hpp"
+#include "mgpu.hpp"
 #include "neighbours.hpp"
 #include "random.hpp"
 #include "spininitialize.hpp"
@@ -149,6 +150,11 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    // since it is a relatively uncommon feature and would otherwise add an
    // unnecessary per-atom branch to the much hotter initialisation loop.
    spininitialize::apply_grain_magnetisation_mode();
+
+   // decomposition independent identity of each atom for the multi-GPU version
+   #ifdef CUDA_MULTIGPU
+      mgpu::set_atom_keys(catom_array);
+   #endif
 
    //---------------------------------------------------------------------------
    // Identify surface atoms and initialise anisotropy data

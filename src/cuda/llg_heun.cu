@@ -142,6 +142,27 @@ namespace vcuda{
 
          }
 
+         //-----------------------------------------------------------
+         // Function to free llg data structures
+         //-----------------------------------------------------------
+         void __llg_finalise (){
+
+            if(!initialized) return;
+
+            cudaFree(cu::llg::d_x_spin_buffer);
+            cudaFree(cu::llg::d_y_spin_buffer);
+            cudaFree(cu::llg::d_z_spin_buffer);
+            cudaFree(cu::llg::d_ds_x);
+            cudaFree(cu::llg::d_ds_y);
+            cudaFree(cu::llg::d_ds_z);
+            cudaFree(cu::llg::d_heun_params);
+
+            initialized=false;
+
+            return;
+
+         }
+
          //---------------------------------------------------------
          // Function to calculate single heun step
          //---------------------------------------------------------
