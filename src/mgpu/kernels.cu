@@ -14,10 +14,8 @@
 // Vampire headers
 #include "atoms.hpp"
 #include "errors.hpp"
-#include "hamr.hpp"
 #include "material.hpp"
 #include "mgpu.hpp"
-#include "sim.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
 
@@ -175,13 +173,6 @@ namespace internal{
 //------------------------------------------------------------------------------
 void llg_heun(){
 
-   // the thermal noise of the CUDA module repeats the same random numbers on every rank
-   if(vmpi::num_processors > 1 && (sim::temperature > 0.0 || ::hamr::head_laser_on)){
-      if(vmpi::my_rank == 0) std::cerr << "Error: finite temperatures are not yet supported by the multi-GPU version on more than one rank" << std::endl;
-      zlog << zTs() << "Error: finite temperatures are not yet supported by the multi-GPU version on more than one rank" << std::endl;
-      err::vexit();
-   }
-
    if(!cu::llg::initialized) cu::llg::__llg_init();
 
    const size_t num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
@@ -189,7 +180,7 @@ void llg_heun(){
    // fields at the start of the step
    internal::swap_halo();
    cu::update_spin_fields();
-   cu::update_external_fields();
+   internal::update_external_fields(); // thermal noise from the atom keys (thermal.cu)
 
    cu::llg::llg_heun_predictor_step <<< cu::grid_size, cu::block_size >>> (
       cu::atoms::d_materials, cu::llg::d_heun_params,
