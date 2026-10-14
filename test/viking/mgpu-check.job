@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-mgpu-check
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=0-04:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Runs the multi-GPU check (test/validation/mgpu_check.sh) with one GPU per
+# rank on the nodes of the job, submitted by mgpu-submit.sh with --partition,
+# --nodes, --ntasks-per-node and --gres=gpu:<ranks per node>. Rank counts:
+# 1, 2, the ranks of one node and all ranks (e.g. 1 2 3 6 on two A40 nodes).
+# The archive of the check goes to $WORK/mgpu/check/<partition>/.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/mgpu-common.sh
+
+ranks=$(printf "%s\n" 1 2 $per_node $total | awk '$1 <= '$total | sort -nu | paste -sd' ')
+dest=$MGPU/check/$partition
+mkdir -p $dest
+cp $MGPU/commit.txt $dest/
+
+JOBS=16 $src/test/validation/mgpu_check.sh $ranks 2>&1 | tee $dest/summary.txt
+mv $src/test/validation/results/mgpu-check-*.tar.gz $dest/
+rm -rf $src
+ls -l $dest
