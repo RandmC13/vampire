@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-mgpu-scaling
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=0-06:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Times the multi-GPU version (one GPU per rank) on 1 GPU up to all GPUs of the
+# job, submitted by mgpu-submit.sh with --partition, --nodes, --ntasks-per-node
+# and --gres=gpu:<ranks per node>. Rank layouts (ranks x ranks per node):
+# 1, 2, ..., ranks of one node; on more than one node also 2 ranks on two nodes
+# (one per node, to compare with 2 ranks on one node) and all ranks.
+#
+# Cases (double and single precision, 2 repeats):
+#    strong scaling  hamr-perf (168k atoms), thermal-perf at 100 x 100 nm and
+#                    200 x 200 nm (1.36M and 5.4M atoms; 6 nm thick)
+#    weak scaling    thermal-perf at 100*N x 100 nm on N ranks (1.36M atoms per GPU)
+#
+# Appends one line per run to $WORK/mgpu/scaling/<partition>.csv:
+#    partition,gpu,nodes,ranks,ranks_per_node,precision,case,atoms,repeat,
+#    wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,exit
+# where halo_copy_max_s and halo_mpi_max_s are the largest over the ranks of the
+# GPU time spent on halo copies and the time spent in MPI halo messages
+# (vampire reports both per rank at the end of the run). Logs of every run are
+# kept in $WORK/mgpu/scaling/runs/<partition>/.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/mgpu-common.sh
+
+# build the double and single precision binaries for the GPU of this partition
+bin=$MGPU/scaling/bin-$partition
+mkdir -p $bin
+for pr in dp sp; do
+   make -C $src clean > /dev/null
+   make -C $src -j16 cuda-multigpu CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}" > $bin/build-$pr.log 2>&1 \
+      || { tail -n 30 $bin/build-$pr.log; exit 1; }
+   mv $src/vampire-cuda-multigpu $bin/vampire-mgpu-$pr
+done
+
+# rank layouts "ranks:ranks_per_node"
+layouts=()
+for ((n = 1; n <= per_node; n++)); do layouts+=("$n:$n"); done
+if [ $nodes -gt 1 ]; then layouts+=("2:1" "$total:$per_node"); fi
+
+csv=$MGPU/scaling/$partition.csv
+runs=$MGPU/scaling/runs/$partition
+mkdir -p $runs
+[ -f $csv ] || echo "partition,gpu,nodes,ranks,ranks_per_node,precision,case,atoms,repeat,wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,exit" > $csv
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+
+for layout in "${layouts[@]}"; do
+   n=${layout%:*}; ppn=${layout#*:}
+   used_nodes=$(( (n + ppn - 1) / ppn ))
+   for pr in dp sp; do
+      cases="hamr-perf thermal-perf@100x100 thermal-perf@200x200"
+      [ $n -gt 1 ] && cases+=" thermal-perf@$((100 * n))x100"   # weak scaling (1 rank: same as 100x100)
+      for case in $cases; do
+         for repeat in 0 1; do
+            run=$case-$pr-np$n-ppn$ppn-r$repeat
+            dir=$runs/$run
+            rm -rf $dir; mkdir -p $dir
+            cp $src/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
+            if [[ $case == *@* ]]; then
+               size=${case#*@}
+               sed -i -e "s/^dimensions:system-size-x.*/dimensions:system-size-x = ${size%x*} !nm/" \
+                      -e "s/^dimensions:system-size-y.*/dimensions:system-size-y = ${size#*x} !nm/" $dir/input
+            fi
+            # decompose by node first, then within each node
+            [ $used_nodes -gt 1 ] && echo "sim:mpi-ppn = $ppn" >> $dir/input
+            cd $dir
+            start=$(date +%s.%N)
+            MPI_OPTS="--map-by ppr:$ppn:node" $MPIRUN -np $n $bin/vampire-mgpu-$pr > log.txt 2>&1
+            status=$?
+            end=$(date +%s.%N)
+            rm -f *.data *.meta
+            cd - > /dev/null
+            atoms=$(awk '/^Multi-GPU rank/ { s += $4 } END { print s }' $dir/log.txt)
+            sim=$(awk -F': *' '/Simulation run time \[s\]/ { print $2 }' $dir/log.txt)
+            copy=$(awk '/^Multi-GPU rank/ { v = $(NF - 4); if (v > m) m = v } END { print m + 0 }' $dir/log.txt)
+            mpi=$(awk '/^Multi-GPU rank/ { v = $(NF - 1); if (v > m) m = v } END { print m + 0 }' $dir/log.txt)
+            wall=$(awk -v s=$start -v e=$end 'BEGIN { printf "%.2f", e - s }')
+            echo "$partition,$gpu,$used_nodes,$n,$ppn,$pr,$case,$atoms,$repeat,$wall,$sim,$copy,$mpi,$status" | tee -a $csv
+         done
+      done
+   done
+done
+rm -rf $src

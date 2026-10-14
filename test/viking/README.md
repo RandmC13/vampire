@@ -33,3 +33,25 @@ checkout with `REPO` and `WORK` exported (`export REPO=$PWD WORK=~/scratch/vampi
 
 Everything is written to `$WORK` (default `~/scratch/vampire-benchmarks`). The CUDA module
 can be chosen with `CUDA_MODULE` (default: the module system's default `CUDA`).
+
+## Multi-GPU version
+
+The multi-GPU version (`make cuda-multigpu`, one MPI rank per GPU) is checked and timed with
+
+    test/viking/mgpu-submit.sh [commit]      # default: HEAD
+    test/viking/mgpu-collect.sh              # when all jobs have finished
+
+which submits, on two A40 nodes (6 GPUs; `NODES` changes the number of nodes) and one H100
+node (2 GPUs):
+
+- `mgpu-check.job`: `test/validation/mgpu_check.sh` on 1, 2, one node's and all GPUs
+  (bit-identical spins on any number of GPUs, comparison with the CPU versions)
+- `mgpu-scaling.job` (after the check succeeded): strong scaling of `hamr-perf` and
+  `thermal-perf` at 100 x 100 and 200 x 200 nm, and weak scaling of `thermal-perf` at
+  100 x 100 nm per GPU, in double and single precision, on 1 GPU up to all GPUs, including 2
+  GPUs on two nodes. Results in `$WORK/mgpu/scaling/<partition>.csv`, with the time each run
+  spent on halo exchange (reported by vampire for every rank).
+
+Ranks are started by `mgpu-launch.sh`, which gives every rank one GPU and binds it to the
+CPU cores and memory of that GPU's NUMA node. Modules default to `CUDA/12.9.0`,
+`OpenMPI/4.1.5-GCC-12.3.0` and `SciPy-bundle/2023.07-gfbf-2023a`; override with `MODULES`.
