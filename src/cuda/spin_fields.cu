@@ -35,9 +35,10 @@ namespace vcuda {
 namespace internal {
 
 //------------------------------------------------------------------------------
-// Host function to calculate spin fields using gpu kernel
+// Host function to calculate spin fields of atoms first_atom to num_atoms-1
+// using gpu kernels (the exchange matrix path always computes all atoms)
 //------------------------------------------------------------------------------
-void update_spin_fields(const int num_atoms) {
+void update_spin_fields(const int num_atoms, const int first_atom) {
 
   if (!cu::exchange::exchange_initialised)
     cu::exchange::initialise_exchange();
@@ -51,17 +52,17 @@ void update_spin_fields(const int num_atoms) {
         cu::exchange::d_nbr_start, cu::exchange::d_nbr_atom,
         cu::exchange::d_nbr_J, cu::atoms::d_x_spin, cu::atoms::d_y_spin,
         cu::atoms::d_z_spin, cu::d_x_spin_field, cu::d_y_spin_field,
-        cu::d_z_spin_field, num_atoms);
+        cu::d_z_spin_field, num_atoms, first_atom);
 
     check_cuda_errors(__FILE__, __LINE__);
 
     // If neel fields are enabled, execute the kernel
     if (anisotropy::is_neel_enabled())
-      cu::update_neel_fields(num_atoms);
+      cu::update_neel_fields(num_atoms, first_atom);
 
     // If rotational fields are enabled, execute the kernel
     if (anisotropy::is_rotational_enabled())
-      cu::update_rotational_fields(num_atoms);
+      cu::update_rotational_fields(num_atoms, first_atom);
 
     return;
   }
@@ -73,17 +74,17 @@ void update_spin_fields(const int num_atoms) {
 
   // If neel fields are enabled, execute the kernel
   if (anisotropy::is_neel_enabled())
-    cu::update_neel_fields(num_atoms);
+    cu::update_neel_fields(num_atoms, first_atom);
 
   // If rotational fields are enabled, execute the kernel
   if (anisotropy::is_rotational_enabled())
-    cu::update_rotational_fields(num_atoms);
+    cu::update_rotational_fields(num_atoms, first_atom);
 
   // Call kernel to calculate non-exchange spin fields
   cu::update_non_exchange_spin_fields_kernel<<<cu::grid_size, cu::block_size>>>(
       cu::atoms::d_materials, cu::mp::d_material_params, cu::atoms::d_x_spin,
       cu::atoms::d_y_spin, cu::atoms::d_z_spin, cu::d_x_spin_field,
-      cu::d_y_spin_field, cu::d_z_spin_field, num_atoms);
+      cu::d_y_spin_field, cu::d_z_spin_field, num_atoms, first_atom);
 
   check_cuda_errors(__FILE__, __LINE__);
 }
@@ -211,9 +212,9 @@ __global__ void update_non_exchange_spin_fields_kernel(
     int *material, cu::material_parameters_t *material_params,
     cu_real_t *x_spin, cu_real_t *y_spin, cu_real_t *z_spin,
     cu_real_t *x_sp_field, cu_real_t *y_sp_field, cu_real_t *z_sp_field,
-    int n_atoms) {
+    int n_atoms, int first_atom) {
 
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
+  for (int i = first_atom + blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
        i += blockDim.x * gridDim.x) {
 
     cu_real_t field_x, field_y, field_z;
@@ -236,9 +237,9 @@ __global__ void update_isotropic_exchange_and_anisotropy_fields_kernel(
     const int *nbr_start, const int *nbr_atom, const cu_real_t *nbr_J,
     const cu_real_t *x_spin, const cu_real_t *y_spin, const cu_real_t *z_spin,
     cu_real_t *x_sp_field, cu_real_t *y_sp_field, cu_real_t *z_sp_field,
-    int n_atoms) {
+    int n_atoms, int first_atom) {
 
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
+  for (int i = first_atom + blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
        i += blockDim.x * gridDim.x) {
 
     // exchange field

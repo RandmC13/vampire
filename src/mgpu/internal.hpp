@@ -31,15 +31,24 @@ namespace mgpu{
       // device side (kernels.cu)
       void allocate_device_halo(const std::vector<int>& send_atoms, const std::vector<int>& recv_atoms);
       void free_device_halo();
-      void pack_halo();   // device spins -> h_send_buffer
-      void unpack_halo(); // h_recv_buffer -> device spins
+      // The halo update runs on its own stream: start_halo() packs the spins and
+      // copies them to h_send_buffer; finish_halo() exchanges the buffers (MPI),
+      // copies the received spins back to the device and makes the default
+      // stream wait for them. Work launched in between overlaps the update.
+      void start_halo();
+      void finish_halo();
       double halo_copy_time(); // GPU time in seconds spent packing, unpacking and copying halo spins
+      double halo_wait_time(); // GPU time in seconds the default stream waited for halo spins
 
       // host side (halo.cpp): exchanges h_send_buffer and h_recv_buffer with the other ranks
       void exchange_halo();
 
-      // full halo update of the spins on the device
+      // full halo update of the spins on the device without overlap
       void swap_halo();
+
+      // halo update and fields of the local atoms; external = true adds the
+      // external (thermal, HAMR) fields of the step (kernels.cu)
+      void update_fields(const bool external);
 
       // writes the halo exchange times of every rank to the log and screen (halo.cpp)
       void report_halo_times();

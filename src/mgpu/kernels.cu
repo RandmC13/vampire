@@ -42,11 +42,17 @@ namespace internal{
    cu::cu_real_t* d_send_buffer = nullptr;
    cu::cu_real_t* d_recv_buffer = nullptr;
 
-   // events timing the halo copies on the GPU; the unpack of one update is
-   // added after the next update has been packed, when it has surely finished
-   cudaEvent_t pack_start, pack_end, unpack_start, unpack_end;
+   // Stream for the halo update.
+   cudaStream_t halo_stream;
+   cudaEvent_t step_done;
+
+   // Events timing the halo copies on the GPU and the waiting for the default
+   // stream to return the received spins; the times of one update are added after
+   // the next update has been packed
+   cudaEvent_t pack_start, pack_end, unpack_start, unpack_end, wait_start, wait_end, next_wait_start;
    bool unpack_pending = false;
    double copy_time = 0.0;
+   double wait_time = 0.0;
 
    double elapsed(cudaEvent_t start, cudaEvent_t end){
       float ms = 0.0f;
@@ -99,10 +105,15 @@ namespace internal{
       cudaMallocHost(&h_recv_buffer, std::max<size_t>(3 * recv_atoms.size(), 1) * sizeof(cu::cu_real_t));
       cudaMemcpy(d_send_atoms, send_atoms.data(), send_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(d_recv_atoms, recv_atoms.data(), recv_atoms.size() * sizeof(int), cudaMemcpyHostToDevice);
+      cudaStreamCreateWithFlags(&halo_stream, cudaStreamNonBlocking);
+      cudaEventCreateWithFlags(&step_done, cudaEventDisableTiming);
       cudaEventCreate(&pack_start);
       cudaEventCreate(&pack_end);
       cudaEventCreate(&unpack_start);
       cudaEventCreate(&unpack_end);
+      cudaEventCreate(&wait_start);
+      cudaEventCreate(&wait_end);
+      cudaEventCreate(&next_wait_start);
 
       if(cudaGetLastError() != cudaSuccess){
          std::cerr << "Error: unable to allocate multi-GPU halo buffers on rank " << vmpi::my_rank << std::endl;
@@ -113,10 +124,15 @@ namespace internal{
    }
 
    void free_device_halo(){
+      cudaStreamDestroy(halo_stream);
+      cudaEventDestroy(step_done);
       cudaEventDestroy(pack_start);
       cudaEventDestroy(pack_end);
       cudaEventDestroy(unpack_start);
       cudaEventDestroy(unpack_end);
+      cudaEventDestroy(wait_start);
+      cudaEventDestroy(wait_end);
+      cudaEventDestroy(next_wait_start);
       cudaFree(d_send_atoms);
       cudaFree(d_recv_atoms);
       cudaFree(d_send_buffer);
@@ -128,38 +144,61 @@ namespace internal{
       h_send_buffer = h_recv_buffer = nullptr;
    }
 
-   void pack_halo(){
-      if(num_send == 0) return;
-      cudaEventRecord(pack_start);
-      pack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_send_atoms, num_send,
-         cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, d_send_buffer);
-      check_cuda_errors(__FILE__, __LINE__);
-      cudaMemcpy(h_send_buffer, d_send_buffer, 3 * num_send * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost);
-      cudaEventRecord(pack_end);
-      cudaEventSynchronize(pack_end);
-      copy_time += elapsed(pack_start, pack_end);
-      if(unpack_pending) copy_time += elapsed(unpack_start, unpack_end);
+   // adds the times of the last update once it has finished
+   void add_pending_times(){
+      if(!unpack_pending) return;
+      copy_time += elapsed(unpack_start, unpack_end);
+      wait_time += elapsed(wait_start, wait_end);
       unpack_pending = false;
    }
 
-   void unpack_halo(){
-      if(num_recv == 0) return;
-      cudaEventRecord(unpack_start);
-      cudaMemcpy(d_recv_buffer, h_recv_buffer, 3 * num_recv * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice);
-      unpack_spins_kernel <<< cu::grid_size, cu::block_size >>> (d_recv_atoms, num_recv, d_recv_buffer,
-         cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin);
+   void start_halo(){
+      // spins must not be packed before the launched integration step has finished
+      cudaEventRecord(step_done, 0);
+      cudaStreamWaitEvent(halo_stream, step_done, 0);
+      if(num_send == 0) return;
+      cudaEventRecord(pack_start, halo_stream);
+      pack_spins_kernel <<< cu::grid_size, cu::block_size, 0, halo_stream >>> (d_send_atoms, num_send,
+         cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, d_send_buffer);
       check_cuda_errors(__FILE__, __LINE__);
-      cudaEventRecord(unpack_end);
+      cudaMemcpyAsync(h_send_buffer, d_send_buffer, 3 * num_send * sizeof(cu::cu_real_t), cudaMemcpyDeviceToHost, halo_stream);
+      cudaEventRecord(pack_end, halo_stream);
+   }
+
+   void finish_halo(){
+      // everything launched on the default stream so far does not need halo spins
+      // (recorded in a second event, as wait_start still times the last update)
+      cudaEventRecord(next_wait_start, 0);
+      // the send buffer is complete and the last unpack has read the receive buffer
+      cudaStreamSynchronize(halo_stream);
+      if(num_send != 0) copy_time += elapsed(pack_start, pack_end);
+      add_pending_times();
+      std::swap(wait_start, next_wait_start);
+      exchange_halo();
+      if(num_recv != 0){
+         cudaEventRecord(unpack_start, halo_stream);
+         cudaMemcpyAsync(d_recv_buffer, h_recv_buffer, 3 * num_recv * sizeof(cu::cu_real_t), cudaMemcpyHostToDevice, halo_stream);
+         unpack_spins_kernel <<< cu::grid_size, cu::block_size, 0, halo_stream >>> (d_recv_atoms, num_recv, d_recv_buffer,
+            cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin);
+         check_cuda_errors(__FILE__, __LINE__);
+      }
+      else cudaEventRecord(unpack_start, halo_stream);
+      cudaEventRecord(unpack_end, halo_stream);
+      cudaStreamWaitEvent(0, unpack_end, 0);
+      cudaEventRecord(wait_end, 0);
       unpack_pending = true;
    }
 
    double halo_copy_time(){
-      if(unpack_pending){
-         cudaEventSynchronize(unpack_end);
-         copy_time += elapsed(unpack_start, unpack_end);
-         unpack_pending = false;
-      }
+      cudaDeviceSynchronize();
+      add_pending_times();
       return copy_time;
+   }
+
+   double halo_wait_time(){
+      cudaDeviceSynchronize();
+      add_pending_times();
+      return wait_time;
    }
 
    //---------------------------------------------------------------------------
@@ -204,6 +243,31 @@ namespace internal{
       zlog << zTs() << "Exchange neighbours of each atom ordered by atom key" << std::endl;
 
    }
+   //---------------------------------------------------------------------------
+   // Function to update the halo spins and the fields of the local atoms. Core
+   // atoms have no halo neighbours, so their spin fields (and the external
+   // fields, which need no spins) are calculated while the halo is updated, as
+   // in the CPU-only MPI version; boundary atoms follow once the halo spins have
+   // arrived.
+   //---------------------------------------------------------------------------
+   void update_fields(const bool external){
+
+      const int num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
+
+      if(!cu::exchange::use_isotropic_kernel || (num_send == 0 && num_recv == 0)){
+         swap_halo();
+         cu::update_spin_fields(num_local_atoms);
+         if(external) update_external_fields(); // thermal noise from the atom keys (thermal.cu)
+         return;
+      }
+
+      start_halo();
+      cu::update_spin_fields(vmpi::num_core_atoms);
+      if(external) update_external_fields();
+      finish_halo();
+      cu::update_spin_fields(num_local_atoms, vmpi::num_core_atoms);
+
+   }
 
 } // end of internal namespace
 
@@ -220,9 +284,7 @@ void llg_heun(){
    const size_t num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
 
    // fields at the start of the step
-   internal::swap_halo();
-   cu::update_spin_fields(num_local_atoms);
-   internal::update_external_fields(); // thermal noise from the atom keys (thermal.cu)
+   internal::update_fields(true);
 
    cu::llg::llg_heun_predictor_step <<< cu::grid_size, cu::block_size >>> (
       cu::atoms::d_materials, cu::llg::d_heun_params,
@@ -234,8 +296,7 @@ void llg_heun(){
    check_cuda_errors(__FILE__, __LINE__);
 
    // fields of the predicted spins
-   internal::swap_halo();
-   cu::update_spin_fields(num_local_atoms);
+   internal::update_fields(false);
 
    cu::llg::llg_heun_corrector_step <<< cu::grid_size, cu::block_size >>> (
       cu::atoms::d_materials, cu::llg::d_heun_params,
