@@ -17,6 +17,7 @@
 #include "atoms.hpp"
 #include "errors.hpp"
 #include "gpu.hpp"
+#include "hamr.hpp"
 #include "random.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
@@ -131,6 +132,9 @@ void save_checkpoint(){
    chkfile.write(reinterpret_cast<const char*>(&num_processors64),sizeof(int64_t));
    chkfile.write(reinterpret_cast<const char*>(&vmpi::min_dimensions[0]),sizeof(double)*3);
    chkfile.write(reinterpret_cast<const char*>(&vmpi::max_dimensions[0]),sizeof(double)*3);
+
+   // HAMR simulation: state of the head
+   if(program::program == 7) hamr::save_checkpoint(chkfile);
 
    // close checkpoint file
    chkfile.close();
@@ -291,6 +295,9 @@ void load_checkpoint(){
          err::vexit();
       }
    }
+
+   // HAMR simulation: state of the head (needed only to continue)
+   if(program::program == 7 && sim::load_checkpoint_continue_flag) hamr::load_checkpoint(chkfile);
 
    // close checkpoint file
    chkfile.close();

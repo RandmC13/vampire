@@ -5,6 +5,7 @@
 # List module object filenames
 hamr_objects =\
 bit_sequence.o \
+checkpoint.o \
 data.o \
 fields.o \
 field_profiles.o \
