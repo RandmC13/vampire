@@ -35,13 +35,13 @@ namespace internal{
 //------------------------------------------------------------------------------
 // Host function to calculate neel fields using gpu kernel
 //------------------------------------------------------------------------------
-void update_rotational_fields()
+void update_rotational_fields(const int num_atoms)
 {
    cu::update_rotational_fields_kernel <<<cu::grid_size, cu::block_size>>> (cu::atoms::d_materials, cu::mp::d_material_params,
          cu::mp::d_material_params_r,
          cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
          cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
-         ::atoms::num_atoms);
+         num_atoms);
 
    check_cuda_errors(__FILE__, __LINE__);
 }

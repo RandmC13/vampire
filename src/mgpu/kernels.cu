@@ -209,9 +209,9 @@ namespace internal{
 
 //------------------------------------------------------------------------------
 // Function to perform a single LLG Heun step: Only the local (core and boundary)
-// atoms, which come first, are integrated; halo atoms only change when they are
-// received, so after a step they hold the predicted spins of the last update,
-// as in the CPU-only MPI version.
+// atoms, which come first, are integrated and get spin fields; halo atoms only
+// change when they are received, so after a step they hold the predicted spins
+// of the last update, as in the CPU-only MPI version.
 //------------------------------------------------------------------------------
 void llg_heun(){
 
@@ -221,7 +221,7 @@ void llg_heun(){
 
    // fields at the start of the step
    internal::swap_halo();
-   cu::update_spin_fields();
+   cu::update_spin_fields(num_local_atoms);
    internal::update_external_fields(); // thermal noise from the atom keys (thermal.cu)
 
    cu::llg::llg_heun_predictor_step <<< cu::grid_size, cu::block_size >>> (
@@ -235,7 +235,7 @@ void llg_heun(){
 
    // fields of the predicted spins
    internal::swap_halo();
-   cu::update_spin_fields();
+   cu::update_spin_fields(num_local_atoms);
 
    cu::llg::llg_heun_corrector_step <<< cu::grid_size, cu::block_size >>> (
       cu::atoms::d_materials, cu::llg::d_heun_params,
