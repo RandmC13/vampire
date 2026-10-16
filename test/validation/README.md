@@ -52,11 +52,15 @@ one GPU. One-rank runs are compared with the serial references and multi-rank ru
 same number of ranks (most cases start from random spins drawn per rank). `t0-spin-spiral` starts from a state that
 does not depend on the decomposition: it is compared with the serial references on every number of ranks, and its
 final spins must be bit for bit identical on every number of ranks (the script enables
-`gpu:decomposition-independent-order` for the GPU runs). The other LLG cases whose initial state does not depend on
+`gpu:decomposition-independent-order` for the GPU runs). `t0-exchange-tensor` also starts from that state, with
+tensorial exchange whose order of summation depends on the decomposition, so it is only compared with the references. The other LLG cases whose initial state does not depend on
 the decomposition (finite temperature, HAMR and program cases) are run with one seed on every number of ranks and
 their final spins must also be bit for bit identical, since the multi-GPU version draws the thermal noise of each atom
 from its key and the time step; with all their seeds on one rank they are compared statistically with the serial
-references.
+references. Finally `timeseries-T300` and `hamr-small` are rerun on every number of ranks saving a single checkpoint part way
+(`sim:save-checkpoint=continuous` with a rate of 60 % of the time steps) and continued from it
+(`sim:load-checkpoint=continue`); the final spins of the continuation must be bit for bit those of the uninterrupted
+run.
 
 `run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
 of all statistical comparisons pooled together: when test and reference sample the same distribution they are

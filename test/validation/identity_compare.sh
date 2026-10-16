@@ -117,7 +117,7 @@ for pr in dp sp; do
             [ -f $refdir/$rundir/$f ] || diffs="$diffs ${f#./}(new only)"
          done
          if [ -z "$diffs" ] && [ "$path" != "NO OUTPUT" ]; then status=IDENTICAL; else status="DIFFERENT:$diffs"; fail=1; fi
-         s=${set#-}; printf "%-4s %-7s %-26s %-6s %-10s %3d files  %s\n" $pr "${s:-plain}" $case ${rundir##*/} $path $files "$status"
+         s=${set#-}; printf "%-4s %-7s %-26s %-6s %-10s %3d files  %s\n" $pr "${s:-plain}" $case ${rundir##*/} "$path" $files "$status"
       done
    done
 done > $report

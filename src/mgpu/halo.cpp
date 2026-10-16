@@ -57,6 +57,7 @@ namespace internal{
       }
       MPI_Waitall(requests.size(), requests.data(), MPI_STATUSES_IGNORE);
       mpi_time += MPI_Wtime() - start;
+      num_swaps++;
 
    }
 
@@ -65,21 +66,18 @@ namespace internal{
    //---------------------------------------------------------------------------
    void swap_halo(){
       if(num_send == 0 && num_recv == 0) return;
-      pack_halo();
-      exchange_halo();
-      unpack_halo();
-      num_swaps++;
+      start_halo();
+      finish_halo();
    }
 
    //---------------------------------------------------------------------------
    // Function to write the atom counts and halo exchange times of every rank.
-   // The GPU is idle during the exchange, so these times add to the run time.
    //---------------------------------------------------------------------------
    void report_halo_times(){
 
-      const int n = 6;
+      const int n = 7;
       const double mine[n] = {double(vmpi::num_core_atoms + vmpi::num_bdry_atoms), double(num_recv), double(num_send),
-                              double(num_swaps), halo_copy_time(), mpi_time};
+                              double(num_swaps), halo_copy_time(), mpi_time, halo_wait_time()};
       std::vector<double> all(n * vmpi::num_processors);
       MPI_Gather(mine, n, MPI_DOUBLE, all.data(), n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
       if(vmpi::my_rank != 0) return;
@@ -89,7 +87,7 @@ namespace internal{
       for(int p = 0; p < vmpi::num_processors; p++){
          const double* r = &all[n * p];
          report << "Multi-GPU rank " << p << ": " << uint64_t(r[0]) << " local atoms, " << uint64_t(r[1]) << " halo atoms received, "
-                << uint64_t(r[2]) << " sent; " << uint64_t(r[3]) << " halo updates: GPU copies " << r[4] << " s, MPI " << r[5] << " s\n";
+                << uint64_t(r[2]) << " sent; " << uint64_t(r[3]) << " halo updates: GPU copies " << r[4] << " s, MPI " << r[5] << " s, GPU waiting " << r[6] << " s\n";
       }
       std::cout << report.str() << std::flush;
       zlog << zTs() << "Halo exchange times\n" << report.str() << std::flush;

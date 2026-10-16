@@ -19,6 +19,7 @@
 #include "program.hpp"
 #include "random.hpp"
 #include "sim.hpp"
+#include "vmpi.hpp"
 
 // CUDA module headers
 #include "../cuda/cuda_utils.hpp"
@@ -186,7 +187,8 @@ namespace internal{
    //---------------------------------------------------------------------------
    void update_external_fields(){
 
-      const int num_atoms = ::atoms::num_atoms;
+      // halo atoms are not integrated, so they need no thermal and HAMR fields
+      const int num_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
       const uint2 seed = make_uint2(uint32_t(::mtrandom::integration_seed), 0u);
       const uint64_t step = noise_step++;
 

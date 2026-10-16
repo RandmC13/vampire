@@ -119,6 +119,12 @@ namespace anisotropy
    bool is_neel_enabled();
 
    bool is_rotational_enabled();
+
+   // terms that only the CPU version calculates
+   bool is_triaxial_enabled();
+   bool is_lattice_enabled();
+   bool is_cubic_rotation_enabled();
+   bool is_biaxial_fourth_order_simple_enabled();
 } // end of anisotropy namespace
 
 #endif //ANISOTROPY_H_
