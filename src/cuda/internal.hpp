@@ -74,7 +74,7 @@ void __finalize();
  * Field updates
  */
 
-void update_spin_fields(const int num_atoms);
+void update_spin_fields(const int num_atoms, const int first_atom = 0); // atoms first_atom to num_atoms-1
 void update_external_fields();
 void update_dipolar_fields();
 void update_cell_magnetizations();
@@ -82,8 +82,8 @@ void update_hamr_field();
 void update_global_thermal_field();
 void update_applied_fields();
 void update_fmr_fields();
-void update_neel_fields(const int num_atoms);
-void update_rotational_fields(const int num_atoms);
+void update_neel_fields(const int num_atoms, const int first_atom = 0);
+void update_rotational_fields(const int num_atoms, const int first_atom = 0);
 
 /*
  * Shared device functions
@@ -115,14 +115,14 @@ __global__ void init_rng(curandState *state, int seed);
 __global__ void update_non_exchange_spin_fields_kernel(
     int *material, material_parameters_t *material_params, cu_real_t *x_spin,
     cu_real_t *y_spin, cu_real_t *z_spin, cu_real_t *x_sp_field,
-    cu_real_t *y_sp_field, cu_real_t *z_sp_field, int num_atoms);
+    cu_real_t *y_sp_field, cu_real_t *z_sp_field, int num_atoms, int first_atom);
 
 __global__ void update_isotropic_exchange_and_anisotropy_fields_kernel(
     const int *material, const material_parameters_t *material_params,
     const int *nbr_start, const int *nbr_atom, const cu_real_t *nbr_J,
     const cu_real_t *x_spin, const cu_real_t *y_spin, const cu_real_t *z_spin,
     cu_real_t *x_sp_field, cu_real_t *y_sp_field, cu_real_t *z_sp_field,
-    int num_atoms);
+    int num_atoms, int first_atom);
 
 __global__ void
 update_external_fields_kernel(cu_real_t *x_dip_field, cu_real_t *y_dip_field,
@@ -175,13 +175,14 @@ __global__ void update_neel_fields_kernel(cu_real_t *d_neel_tensor,
                                           cu_real_t *z_spin,
                                           cu_real_t *x_sp_field,
                                           cu_real_t *y_sp_field,
-                                          cu_real_t *z_sp_field, int n_atoms);
+                                          cu_real_t *z_sp_field, int n_atoms,
+                                          int first_atom);
 
 __global__ void update_rotational_fields_kernel(
     int *material, material_parameters_t *material_params,
     material_parameters_rotational_t *material_params_r, cu_real_t *x_spin,
     cu_real_t *y_spin, cu_real_t *z_spin, cu_real_t *x_sp_field,
-    cu_real_t *y_sp_field, cu_real_t *z_sp_field, int n_atoms);
+    cu_real_t *y_sp_field, cu_real_t *z_sp_field, int n_atoms, int first_atom);
 
 namespace stats {
 extern bool use_cpu;
