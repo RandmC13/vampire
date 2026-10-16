@@ -51,6 +51,23 @@ void invalidate_host_spins(){
 }
 
 //------------------------------------------------------------------------------
+// Wrapper function to copy the spins to the host after integration when the
+// program may read them there directly
+//------------------------------------------------------------------------------
+void update_host_spins(){
+
+   // check for gpu functions and data initialised
+   if( !gpu::initialized ) return;
+
+   #ifdef CUDA
+      vcuda::update_host_spins();
+   #endif
+
+   return;
+
+}
+
+//------------------------------------------------------------------------------
 // Wrapper function to transfer dipole field data from CPU to GPU
 //------------------------------------------------------------------------------
 void transfer_dipole_fields_from_cpu_to_gpu(){

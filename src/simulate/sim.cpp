@@ -660,6 +660,10 @@ int integrate(uint64_t n_steps){
 		sim::integrate_serial(n_steps);
 	#endif
 
+	// With GPU acceleration, programs that read the spins on the host directly need
+	// them copied from the device after integration
+	if(gpu::acceleration) gpu::update_host_spins();
+
 	// return
 	return EXIT_SUCCESS;
 }

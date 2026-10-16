@@ -405,8 +405,12 @@ namespace vout{
       // check for open ofstream on root process only
       if(vmpi::my_rank == 0){
          if(!zmag.is_open()){
-            // check for checkpoint continue and append data
-            if(sim::load_checkpoint_flag && sim::load_checkpoint_continue_flag) zmag.open(vout::output_file_name,std::ofstream::app);
+            // check for checkpoint continue and append data, after a line of column headers
+            // (write_out writes them at its first call, which would otherwise replace the first data row)
+            if(sim::load_checkpoint_flag && sim::load_checkpoint_continue_flag){
+               zmag.open(vout::output_file_name,std::ofstream::app);
+               if(vout::header_option) write_out(zmag, file_output_list);
+            }
             // otherwise overwrite file
             else{
                zmag.open(vout::output_file_name,std::ofstream::trunc);

@@ -27,6 +27,9 @@
 #   6. runs those cases with all their seeds on the first number of ranks and
 #      compares them with the serial CPU references (statistically for finite
 #      temperature cases: the thermal noise sequence differs from the CPU's)
+#   7. reruns the time series and a HAMR case of stage 5 saving a checkpoint
+#      part way, and continues them from it, on each number of ranks, and checks
+#      that their final spins are bit for bit those of the uninterrupted runs
 #
 # Usage (from anywhere):  test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
@@ -63,6 +66,8 @@ ft_cont=curie-llg,prog-partial-hysteresis
 ft=$ft_end,$ft_cont
 # bit for bit identical results on any number of ranks need exchange sums in atom key order
 configs=(--extra "config:atoms=end" --extra "config:output-format=binary" --extra "gpu:decomposition-independent-order")
+# cases continued from a checkpoint (stage 7)
+continued=timeseries-T300,hamr-small
 configs_cont=(--extra "config:atoms" --extra "config:atoms-output-rate=1" --extra "config:output-format=binary" --extra "gpu:decomposition-independent-order")
 
 {
@@ -73,6 +78,27 @@ configs_cont=(--extra "config:atoms" --extra "config:atoms-output-rate=1" --extr
 	echo "git: $(git rev-parse HEAD)"
 	git status --short
 } >$out/system.txt 2>&1
+
+# continue_runs <exe> <ranks> <label of uninterrupted runs> <new label>: reruns each run of the
+# continued cases with one checkpoint saved part way (the checkpoint rate is 60 % of the time steps of
+# the run, read from its last output row), then continues a second run from that checkpoint
+continue_runs(){
+	for c in ${continued//,/ }; do
+		for src in $results/$3/$c/*/; do
+			d=$results/$4/$c/$(basename $src)
+			rm -rf $d; mkdir -p $d
+			cp test/validation/cases/$c/* $d/; rm $d/case.json
+			cp $src/input $d/input.full   # input of the uninterrupted run (with its extra lines)
+			dt=$(awk -F= '/^sim:time-step *=/ { print $2 + 0 }' $d/input.full)
+			rate=$(awk -v dt=$dt '!/^#/ && $1 + 0 == $1 { t = $1 } END { printf "%d", int(0.6 * int(t / dt + 0.5) / 1000) * 1000 }' $src/output)
+			{ cat $d/input.full; echo "sim:save-checkpoint=continuous"; echo "sim:save-checkpoint-rate=$rate"; } >$d/input
+			(cd $d && $MPIRUN -np $2 $1 >stdout-first 2>&1)
+			{ cat $d/input.full; echo "sim:load-checkpoint=continue"; } >$d/input
+			(cd $d && $MPIRUN -np $2 $1 >stdout 2>&1) || echo "$c $(basename $src): continuation failed (see $d/stdout)"
+			grep -q "Checkpoint file loaded at sim::time $rate\." $d/log* || echo "$c $(basename $src): checkpoint not loaded at time step $rate (see $d/log)"
+		done
+	done
+}
 
 echo "=== Building CPU MPI version ==="
 make clean
@@ -99,6 +125,8 @@ for pr in dp sp; do
 		echo "=== Multi-GPU version ($pr), $n ranks, finite temperature and program cases, one seed ==="
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_end --seeds 1 "${configs[@]}"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_cont --seeds 1 "${configs_cont[@]}"
+		echo "=== Multi-GPU version ($pr), $n ranks, continuation from a checkpoint ==="
+		continue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-continue
 	done
 	first=$(echo $ranks | awk '{print $1}')
 	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
@@ -121,6 +149,7 @@ for pr in dp sp; do
 		fi
 		[ $n != $first ] && $vt configs --test $name-$pr-np$n --ref $name-$pr-np$first --cases $spiral >$out/configs-$pr-np$n.txt
 		[ $n != $first ] && $vt configs --test $name-$pr-np$n-ft --ref $name-$pr-np$first-ft --cases $ft >$out/configs-ft-$pr-np$n.txt
+		$vt configs --test $name-$pr-np$n-continue --ref $name-$pr-np$n-ft --cases $continued >$out/continue-$pr-np$n.txt
 	done
 	$vt compare --test $name-$pr-stat --ref cpu --cases $ft --verbose --summary >$out/compare-stat-$pr.txt
 done
@@ -138,6 +167,10 @@ for f in $out/compare-stat-*.txt; do
 done
 for f in $out/configs-*.txt; do
 	echo "$(basename $f .txt) vs $first rank(s): $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
+	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
+done
+for f in $out/continue-*.txt; do
+	echo "$(basename $f .txt) vs uninterrupted run: $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
 	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
 done
 echo "Archive: $results/$name.tar.gz"
