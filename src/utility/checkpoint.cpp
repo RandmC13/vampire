@@ -245,6 +245,13 @@ void load_checkpoint(){
    chkfile.read((char*)&atoms::y_spin_array[0],sizeof(double)*natoms64);
    chkfile.read((char*)&atoms::z_spin_array[0],sizeof(double)*natoms64);
 
+   // the file holds the spins of local atoms only: update the halo atoms, which
+   // statistics calculated before the first time step use
+   #ifdef MPICF
+      vmpi::mpi_init_halo_swap();
+      vmpi::mpi_complete_halo_swap();
+   #endif
+
    // Load positions and velocities only for SLD simulations
    if(sld::enabled){
 
