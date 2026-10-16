@@ -1,13 +1,17 @@
 #include "exchange_fields.hpp"
 
 #include "atoms.hpp"
+#include "errors.hpp"
 #include "exchange.hpp"
+#include "sim.hpp"
 #include "vio.hpp"
 #include "cuda_utils.hpp"
 #include "internal.hpp"
 #include "data.hpp"
 
 #include <algorithm>
+#include <climits>
+#include <cstdint>
 #include <vector>
 
 #include "cusparse.h"
@@ -138,12 +142,28 @@ namespace vcuda
             std::vector<int> col_inds;
             std::vector<cu_real_t> vals;
 
+            // The 3N x 3N exchange matrix is only used for exchange that is not isotropic
+            // (spin fields from cuSPARSE) and by Monte Carlo; isotropic exchange in the LLG
+            // integrator uses the neighbour list of each atom below instead
+            const bool build_matrix = ::exchange::get_exchange_type() != 0 || ::sim::integrator == ::sim::monte_carlo;
+
+            // device indices are 32 bit integers
+            const uint64_t num_nbrs = ::atoms::neighbour_list_array.size();
+            const uint64_t max_entries = build_matrix ? num_nbrs * (::exchange::get_exchange_type() == 2 ? 9 : 3) : num_nbrs;
+            if(max_entries > uint64_t(INT_MAX) || 3 * uint64_t(Natoms) > uint64_t(INT_MAX)){
+               std::cerr << "Error: " << Natoms << " atoms with " << num_nbrs << " exchange interactions are too many for one GPU"
+                         << " (more than " << INT_MAX << " exchange entries); use more GPUs with vampire-cuda-multigpu" << std::endl;
+               zlog << zTs() << "Error: " << Natoms << " atoms with " << num_nbrs << " exchange interactions are too many for one GPU"
+                    << " (more than " << INT_MAX << " exchange entries)" << std::endl;
+               err::vexit();
+            }
+
             // NOTE: Below calculations have been left in double precision
             // for now !!
             // tolerance to ignore exchange components
             const cu_real_t tol = 1e-10;
             // loop over all atoms
-            for(int atom = 0; atom < ::atoms::num_atoms; ++atom){
+            for(int atom = 0; build_matrix && atom < ::atoms::num_atoms; ++atom){
 
                 // temporray constants for loop start and end indices
                 const int start = ::atoms::neighbour_list_start_index[atom];
@@ -200,7 +220,8 @@ namespace vcuda
 
             }
 
-            zlog << zTs() << "Expanded CPU nbr list to 3N by 3N format, no. of non-zeros is :" << vals.size() << " with a tol = " << tol << std::endl;
+            if(build_matrix) zlog << zTs() << "Expanded CPU nbr list to 3N by 3N format, no. of non-zeros is :" << vals.size() << " with a tol = " << tol << std::endl;
+            else zlog << zTs() << "Exchange matrix not needed (isotropic exchange, LLG integrator)" << std::endl;
 
             // For isotropic exchange also store the neighbour list of each atom, with neighbours in the
             // same (sorted) order as the rows of the exchange matrix, for the combined spin field kernel
