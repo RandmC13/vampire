@@ -211,7 +211,7 @@ namespace vcuda{
             cu_real_t * dS_z_dptr = thrust::raw_pointer_cast(cu::llg::dS_z_array.data());
             */
             // Calculate spin dependent fields
-            cu::update_spin_fields ();
+            cu::update_spin_fields (::atoms::num_atoms);
 
             // Calculate external fields (fixed for integration step)
             cu::update_external_fields ();
@@ -240,7 +240,7 @@ namespace vcuda{
             check_cuda_errors (__FILE__, __LINE__);
 
             // Recalculate spin dependent fields
-            cu::update_spin_fields ();
+            cu::update_spin_fields (::atoms::num_atoms);
 
             check_cuda_errors (__FILE__, __LINE__);
 

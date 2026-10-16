@@ -13,86 +13,119 @@
 // Vampire headers
 #include "environment.hpp"
 #include "errors.hpp"
-#include "exchange.hpp"
 #include "gpu.hpp"
 #include "mgpu.hpp"
 #include "micromagnetic.hpp"
+#include "program.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
 
 // mgpu module headers
 #include "internal.hpp"
 
-namespace mgpu{
+namespace mgpu {
 
-namespace internal{
-   int device_count(); // kernels.cu
-   void device_pci_id(int device, char* id, int size);
-}
+namespace internal {
+int device_count(); // kernels.cu
+void device_pci_id(int device, char *id, int size);
+} // namespace internal
 
 //------------------------------------------------------------------------------
 // Function to stop with an error message for unsupported simulations
 //------------------------------------------------------------------------------
-void unsupported(const std::string& feature){
-   if(vmpi::my_rank == 0){
-      terminaltextcolor(RED);
-      std::cerr << "Error: " << feature << " is not supported by the multi-GPU version (vampire-cuda-multigpu)" << std::endl;
-      terminaltextcolor(WHITE);
-   }
-   zlog << zTs() << "Error: " << feature << " is not supported by the multi-GPU version" << std::endl;
-   err::vexit();
+void unsupported(const std::string &feature) {
+  if (vmpi::my_rank == 0) {
+    terminaltextcolor(RED);
+    std::cerr
+        << "Error: " << feature
+        << " is not supported by the multi-GPU version (vampire-cuda-multigpu)"
+        << std::endl;
+    terminaltextcolor(WHITE);
+  }
+  zlog << zTs() << "Error: " << feature
+       << " is not supported by the multi-GPU version" << std::endl;
+  err::vexit();
 }
 
 //------------------------------------------------------------------------------
 // Function to select the GPU of this rank and to check that the simulation is
 // supported. Ranks on the same node use the node's GPUs in turn.
 //------------------------------------------------------------------------------
-void initialize(){
+void initialize() {
 
-   // simulation features not yet distributed over several GPUs (features the GPU
-   // version does not support at all are checked in gpu::initialize). Remove an
-   // entry once the multi-GPU version supports it and a test confirms it.
-   if(vmpi::mpi_mode != 0) unsupported("MPI modes other than geometric decomposition");
-   if(::exchange::get_exchange_type() != 0) unsupported("Vectorial and tensorial exchange");
-   if(micromagnetic::discretisation_type > 0) unsupported("Micromagnetic discretisation");
-   if(environment::enabled) unsupported("The environment module");
+  // simulation features not yet distributed over several GPUs (features the GPU
+  // version does not support at all are checked in gpu::initialize). Remove an
+  // entry once the multi-GPU version supports it and a test confirms it.
+  if (vmpi::mpi_mode != 0)
+    unsupported("MPI modes other than geometric decomposition");
+  if (micromagnetic::discretisation_type > 0)
+    unsupported("Micromagnetic discretisation");
+  if (environment::enabled)
+    unsupported("The environment module");
 
-   // rank within this node
-   MPI_Comm node;
-   MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &node);
-   int node_rank, node_size;
-   MPI_Comm_rank(node, &node_rank);
-   MPI_Comm_size(node, &node_size);
+  // refuses programs that are not confirmed to work on several GPUs
+  if (vmpi::num_processors > 1) {
+    switch (program::program) {
+    case 1:  // time series
+    case 2:  // hysteresis loop
+    case 4:  // curie temperature
+    case 5:  // field cool
+    case 6:  // temperature pulse
+    case 7:  // hamr simulation
+    case 12: // partial hysteresis loop
+    case 15: // fmr
+      break;
+    default:
+      unsupported("Program " + std::to_string(program::program) +
+                  " (sim:program) on more than one GPU");
+    }
+  }
 
-   const int num_devices = internal::device_count();
-   if(num_devices < 1){
-      std::cerr << "Error: no CUDA device found on rank " << vmpi::my_rank << std::endl;
-      zlog << zTs() << "Error: no CUDA device found" << std::endl;
-      err::vexit();
-   }
+  // rank within this node
+  MPI_Comm node;
+  MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
+                      &node);
+  int node_rank, node_size;
+  MPI_Comm_rank(node, &node_rank);
+  MPI_Comm_size(node, &node_size);
 
-   // the CUDA module sets the device chosen here (unless set in the input file)
-   if(gpu::device == -1) gpu::device = node_rank % num_devices;
+  const int num_devices = internal::device_count();
+  if (num_devices < 1) {
+    std::cerr << "Error: no CUDA device found on rank " << vmpi::my_rank
+              << std::endl;
+    zlog << zTs() << "Error: no CUDA device found" << std::endl;
+    err::vexit();
+  }
 
-   // ranks may see different devices (e.g. one each), so compare PCI addresses
-   const int id_size = 32;
-   std::vector<char> ids(id_size * node_size, 0);
-   internal::device_pci_id(gpu::device, &ids[id_size * node_rank], id_size);
-   MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ids.data(), id_size, MPI_CHAR, node);
-   MPI_Comm_free(&node);
-   const std::string my_id(&ids[id_size * node_rank]);
-   int sharing = 0;
-   for(int r = 0; r < node_size; r++) if(my_id == std::string(&ids[id_size * r])) sharing++;
+  // the CUDA module sets the device chosen here (unless set in the input file)
+  if (gpu::device == -1)
+    gpu::device = node_rank % num_devices;
 
-   zlog << zTs() << "Rank " << vmpi::my_rank << " is rank " << node_rank << " of " << node_size
-        << " on this node and uses GPU " << gpu::device << " of " << num_devices << " (PCI " << my_id << ")" << std::endl;
-   if(sharing > 1){
-      if(vmpi::my_rank == 0) std::cout << "Warning: rank 0 shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
-      zlog << zTs() << "Warning: this rank shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
-   }
+  // ranks may see different devices (e.g. one each), so compare PCI addresses
+  const int id_size = 32;
+  std::vector<char> ids(id_size * node_size, 0);
+  internal::device_pci_id(gpu::device, &ids[id_size * node_rank], id_size);
+  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ids.data(), id_size,
+                MPI_CHAR, node);
+  MPI_Comm_free(&node);
+  const std::string my_id(&ids[id_size * node_rank]);
+  int sharing = 0;
+  for (int r = 0; r < node_size; r++)
+    if (my_id == std::string(&ids[id_size * r]))
+      sharing++;
 
-   return;
+  zlog << zTs() << "Rank " << vmpi::my_rank << " is rank " << node_rank
+       << " of " << node_size << " on this node and uses GPU " << gpu::device
+       << " of " << num_devices << " (PCI " << my_id << ")" << std::endl;
+  if (sharing > 1) {
+    if (vmpi::my_rank == 0)
+      std::cout << "Warning: rank 0 shares its GPU with " << sharing - 1
+                << " other rank(s)" << std::endl;
+    zlog << zTs() << "Warning: this rank shares its GPU with " << sharing - 1
+         << " other rank(s)" << std::endl;
+  }
 
+  return;
 }
 
-} // end of mgpu namespace
+} // namespace mgpu
