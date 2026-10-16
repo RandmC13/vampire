@@ -23,10 +23,12 @@
 #
 # Appends one line per run to $WORK/mgpu/scaling/<partition>.csv:
 #    partition,gpu,nodes,ranks,ranks_per_node,precision,case,atoms,repeat,
-#    wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,exit
-# where halo_copy_max_s and halo_mpi_max_s are the largest over the ranks of the
-# GPU time spent on halo copies and the time spent in MPI halo messages
-# (vampire reports both per rank at the end of the run). Logs of every run are
+#    wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,halo_wait_max_s,exit
+# where halo_copy_max_s, halo_mpi_max_s and halo_wait_max_s are the largest over
+# the ranks of the GPU time spent on halo copies, the time spent in MPI halo
+# messages and the time the GPU waited for halo spins, i.e. the part of the
+# exchange not hidden behind computation (vampire reports all three per rank at
+# the end of the run; the waiting time is 0 for versions that do not report it). Logs of every run are
 # kept in $WORK/mgpu/scaling/runs/<partition>/.
 #------------------------------------------------------------------------------
 source $REPO/test/viking/mgpu-common.sh
@@ -41,6 +43,11 @@ for pr in dp sp; do
    mv $src/vampire-cuda-multigpu $bin/vampire-mgpu-$pr
 done
 
+# largest time over the ranks after <label> in the halo report lines of a log
+halo_max(){
+   awk -v label="$1 " '/^Multi-GPU rank/ { i = index($0, label); if (i) { v = substr($0, i + length(label)) + 0; if (v > m) m = v } } END { print m + 0 }' "$2"
+}
+
 # rank layouts "ranks:ranks_per_node"
 layouts=()
 for ((n = 1; n <= per_node; n++)); do layouts+=("$n:$n"); done
@@ -49,7 +56,7 @@ if [ $nodes -gt 1 ]; then layouts+=("2:1" "$total:$per_node"); fi
 csv=$MGPU/scaling/$partition.csv
 runs=$MGPU/scaling/runs/$partition
 mkdir -p $runs
-[ -f $csv ] || echo "partition,gpu,nodes,ranks,ranks_per_node,precision,case,atoms,repeat,wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,exit" > $csv
+[ -f $csv ] || echo "partition,gpu,nodes,ranks,ranks_per_node,precision,case,atoms,repeat,wall_s,sim_s,halo_copy_max_s,halo_mpi_max_s,halo_wait_max_s,exit" > $csv
 gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
 
 for layout in "${layouts[@]}"; do
@@ -80,10 +87,11 @@ for layout in "${layouts[@]}"; do
             cd - > /dev/null
             atoms=$(awk '/^Multi-GPU rank/ { s += $4 } END { print s }' $dir/log.txt)
             sim=$(awk -F': *' '/Simulation run time \[s\]/ { print $2 }' $dir/log.txt)
-            copy=$(awk '/^Multi-GPU rank/ { v = $(NF - 4); if (v > m) m = v } END { print m + 0 }' $dir/log.txt)
-            mpi=$(awk '/^Multi-GPU rank/ { v = $(NF - 1); if (v > m) m = v } END { print m + 0 }' $dir/log.txt)
+            copy=$(halo_max "GPU copies" $dir/log.txt)
+            mpi=$(halo_max "MPI" $dir/log.txt)
+            wait=$(halo_max "GPU waiting" $dir/log.txt)
             wall=$(awk -v s=$start -v e=$end 'BEGIN { printf "%.2f", e - s }')
-            echo "$partition,$gpu,$used_nodes,$n,$ppn,$pr,$case,$atoms,$repeat,$wall,$sim,$copy,$mpi,$status" | tee -a $csv
+            echo "$partition,$gpu,$used_nodes,$n,$ppn,$pr,$case,$atoms,$repeat,$wall,$sim,$copy,$mpi,$wait,$status" | tee -a $csv
          done
       done
    done

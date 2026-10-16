@@ -50,7 +50,8 @@ node (2 GPUs):
   `thermal-perf` at 100 x 100 and 200 x 200 nm, and weak scaling of `thermal-perf` at
   100 x 100 nm per GPU, in double and single precision, on 1 GPU up to all GPUs, including 2
   GPUs on two nodes. Results in `$WORK/mgpu/scaling/<partition>.csv`, with the time each run
-  spent on halo exchange (reported by vampire for every rank).
+  spent on halo exchange and the part of it the GPU waited for, i.e. not hidden behind the
+  core-atom fields (reported by vampire for every rank).
 
 Ranks are started by `mgpu-launch.sh`, which gives every rank one GPU and binds it to the
 CPU cores and memory of that GPU's NUMA node. Modules default to `CUDA/12.9.0`,
