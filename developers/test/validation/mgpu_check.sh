@@ -34,7 +34,7 @@
 # Usage (from anywhere):  developers/test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
 # Environment variables:
-#   JOBS       parallel build jobs (default: 10)
+#   JOBS       parallel build jobs (default: number of cores)
 #   CUDA_ARCH  GPU architecture flags (default: -arch=native)
 #   MPIRUN     MPI launcher (default: mpirun --oversubscribe)
 #
@@ -47,7 +47,7 @@ set -u
 cd "$(dirname "$0")/../../.."
 
 ranks=${*:-1 2 4}
-jobs=${JOBS:-10}
+jobs=${JOBS:-$(nproc)}
 arch=${CUDA_ARCH:--arch=native}
 export MPIRUN=${MPIRUN:-mpirun --oversubscribe}
 name=mgpu-check-$(hostname -s)-$(date +%Y%m%d-%H%M)
