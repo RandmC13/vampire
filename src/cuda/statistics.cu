@@ -1,15 +1,16 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2015. All rights reserved.
+//   (c) R F L Evans 2015. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
 #include <iostream>
+#include <string>
 #include <vector>
 
 // Vampire headers
@@ -17,6 +18,7 @@
 #include "cuda.hpp"
 #include "dipole.hpp"
 #include "errors.hpp"
+#include "integrate.hpp"
 #include "program.hpp"
 #include "spintorque.hpp"
 #include "spintransport.hpp"
@@ -85,9 +87,7 @@ namespace {
    void check_device_errors(){
       const cudaError_t error = cudaGetLastError();
       if(error != cudaSuccess){
-         std::cerr << "Error: CUDA error on the GPU: " << cudaGetErrorString(error) << std::endl;
-         zlog << zTs() << "Error: CUDA error on the GPU: " << cudaGetErrorString(error) << std::endl;
-         ::err::vexit();
+         ::err::fatal(std::string("Error: CUDA error on the GPU: ") + cudaGetErrorString(error));
       }
    }
 
@@ -190,14 +190,14 @@ namespace {
 
       // programs which only use statistics of the spins during the simulation
       switch(::program::program){
-         case 1:  // time series
-         case 2:  // hysteresis loop
-         case 4:  // curie temperature
-         case 5:  // field cool
-         case 6:  // temperature pulse
-         case 7:  // hamr simulation
-         case 12: // partial hysteresis loop
-         case 15: // fmr
+         case ::program::program_t::time_series:
+         case ::program::program_t::hysteresis_loop:
+         case ::program::program_t::curie_temperature:
+         case ::program::program_t::field_cool:
+         case ::program::program_t::laser_pulse:
+         case ::program::program_t::hamr_simulation:
+         case ::program::program_t::partial_hysteresis_loop:
+         case ::program::program_t::fmr:
             return false;
          default:
             return true;
@@ -216,10 +216,10 @@ namespace {
       if(::stats::calculate_system_energy || ::stats::calculate_grain_energy || ::stats::calculate_material_energy) return true;
 
       // modules reading the spins on the host every time step
-      if(::dipole::activated || ::st::is_enabled() || ::spin_transport::is_enabled() || ::sim::lagrange_multiplier) return true;
+      if(::dipole::activated || ::st::is_enabled() || ::spin_transport::is_enabled() || ::program::lagrange_multiplier_enabled) return true;
 
       // only the GPU integrators keep the spins on the device up to date
-      if(::sim::integrator != ::sim::llg_heun && ::sim::integrator != ::sim::monte_carlo) return true;
+      if(::integrate::integrator != ::integrate::integrator_t::llg_heun && ::integrate::integrator != ::integrate::integrator_t::monte_carlo) return true;
 
       return program_reads_host_spins();
 

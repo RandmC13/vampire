@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -13,6 +13,7 @@
 #include "errors.hpp"
 #include "ltmp.hpp"
 #include "material.hpp"
+#include "program.hpp"
 #include "sim.hpp"
 #include "stats.hpp"
 #include "vio.hpp"
@@ -26,16 +27,15 @@ namespace program{
    // Check localised temperature pulse is enabled
    if(!ltmp::is_enabled()){
       zlog << zTs() << "Fatal Error: Localised temperature pulse is not initialised. Exiting" << std::endl;
-      std::cerr << "Fatal Error: Localised temperature pulse is not initialised. Exiting" << std::endl;
-      err::vexit();
+      err::fatal("Fatal Error: Localised temperature pulse is not initialised. Exiting");
    }
 
    // Set equilibration temperature and field
    sim::temperature=sim::Teq;
 
    // Initialise electron and phonon temperature
-   sim::TTTe=sim::temperature;
-   sim::TTTp=sim::temperature;
+   program::TTTe=sim::temperature;
+   program::TTTp=sim::temperature;
 
    // Equilibrate system
    while(sim::time<sim::equilibration_time){

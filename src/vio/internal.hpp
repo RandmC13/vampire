@@ -5,7 +5,8 @@
 //
 //   (c) Richard F L Evans and Rory Pond 2016. All rights reserved.
 //
-//   Email: richard.evans@york.ac.uk and rory.pond@york.ac.uk
+//   Email: richard.evans@york.ac.uk
+//          rory.pond@york.ac.uk
 //
 //------------------------------------------------------------------------------
 //
@@ -25,6 +26,7 @@
 #include <iostream>
 
 // Vampire headers
+#include "vio.hpp"
 
 #ifdef WIN_COMPILE
    #include <direct.h>
@@ -37,18 +39,11 @@ namespace vin{
    //----------------------------------------------------------------------------------
    int match(std::string const, std::string const, std::string const, std::string const, int const);
    int match(std::string const, std::string const, std::string const, std::string const, int const, int const, int const);
-   int match_create(std::string const, std::string const, std::string const, int const);
-   int match_dimension(std::string const, std::string const, std::string const, int const);
-   int match_sim(std::string const, std::string const, std::string const, int const);
-   int match_vout_list(std::string const, std::string const, int const, std::vector<unsigned int> &);
-   int match_material(std::string const, std::string const, std::string const, int const, int const, int const, std::string const, std::string const);
-   int match_config(std::string const, std::string const, std::string const, int const);
 
    //----------------------------------------------------------------------------------
    //Function protypes for functions inside: read.cpp
    //----------------------------------------------------------------------------------
    int read(std::string const filename);
-   int read_mat_file(std::string const, int const);
 
 }
 
@@ -58,9 +53,9 @@ namespace vout{
    extern std::string zLogHostName; /// Host Name
    extern bool        zLogInitialised; /// Initialised flag
    #ifdef WIN_COMPILE
-   	extern int      zLogPid; /// Process ID
+      extern int      zLogPid; /// Process ID
    #else
-   	extern pid_t    zLogPid; /// Process ID
+      extern pid_t    zLogPid; /// Process ID
    #endif
 
    // namespaced io lists (to avoid collisions)
@@ -109,7 +104,8 @@ namespace vout{
    //-------------------------------------------------------------------------
    // New match functions
    //-------------------------------------------------------------------------
-   int match_vout_grain_list(std::string const word, std::string const value, int const line, std::vector<grain::output_t> & output_list);
+   bool match_vout_grain_list(std::string const word, std::string const value, int const line, std::vector<grain::output_t> & output_list);
+   bool match_vout_list(std::string const word, std::string const value, int const line, std::vector<output_t> & output_list);
 
 
    //-------------------------------------------------------------------------
@@ -167,6 +163,8 @@ namespace vout{
    void mean_total_applied_field_energy(std::ostream& stream,bool header);
    void total_magnetostatic_energy(std::ostream& stream,bool header);
    void mean_total_magnetostatic_energy(std::ostream& stream,bool header);
+   void total_dmi_energy(std::ostream& stream,bool header);
+   void mean_total_dmi_energy(std::ostream& stream,bool header);
    //void total_so_anisotropy_energy(std::ostream& stream,bool header);
    //void mean_total_so_anisotropy_energy(std::ostream& stream,bool header);
    void height_mvec(std::ostream& stream,bool header);
@@ -174,8 +172,8 @@ namespace vout{
    void height_mvec_actual(std::ostream& stream,bool header);
    void material_height_mvec_actual(std::ostream& stream,bool header);
    void fmr_field_strength(std::ostream& stream,bool header);
-	void mean_mvec(std::ostream& stream,bool header);
-	void mat_mean_mvec(std::ostream& stream,bool header);
+   void mean_mvec(std::ostream& stream,bool header);
+   void mat_mean_mvec(std::ostream& stream,bool header);
    void mean_material_susceptibility(std::ostream& stream,bool header);
    void material_binder_cumulant(std::ostream& stream,bool header);
    void mean_height_magnetisation_length(std::ostream& stream,bool header);
@@ -186,6 +184,8 @@ namespace vout{
    void mean_material_specific_heat(std::ostream& stream,bool header);
    void material_total_energy(std::ostream& stream,bool header);
    void material_mean_total_energy(std::ostream& stream,bool header);
+   void material_dmi_energy(std::ostream& stream,bool header);
+   void material_mean_dmi_energy(std::ostream& stream,bool header);
    void resistance(std::ostream& stream, bool header);
    void current(std::ostream& stream, bool header);
    void domain_wall_position(std::ostream& stream,bool header);
@@ -207,7 +207,7 @@ namespace vout{
    void material_lattice_temp(std::ostream& stream, bool header);
    void mean_syslatticetemp(std::ostream& stream,bool header);
    void material_mean_syslatticetemp(std::ostream& stream,bool header);
-   void mean_coupling_field_vec(std::ostream& stream, bool header); 
+   void mean_coupling_field_vec(std::ostream& stream, bool header);
 
    void potential_energy(std::ostream& stream, bool header);
    void kinetic_energy(std::ostream& stream, bool header);

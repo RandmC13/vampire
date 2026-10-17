@@ -28,7 +28,7 @@ while read version commit; do
    for pr in dp sp; do
       echo "=== $version ($commit) $pr ==="
       make -C $src clean > /dev/null
-      make -C $src -j$SLURM_CPUS_PER_TASK cuda CUDA_PR="-DCUDA_${pr^^}" CUDA_ARCH="$GPU_ARCH" > $WORK/bin/build-$version-$pr.log 2>&1 \
+      make -C $src -j$(nproc) cuda CUDA_PR="-DCUDA_${pr^^}" CUDA_ARCH="$GPU_ARCH" > $WORK/bin/build-$version-$pr.log 2>&1 \
          || { tail -n 30 $WORK/bin/build-$version-$pr.log; exit 1; }
       mv $src/vampire-cuda $WORK/bin/vampire-cuda-$version-$pr
    done

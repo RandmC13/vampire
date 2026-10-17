@@ -10,8 +10,8 @@
 //------------------------------------------------------------------------------
 //
 
-#ifndef SLD_INTERNAL_H_
-#define SLD_INTERNAL_H_
+#ifndef SPINLATTICE_INTERNAL_H_
+#define SPINLATTICE_INTERNAL_H_
 //
 //---------------------------------------------------------------------
 // This header file defines shared internal data structures and
@@ -24,9 +24,6 @@
 
 // Vampire headers
 #include "sld.hpp"
-
-// sld module headers
-#include "internal.hpp"
 
 
 namespace sld{
@@ -110,7 +107,7 @@ namespace sld{
 
              }; // end of constructor
 
-             
+
 
        }; // end of internal::mp class
 
@@ -122,14 +119,14 @@ namespace sld{
       extern double phonon_wavevector[3];      // For kx, ky, kz
       extern double phonon_pulse_start_time;
       extern double phonon_pulse_end_time;
-      extern std::vector<double> coupling_field_x; 
-      extern std::vector<double> coupling_field_y; 
+      extern std::vector<double> coupling_field_x;
+      extern std::vector<double> coupling_field_y;
       extern std::vector<double> coupling_field_z;
 
       // NEW: Intermediate storage for wave parameters from the input file
       extern double phonon_wave_lambda[3];   // For λ_x, λ_y, λ_z
       extern double phonon_wave_direction[3]; // For direction_x, direction_y, direction_z
- 
+
 
 
       //-------------------------------------------------------------------------
@@ -264,7 +261,7 @@ namespace sld{
 
 
       void compute_thz(const int start_index,
-            const int end_index, 
+            const int end_index,
             const std::vector<double>& x_coord_array, // current coord vectors for atoms
             const std::vector<double>& y_coord_array,
             const std::vector<double>& z_coord_array,
@@ -357,4 +354,4 @@ namespace sld{
 } // end of sld namespace
 
 
-#endif //SLD_INTERNAL_H_
+#endif //SPINLATTICE_INTERNAL_H_

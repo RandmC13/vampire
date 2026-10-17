@@ -1,8 +1,18 @@
+//------------------------------------------------------------------------------
+//
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
+//
+//   (c) M A Ellis 2015. All rights reserved.
+//
+//------------------------------------------------------------------------------
+
 #include "exchange_fields.hpp"
 
 #include "atoms.hpp"
 #include "errors.hpp"
 #include "exchange.hpp"
+#include "integrate.hpp"
 #include "sim.hpp"
 #include "vio.hpp"
 #include "cuda_utils.hpp"
@@ -12,6 +22,7 @@
 #include <algorithm>
 #include <climits>
 #include <cstdint>
+#include <sstream>
 #include <vector>
 
 #include "cusparse.h"
@@ -145,17 +156,16 @@ namespace vcuda
             // The 3N x 3N exchange matrix is only used for exchange that is not isotropic
             // (spin fields from cuSPARSE) and by Monte Carlo; isotropic exchange in the LLG
             // integrator uses the neighbour list of each atom below instead
-            const bool build_matrix = ::exchange::get_exchange_type() != 0 || ::sim::integrator == ::sim::monte_carlo;
+            const bool build_matrix = ::exchange::get_exchange_type() != 0 || ::integrate::integrator == ::integrate::integrator_t::monte_carlo;
 
             // device indices are 32 bit integers
             const uint64_t num_nbrs = ::atoms::neighbour_list_array.size();
             const uint64_t max_entries = build_matrix ? num_nbrs * (::exchange::get_exchange_type() == 2 ? 9 : 3) : num_nbrs;
             if(max_entries > uint64_t(INT_MAX) || 3 * uint64_t(Natoms) > uint64_t(INT_MAX)){
-               std::cerr << "Error: " << Natoms << " atoms with " << num_nbrs << " exchange interactions are too many for one GPU"
-                         << " (more than " << INT_MAX << " exchange entries); use more GPUs with vampire-cuda-multigpu" << std::endl;
-               zlog << zTs() << "Error: " << Natoms << " atoms with " << num_nbrs << " exchange interactions are too many for one GPU"
-                    << " (more than " << INT_MAX << " exchange entries)" << std::endl;
-               err::vexit();
+               std::ostringstream message;
+               message << "Error: " << Natoms << " atoms with " << num_nbrs << " exchange interactions are too many for one GPU"
+                       << " (more than " << INT_MAX << " exchange entries); use more GPUs with vampire-cuda-multigpu";
+               err::fatal(message.str());
             }
 
             // NOTE: Below calculations have been left in double precision
@@ -449,9 +459,9 @@ namespace vcuda
             if( !exchange_initialised) initialise_exchange();
 
             if( !empty_exchange) {
-                //cudaMemcpy(d_spin3n, 				cu::atoms::d_x_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(d_spin3n + ::atoms::num_atoms, 	cu::atoms::d_y_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(d_spin3n + 2 * ::atoms::num_atoms, 	cu::atoms::d_z_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(d_spin3n,             cu::atoms::d_x_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(d_spin3n + ::atoms::num_atoms,    cu::atoms::d_y_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(d_spin3n + 2 * ::atoms::num_atoms,   cu::atoms::d_z_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
                 check_cuda_errors(__FILE__,__LINE__);
 
                 // cusparseSpMV using CSR algorithm 2 (deterministic, no per-call preprocessing)
@@ -473,9 +483,9 @@ namespace vcuda
 
                 check_cuda_errors(__FILE__,__LINE__);
 
-                //cudaMemcpy(cu::d_x_spin_field, d_field3n, 				::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(cu::d_y_spin_field, d_field3n + ::atoms::num_atoms, 		::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(cu::d_z_spin_field, d_field3n + 2 * ::atoms::num_atoms, 	::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::d_x_spin_field, d_field3n,             ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::d_y_spin_field, d_field3n + ::atoms::num_atoms,       ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::d_z_spin_field, d_field3n + 2 * ::atoms::num_atoms,   ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
 
             }
             else {

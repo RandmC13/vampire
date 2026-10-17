@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) Mara Strungaru 2022. All rights reserved.
+//   (c) Mara Strungaru 2022. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
@@ -43,11 +43,9 @@ void lattice_temp_statistic_t::set_mask(const int in_mask_size, std::vector<int>
    // Check that mask values never exceed mask_size
    for(unsigned int atom=0; atom<in_mask.size(); ++atom){
       if(in_mask[atom] > in_mask_size-1){
-         terminaltextcolor(RED);
-         std::cerr << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask " << in_mask_size;
+         err::fatal(message.str());
       }
    }
 
@@ -135,15 +133,15 @@ void lattice_temp_statistic_t::calculate_lattice_temp(const std::vector<double>&
 
       // get atomic moment
 
-		double vx = atoms::x_velo_array[atom];
+      double vx = atoms::x_velo_array[atom];
         double vy = atoms::y_velo_array[atom];
         double vz = atoms::z_velo_array[atom];
   //      std::cout<<"viteze "<<vx<<"\t"<<vy<<"\t"<<vz<<std::endl;
          //std::cout<<"s"<<S[0]<<"\t"<<S[1]<<"\t"<<S[2]<<"b"<<B[0]<<"\t"<< B[1]<<"\t"<<B[2]<<"mask id:"<<mask_id<<"\t"<<SxH2<<"\t"<<SH<<std::endl;
         lattice_temp[mask_id]+=atoms::mass_spin_array[atom]*(vx*vx+vy*vy+vz*vz);
-	    //if(atom==2) std::cout<<"STATS at 2  "<<( 2.0 /(3.0*constants::kB_eV))*kinetic*atoms::mass_spin_array[atom]*0.5<<std::endl;
+       //if(atom==2) std::cout<<"STATS at 2  "<<( 2.0 /(3.0*constants::kB_eV))*kinetic*atoms::mass_spin_array[atom]*0.5<<std::endl;
        //std::cout<<"mask id "<<mask_id<<"\t"<<lattice_temp.size()<<std::endl;
-	}
+   }
     vmpi::barrier();
 
 

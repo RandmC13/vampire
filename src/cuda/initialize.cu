@@ -1,12 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2015. All rights reserved.
-// Reviewed: Andrea Meo 2022
+//   (c) R F L Evans 2015. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//   Reviewed: Andrea Meo 2022
+//
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -205,18 +206,18 @@ namespace vcuda{
 
          size_t num_bytes = ::atoms::num_atoms * sizeof(cu_real_t);
 
-	 cudaMalloc((void**)&cu::atoms::d_spin, num_bytes * 3);
+    cudaMalloc((void**)&cu::atoms::d_spin, num_bytes * 3);
 
          cu::atoms::d_x_spin = cu::atoms::d_spin;
          cu::atoms::d_y_spin = cu::atoms::d_spin + ::atoms::num_atoms;
          cu::atoms::d_z_spin = cu::atoms::d_spin + 2 * ::atoms::num_atoms;
 
-	 /*
-	 cudaMalloc((void**)&cu::atoms::d_x_spin, num_bytes);
+    /*
+    cudaMalloc((void**)&cu::atoms::d_x_spin, num_bytes);
          cudaMalloc((void**)&cu::atoms::d_y_spin, num_bytes);
          cudaMalloc((void**)&cu::atoms::d_z_spin, num_bytes);
          */
-	 /* Need to be careful here
+    /* Need to be careful here
          The device code can use SP or DP,
          but the host code seems to rely exclusively on DP */
 

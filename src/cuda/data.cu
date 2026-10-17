@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2015. All rights reserved.
+//   (c) R F L Evans 2015. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 /**
  * @brief This file provides object definitions for the global
@@ -101,10 +101,10 @@ namespace vcuda{
 
          //cu_real_array_t volume_array(0UL);
          //cu_index_array_t num_atoms(0UL);
-         
+
          int *d_cell_id_array;
          int *d_num_atoms_in_cell;
- 
+
       } /* cells */
 
       namespace hamr

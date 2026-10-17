@@ -13,7 +13,7 @@
 # each rank through this script again, which gives the rank one GPU of its
 # node (by node-local rank, as the only visible device) and binds the rank to
 # the CPU cores and memory of that GPU's NUMA node if numactl can. Each rank
-# prints its binding to stderr. Used as MPIRUN for test/validation/vtest.py.
+# prints its binding to stderr. Used as MPIRUN for developers/test/validation/vtest.py.
 #------------------------------------------------------------------------------
 if [ "${1:-}" = "-np" ]; then
    exec mpirun ${MPI_OPTS:-} --bind-to none -np "$2" "$0" "${@:3}"

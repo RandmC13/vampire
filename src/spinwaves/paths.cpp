@@ -147,11 +147,9 @@ namespace spinwaves{
                 // else if(uc::sw_crystal_structure == "spinel-layered" ) spinwaves::internal::path_spinel_layered();
                 // else if(uc::sw_crystal_structure == "SmFeN"          ) spinwaves::internal::path_SmFeN();
                 else{
-                    terminaltextcolor(RED);
-                    std::cerr << "Error: Unknown spinwaves crystal_type "<< uc::sw_crystal_structure << " found during spinwave path initialisation. Exiting." << std::endl;
-                    terminaltextcolor(WHITE);
-                    zlog << zTs() << "Error: Unknown spinwaves crystal_type "<< uc::sw_crystal_structure << " found during spinwave path initialisation. Exiting." << std::endl;
-                    err::vexit();
+                    std::ostringstream message;
+                    message << "Error: Unknown spinwaves crystal_type " << uc::sw_crystal_structure << " found during spinwave path initialisation. Exiting.";
+                    err::fatal(message.str());
                 }
             }
             else {
@@ -173,9 +171,9 @@ namespace spinwaves{
          void determine_kpoints_from_user_specific_k(const double system_dimensions_x,
                     const double system_dimensions_y,
                     const double system_dimensions_z,
-					const double unit_cell_size_x,
-					const double unit_cell_size_y,
-					const double unit_cell_size_z){
+               const double unit_cell_size_x,
+               const double unit_cell_size_y,
+               const double unit_cell_size_z){
 
 
             // kfile
@@ -218,9 +216,9 @@ namespace spinwaves{
         void determine_kpoints_from_user_high_sym_path(const double system_dimensions_x,
                     const double system_dimensions_y,
                     const double system_dimensions_z,
-					const double unit_cell_size_x,
-					const double unit_cell_size_y,
-					const double unit_cell_size_z){
+               const double unit_cell_size_x,
+               const double unit_cell_size_y,
+               const double unit_cell_size_z){
 
             // kfile
             std::ofstream kfile;
@@ -230,11 +228,7 @@ namespace spinwaves{
 
             // check path file contains an even number of high symm points.
             if ( len % 2 != 0){
-                terminaltextcolor(RED);
-                std::cerr <<     "Error: k-path file contains an odd number of high symmetry points." << std::endl;
-                terminaltextcolor(WHITE);
-                zlog << zTs() << "Error: k-path file contains an odd number of high symmetry points." << std::endl;
-                err::vexit();
+                err::fatal("Error: k-path file contains an odd number of high symmetry points.");
             }
 
             std::cout << unit_cell_size_x << " " << unit_cell_size_y << " " << unit_cell_size_z << std::endl;

@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2018. All rights reserved.
+//   (c) R F L Evans 2018. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
@@ -56,11 +56,9 @@ void sld_energy_statistic_t::set_mask(const int in_mask_size, const std::vector<
    // Check that mask values never exceed mask_size
    for(unsigned int atom=0; atom<in_mask.size(); ++atom){
       if(in_mask[atom] > in_mask_size-1){
-         terminaltextcolor(RED);
-         std::cerr << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask " << in_mask_size;
+         err::fatal(message.str());
       }
    }
 

@@ -24,7 +24,6 @@
 #include "vmpi.hpp"
 #include "vutil.hpp"
 #include "grains.hpp"
-using namespace std;
 
 namespace program{
 
@@ -122,14 +121,14 @@ namespace program{
             }
             l++;
          }
-         if (Local_Sub[l-1] !=0 ) cerr << Largest_Sublattice[j] <<endl;
+         if (Local_Sub[l-1] !=0 ) std::cerr << Largest_Sublattice[j] <<std::endl;
       }
       int j = 0;
 
 
       for (int i = 0; i < grains::num_grains*4; i= i +4){
          if (Local_Sub[i] != 0){
-            cerr <<"number in each sublattice for grain" << j << ";" <<  Local_Sub[i] << "\t" << Local_Sub[i +1] << "\t" << Local_Sub[i+2] << "\t" << Local_Sub[i+3] << "\t" << std::endl;
+            std::cerr <<"number in each sublattice for grain" << j << ";" <<  Local_Sub[i] << "\t" << Local_Sub[i +1] << "\t" << Local_Sub[i+2] << "\t" << Local_Sub[i+3] << "\t" << std::endl;
             zlog << zTs() <<"number in each sublattice for grain" << j << ";" <<  Local_Sub[i] << "\t" << Local_Sub[i +1] << "\t" << Local_Sub[i+2] << "\t" << Local_Sub[i+3] << "\t" << std::endl;
             j++;
          }
@@ -165,7 +164,7 @@ namespace program{
 
 
       for (int i = 0; i <atoms::num_atoms; i++){
-         //	std::cout << atoms::type_array[i] << "\t" << atoms::z_spin_array[i] <<std::endl;
+         // std::cout << atoms::type_array[i] << "\t" << atoms::z_spin_array[i] <<std::endl;
          if(atoms::type_array[i] > 3){
             atoms::x_spin_array[i] = sim::H_vec[0];
             atoms::y_spin_array[i] = sim::H_vec[1];

@@ -30,38 +30,33 @@
 // Vampire headers
 #include "environment.hpp"
 
-// environment module headers
-#include "internal.hpp"
-
-using namespace std;
-
 namespace environment{
 
    namespace internal{
 
-     extern int num_shields;
+      extern int num_shields;
 
-     extern std::vector <string> shield_shape;
-     extern std::vector <double> shield_ms;
-     extern std::vector <double> shield_Tc;
-     extern std::vector< std::vector <double> > shield_A;
-     extern std::vector <double> shield_ku;
-     extern std::vector <double> shield_alpha;
-     extern std::vector <double> shield_gamma;
-     extern std::vector <double> shield_max_x;
-     extern std::vector <double> shield_max_y;
-     extern std::vector <double> shield_max_z;
-     extern std::vector <double> shield_min_x;
-     extern std::vector <double> shield_min_y;
-     extern std::vector <double> shield_min_z;
-     extern std::vector <double> shield_Hext_x;
-     extern std::vector <double> shield_Hext_y;
-     extern std::vector <double> shield_Hext_z;
-     extern std::vector <double> shield_max_cell_size;
-     extern std::vector <double> shield_min_cell_size;
-     extern std::vector <string> pos_or_neg;
-     extern std::vector <int> shield_number;
-     extern std::vector <int> H_strength;
+      extern std::vector <std::string> shield_shape;
+      extern std::vector <double> shield_ms;
+      extern std::vector <double> shield_Tc;
+      extern std::vector< std::vector <double> > shield_A;
+      extern std::vector <double> shield_ku;
+      extern std::vector <double> shield_alpha;
+      extern std::vector <double> shield_gamma;
+      extern std::vector <double> shield_max_x;
+      extern std::vector <double> shield_max_y;
+      extern std::vector <double> shield_max_z;
+      extern std::vector <double> shield_min_x;
+      extern std::vector <double> shield_min_y;
+      extern std::vector <double> shield_min_z;
+      extern std::vector <double> shield_Hext_x;
+      extern std::vector <double> shield_Hext_y;
+      extern std::vector <double> shield_Hext_z;
+      extern std::vector <double> shield_max_cell_size;
+      extern std::vector <double> shield_min_cell_size;
+      extern std::vector <std::string> pos_or_neg;
+      extern std::vector <int> shield_number;
+      extern std::vector <int> H_strength;
 
 
 
@@ -133,7 +128,7 @@ namespace environment{
       // performs the backward transform to give the dipole field, Hx, Hy, Hz
       extern fftw_plan HxP,HyP,HzP;
       #endif
-//      extern fft_cell_id_array;
+      //      extern fft_cell_id_array;
 
       extern std::vector<double> cell_coords_array_x; /// arrays to store cells positions
       extern std::vector<double> cell_coords_array_y;
@@ -144,7 +139,7 @@ namespace environment{
       extern std::vector<double> neighbour_list_end_index;
       extern std::vector<double> neighbour_list_array;
 
-      extern ofstream o_file;
+      extern std::ofstream o_file;
       #ifdef FFT
       extern fftw_complex *Mx_in; //3D Array for m_in
       extern fftw_complex *My_in;
@@ -234,8 +229,8 @@ namespace environment{
       std::vector<double> calculate_field_mm(int celli, int cellj);
       std::vector < std::vector < double> > calculate_corners(double x, double y, double z, double cell_size_x, double cell_size_y, double cell_size_z);
 
-      } // end of internal namespace
+   } // end of internal namespace
 
-   } // end of environment namespace
+} // end of environment namespace
 
-   #endif //ENVIRONMENT_INTERNAL_H_
+#endif //ENVIRONMENT_INTERNAL_H_

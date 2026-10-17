@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) Andrea Meo 2022. All rights reserved.
+//   (c) Andrea Meo 2022. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <sstream>
@@ -23,7 +23,7 @@ namespace hamr{
    //-----------------------------------------------------------------------------
    // Function to process input file parameters for sim module
    //-----------------------------------------------------------------------------
-   bool match_input_parameter(string const key, string const word, string const value, string const unit, int const line){
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
 
       // Check for valid key, if no match return false
       std::string prefix="hamr";

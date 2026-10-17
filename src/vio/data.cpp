@@ -5,7 +5,8 @@
 //
 //   (c) Richard F L Evans and Rory Pond 2016. All rights reserved.
 //
-//   Email: richard.evans@york.ac.uk and rory.pond@york.ac.uk
+//   Email: richard.evans@york.ac.uk
+//          rory.pond@york.ac.uk
 //
 //------------------------------------------------------------------------------
 //
@@ -33,9 +34,9 @@ namespace vout{
    std::string zLogHostName; /// Host Name
    bool        zLogInitialised=false; /// Initialised flag
    #ifdef WIN_COMPILE
-   	int      zLogPid; /// Process ID
+      int      zLogPid; /// Process ID
    #else
-   	pid_t    zLogPid; /// Process ID
+      pid_t    zLogPid; /// Process ID
    #endif
 
    bool custom_precision = false; // enable user selectable precision for data output
@@ -45,16 +46,16 @@ namespace vout{
    bool fixed = false; // fixed precision output
    bool header_option = false; // output column headers on output file
    int max_header=14;
-	// Namespace variable declarations
-	std::vector<unsigned int> file_output_list(0);
-	std::vector<unsigned int> screen_output_list(0);
+   // Namespace variable declarations
+   std::vector<output_t> file_output_list(0);
+   std::vector<output_t> screen_output_list(0);
 
-	// Variables to control rate of data output to screen, output file and grain file
-	int output_rate=1;
-	int output_grain_rate=1;
-	//int output_screen_rate=1; needs to be implemented
+   // Variables to control rate of data output to screen, output file and grain file
+   int output_rate=1;
+   int output_grain_rate=1;
+   //int output_screen_rate=1; needs to be implemented
 
-	bool gnuplot_array_format=false;
+   bool gnuplot_array_format=false;
 
    namespace grain{
 

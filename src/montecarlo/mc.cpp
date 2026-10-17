@@ -11,6 +11,7 @@
 //
 
 // Standard Libraries
+#include "constants.hpp"
 #include <cmath>
 #include <vector>
 
@@ -48,7 +49,7 @@ void mc_step(std::vector<double> &x_spin_array,
          double alpha = internal::temperature_rescaling_alpha[m];
          double Tc = internal::temperature_rescaling_Tc[m];
          double rescaled_temperature = sim::temperature < Tc ? Tc*pow(sim::temperature/Tc,alpha) : sim::temperature;
-         rescaled_material_kBTBohr[m] = 9.27400915e-24/(rescaled_temperature*1.3806503e-23);
+         rescaled_material_kBTBohr[m] = constants::muB/(rescaled_temperature*constants::kB);
          sigma_array[m] = rescaled_temperature < 1.0 ? 0.02 : pow(1.0/rescaled_material_kBTBohr[m],0.2)*0.08;
       }
 
@@ -90,7 +91,7 @@ void mc_step(std::vector<double> &x_spin_array,
          Enew = sim::calculate_spin_energy(atom);
 
          // Calculate difference in Joules/mu_B
-         DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*1.07828231e23; //1/9.27400915e-24
+         DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*constants::i_muB; //1/constants::muB
 
          // Check for lower energy state and accept unconditionally
          if(DE<0) continue;
@@ -115,7 +116,7 @@ void mc_step(std::vector<double> &x_spin_array,
          const double factor = 0.5 / last_rejection_rate;
          montecarlo::internal::adaptive_sigma *= factor;
          // check for excessive range (too small angle takes too long to grow, too large does not improve performance) and truncate
-      	if (montecarlo::internal::adaptive_sigma > 60.0 || montecarlo::internal::adaptive_sigma < 1e-5) montecarlo::internal::adaptive_sigma = 60.0;
+         if (montecarlo::internal::adaptive_sigma > 60.0 || montecarlo::internal::adaptive_sigma < 1e-5) montecarlo::internal::adaptive_sigma = 60.0;
       }
 
       // Save statistics to sim namespace variable

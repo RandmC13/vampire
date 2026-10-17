@@ -20,6 +20,7 @@
 #include "hamr.hpp"
 #include "spinwaves.hpp" // jrh
 #include "ltmp.hpp"
+#include "program.hpp"
 #include "sim.hpp"
 #include "spintorque.hpp"
 #include "spintransport.hpp"
@@ -69,7 +70,7 @@ void initialize_modules(){
                      atoms::z_coord_array,
                      atoms::type_array,
                      atoms::cell_array,
-						   create::num_total_atoms_non_filler,
+                     create::num_total_atoms_non_filler,
                      atoms::num_atoms
       );
 
@@ -97,14 +98,14 @@ void initialize_modules(){
                   atoms::type_array,
                   num_local_atoms,
                   sim::Teq,
-                  sim::pump_power,
-                  sim::pump_time,
-                  sim::TTG,
-                  sim::TTCe,
-                  sim::TTCl,
+                  program::pump_power,
+                  program::pump_time,
+                  program::TTG,
+                  program::TTCe,
+                  program::TTCl,
                   mp::dt_SI,
-					   sim::Tmin,
-					   sim::Tmax);
+                  sim::Tmin,
+                  sim::Tmax);
 
    //---------------------------------------------------------------------------
    // Spin transport module
@@ -142,25 +143,25 @@ void initialize_modules(){
    //----------------------------------------
    // Initialise hamr module
    //----------------------------------------
-	hamr::initialize(sim::Hmin,
-				      sim::Hmax,
-				      sim::Tmin,
-				      sim::Tmax,
-				      cs::system_dimensions[0],
-				      cs::system_dimensions[1],
-				      cs::system_dimensions[2],
-				      atoms::x_coord_array,
-				      atoms::y_coord_array,
-				      atoms::z_coord_array,
-				      atoms::type_array,
-				      atoms::num_atoms
-					   );
+   hamr::initialize(sim::Hmin,
+                  sim::Hmax,
+                  sim::Tmin,
+                  sim::Tmax,
+                  cs::system_dimensions[0],
+                  cs::system_dimensions[1],
+                  cs::system_dimensions[2],
+                  atoms::x_coord_array,
+                  atoms::y_coord_array,
+                  atoms::z_coord_array,
+                  atoms::type_array,
+                  atoms::num_atoms
+                  );
 
    //----------------------------------------
    // Initialise spinwaves module
    // jrh
    //----------------------------------------
-	spinwaves::initialize(cs::system_dimensions[0],
+   spinwaves::initialize(cs::system_dimensions[0],
                          cs::system_dimensions[1],
                          cs::system_dimensions[2],
                          cs::total_num_unit_cells[0],
@@ -173,7 +174,7 @@ void initialize_modules(){
                          atoms::x_coord_array,
                          atoms::y_coord_array,
                          atoms::z_coord_array
-					   );
+                  );
 
    return;
 
