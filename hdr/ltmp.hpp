@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This header file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 //   Functions to calculate dynamic lateral and vertical temperature
 //   profiles with the two temperature model. Laser has gaussian absorption
@@ -45,8 +45,8 @@
 
 // Program headers
 
-#ifndef LOCALTEMPERATURE_H_
-#define LOCALTEMPERATURE_H_
+#ifndef LTMP_H_
+#define LTMP_H_
 
 //--------------------------------------------------------------------------------
 // Namespace for variables and functions to calculate localised temperature pulse
@@ -135,4 +135,4 @@ namespace ltmp{
 
 } // end of ltmp namespace
 
-#endif // LOCALTEMPERATURE_H_
+#endif // LTMP_H_

@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -19,6 +19,7 @@ namespace stats{
    bool calculate_system_energy                 = false;
    bool calculate_grain_energy                  = false;
    bool calculate_material_energy               = false;
+   bool calculate_dmi_energy                    = false;
 
    bool calculate_system_sld_energy             = false;
    bool calculate_grain_sld_energy              = false;

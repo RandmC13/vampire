@@ -36,17 +36,7 @@ void device_pci_id(int device, char *id, int size);
 // Function to stop with an error message for unsupported simulations
 //------------------------------------------------------------------------------
 void unsupported(const std::string &feature) {
-  if (vmpi::my_rank == 0) {
-    terminaltextcolor(RED);
-    std::cerr
-        << "Error: " << feature
-        << " is not supported by the multi-GPU version (vampire-cuda-multigpu)"
-        << std::endl;
-    terminaltextcolor(WHITE);
-  }
-  zlog << zTs() << "Error: " << feature
-       << " is not supported by the multi-GPU version" << std::endl;
-  err::vexit();
+  err::fatal("Error: " + feature + " is not supported by the multi-GPU version (vampire-cuda-multigpu)");
 }
 
 //------------------------------------------------------------------------------
@@ -68,17 +58,17 @@ void initialize() {
   // refuses programs that are not confirmed to work on several GPUs
   if (vmpi::num_processors > 1) {
     switch (program::program) {
-    case 1:  // time series
-    case 2:  // hysteresis loop
-    case 4:  // curie temperature
-    case 5:  // field cool
-    case 6:  // temperature pulse
-    case 7:  // hamr simulation
-    case 12: // partial hysteresis loop
-    case 15: // fmr
+    case program::program_t::time_series:
+    case program::program_t::hysteresis_loop:
+    case program::program_t::curie_temperature:
+    case program::program_t::field_cool:
+    case program::program_t::laser_pulse:
+    case program::program_t::hamr_simulation:
+    case program::program_t::partial_hysteresis_loop:
+    case program::program_t::fmr:
       break;
     default:
-      unsupported("Program " + std::to_string(program::program) +
+      unsupported("Program " + std::to_string(static_cast<int>(program::program)) +
                   " (sim:program) on more than one GPU");
     }
   }
@@ -93,10 +83,7 @@ void initialize() {
 
   const int num_devices = internal::device_count();
   if (num_devices < 1) {
-    std::cerr << "Error: no CUDA device found on rank " << vmpi::my_rank
-              << std::endl;
-    zlog << zTs() << "Error: no CUDA device found" << std::endl;
-    err::vexit();
+    err::fatal("Error: no CUDA device found on rank " + std::to_string(vmpi::my_rank));
   }
 
   // the CUDA module sets the device chosen here (unless set in the input file)

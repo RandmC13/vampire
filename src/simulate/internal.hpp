@@ -1,5 +1,5 @@
-#ifndef SIM_INTERNAL_H_
-#define SIM_INTERNAL_H_
+#ifndef SIMULATE_INTERNAL_H_
+#define SIMULATE_INTERNAL_H_
 //------------------------------------------------------------------------------
 //
 //   This file is part of the VAMPIRE open source package under the
@@ -39,9 +39,6 @@ namespace sim{
          vtype::set_int_t sot_pm;  // spin orbit polarisation material
          vtype::vec_t sot_pv;  // spin orbit polarisation vector x,y,z
          vtype::set_double_t vcmak;   // voltage controlled anisotropy coefficient
-         vtype::set_double_t lsf_second_order_coefficient; // Second order LSF coefficient
-         vtype::set_double_t lsf_fourth_order_coefficient; // Fourth order LSF coefficient
-         vtype::set_double_t lsf_sixth_order_coefficient; // Sixth order LSF coefficient
       };
 
       //-----------------------------------------------------------------------------
@@ -70,22 +67,13 @@ namespace sim{
 
       extern std::vector<double> vcmak;   // voltage controlled anisotropy coefficient
 
-      extern std::vector<double> lsf_second_order_coefficient;
-      extern std::vector<double> lsf_fourth_order_coefficient; // LSF coefficients
-      extern std::vector<double> lsf_sixth_order_coefficient;
-
-      // shared Functions
-      void llg_quantum_step();
 
       //-------------------------------------------------------------------------
       // Internal function declarations
       //-------------------------------------------------------------------------
       extern void initialize_modules();
-      extern void increment_time();
-      extern void lsf_step();
-      extern void lsf_rk4_step();
 
    } // end of internal namespace
 } // end of sim namespace
 
-#endif //SIM_INTERNAL_H_
+#endif //SIMULATE_INTERNAL_H_

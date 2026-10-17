@@ -4,12 +4,13 @@
 //   Free BSD licence (see licence file for details).
 //
 //   (c) Sarah Jenkins, Andrea Meo and Richard F L Evans 2017.
-//       All rights reserved.
+//   All rights reserved.
 //
 //------------------------------------------------------------------------------
 //
 
 // C++ standard library headers
+#include "constants.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -124,7 +125,7 @@ namespace dipole{
                fftw_plan_with_nthreads(Nthreads);
             #endif
 
-            const double prefactor = 0.9274009994; // mu_0 * muB / (4*pi*Angstrom^3) = 1.0e-7 * 9.274009994e-24 / 1.0e-30 = 0.9274009994
+            const double prefactor = constants::dipole_prefactor; // mu_0*muB/(4*pi*Ang^3) — see constants::dipole_prefactor
 
             double Lx = cs::system_dimensions[0];
             double Ly = cs::system_dimensions[1];
@@ -303,7 +304,7 @@ namespace dipole{
 #ifdef FFT
             if(!FFT_initialised) {
                 std::cout << "FFT dipole has been called but not initialised." << std::endl;
-                exit(-1);
+                err::vexit();
             }
 
             // instantiate timer

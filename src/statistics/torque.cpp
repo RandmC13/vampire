@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2022. All rights reserved.
+//   (c) R F L Evans 2022. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
@@ -18,6 +18,7 @@
 #include "constants.hpp"
 #include "errors.hpp"
 #include "sim.hpp"
+#include "sld.hpp"
 #include "stats.hpp"
 #include "vmpi.hpp"
 #include "vio.hpp"
@@ -44,11 +45,9 @@ void torque_statistic_t::set_mask(const int in_mask_size, std::vector<int> in_ma
    // Check that mask values never exceed mask_size
    for(unsigned int atom=0; atom<in_mask.size(); ++atom){
       if(in_mask[atom] > in_mask_size-1){
-         terminaltextcolor(RED);
-         std::cerr << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask " << in_mask_size;
+         err::fatal(message.str());
       }
    }
 
@@ -119,12 +118,8 @@ void torque_statistic_t::calculate_torque(const std::vector<double>& sx, // spin
    // initialise torques to zero [.end() seems to be optimised away by the compiler...]
    std::fill(torque.begin(),torque.end(),0.0);
 
-   // check for Monte Carlo solvers and recalculate fields
-   if(sim::integrator == sim::monte_carlo || sim::integrator == sim::cmc || sim::integrator == sim::hybrid_cmc){
-      const int64_t num_atoms = sx.size();
-      sim::calculate_spin_fields(0, num_atoms);
-      sim::calculate_external_fields(0, num_atoms);
-   }
+   // ensure fields are calculated for current spins (bxs, bxe refer to the global field arrays)
+   stats::update_fields();
 
    // calculate contributions of spins to each magetization category
    for(int atom=0; atom < num_atoms; ++atom){
@@ -132,17 +127,23 @@ void torque_statistic_t::calculate_torque(const std::vector<double>& sx, // spin
       const int mask_id = mask[atom]; // get mask id
 
       // get atomic moment
-		const double mu = mm[atom];
+      const double mu = mm[atom];
 
-		// Store local spin in Sand local field in H
-		const double S[3] = {sx[atom]*mu,         sy[atom]*mu,         sz[atom]*mu        };
-		const double B[3] = {bxs[atom]+bxe[atom], bys[atom]+bye[atom], bzs[atom]+bze[atom]};
+      // Store local spin in Sand local field in H
+      const double S[3] = {sx[atom]*mu,         sy[atom]*mu,         sz[atom]*mu        };
+      // (SLD spin fields already include the applied field)
+      double B[3] = {bxs[atom], bys[atom], bzs[atom]};
+      if(!sld::enabled){
+         B[0] += bxe[atom];
+         B[1] += bye[atom];
+         B[2] += bze[atom];
+      }
 
-		torque[3*mask_id + 0] += S[1]*B[2]-S[2]*B[1];
-		torque[3*mask_id + 1] += S[2]*B[0]-S[0]*B[2];
-		torque[3*mask_id + 2] += S[0]*B[1]-S[1]*B[0];
+      torque[3*mask_id + 0] += S[1]*B[2]-S[2]*B[1];
+      torque[3*mask_id + 1] += S[2]*B[0]-S[0]*B[2];
+      torque[3*mask_id + 2] += S[0]*B[1]-S[1]*B[0];
 
-	}
+   }
 
    // Reduce on all CPUS
    #ifdef MPICF

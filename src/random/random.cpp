@@ -1,26 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 #include "random.hpp"
 #include <cmath>
@@ -34,36 +21,36 @@ namespace mtrandom
 //==========================================================
 {
 
-	int voronoi_seed=1951218893;
-	int integration_seed=2137082040;
+   int voronoi_seed=1951218893;
+   int integration_seed=2137082040;
 
-	double x1,x2,w;
-	double number1;
-	double number2;
-	bool logic=false;
-	MTRand grnd; // single sequence of random numbers
+   double x1,x2,w;
+   double number1;
+   double number2;
+   bool logic=false;
+   MTRand grnd; // single sequence of random numbers
 
 
 double gaussian_old(){
-	using namespace mtrandom;
+   using namespace mtrandom;
 
-	if(logic==false){
-		for(;;){
-			x1 = 2.0*grnd() - 1.0;
-			x2 = 2.0*grnd() - 1.0;
-			w = x1*x1 + x2*x2;
-			if(w<1.0) break;
-		}
-		w=sqrt((-2.0*log(w))/w);
-		number1 = w*x1;
-		number2 = w*x2;
-		logic=true;
-		return number1;
-	}
-	else {
-		logic=false;
-		return number2;
-		}
+   if(logic==false){
+      for(;;){
+         x1 = 2.0*grnd() - 1.0;
+         x2 = 2.0*grnd() - 1.0;
+         w = x1*x1 + x2*x2;
+         if(w<1.0) break;
+      }
+      w=sqrt((-2.0*log(w))/w);
+      number1 = w*x1;
+      number2 = w*x2;
+      logic=true;
+      return number1;
+   }
+   else {
+      logic=false;
+      return number2;
+      }
 }
 
   // Here is a revised version which is ~ 10x faster! gaussian() above takes ~ 30%
@@ -222,9 +209,9 @@ double gaussian(){
 
   while (1) {
     U = mtrandom::grnd.i32();
-    i = U & 0x0000007F;		/* 7 bit to choose the step */
-    sign = U & 0x00000080;	/* 1 bit for the sign */
-    j = U>>8;			/* 24 bit for the x-value */
+    i = U & 0x0000007F;    /* 7 bit to choose the step */
+    sign = U & 0x00000080; /* 1 bit for the sign */
+    j = U>>8;        /* 24 bit for the x-value */
 
     x = j*wtab[i];
     if (j < ktab[i])  break;
@@ -250,9 +237,9 @@ double gaussianc(MTRand& grnd){
 
   while (1) {
     U = grnd.i32();
-    i = U & 0x0000007F;		/* 7 bit to choose the step */
-    sign = U & 0x00000080;	/* 1 bit for the sign */
-    j = U>>8;			/* 24 bit for the x-value */
+    i = U & 0x0000007F;    /* 7 bit to choose the step */
+    sign = U & 0x00000080; /* 1 bit for the sign */
+    j = U>>8;        /* 24 bit for the x-value */
 
     x = j*wtab[i];
     if (j < ktab[i])  break;

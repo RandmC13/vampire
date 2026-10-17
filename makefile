@@ -22,8 +22,11 @@ CUDALIBS=-L/usr/local/cuda/lib64/ -lcuda -lcudart
 # Compilers
 #----------------------------------------------------------------------
 
+# C++ standard for every build (serial, MPI, debug and CUDA)
+CXXSTD=-std=c++17
+
 # Specify compiler for MPI compilation with openmpi
-export OMPI_CXX=g++ -std=c++11
+export OMPI_CXX=g++
 #export OMPI_CXX=icc
 #export OMPI_CXX=pathCC
 
@@ -31,56 +34,56 @@ export OMPI_CXX=g++ -std=c++11
 #export MPICH_CXX=g++
 #export MPICH_CXX=bgxlc++
 
-ICC=icc -std=c++11 -DCOMP='"Intel C++ Compiler"'
-GCC=g++ -std=c++11 -DCOMP='"GNU C++ Compiler"'
-LLVM=g++ -std=c++11 -DCOMP='"LLVM C++ Compiler"'
+ICC=icc $(CXXSTD) -DCOMP='"Intel C++ Compiler"'
+GCC=g++ $(CXXSTD) -DCOMP='"GNU C++ Compiler"'
+LLVM=clang++ $(CXXSTD) -DCOMP='"LLVM C++ Compiler"'
 PCC=pathCC -DCOMP='"Pathscale C++ Compiler"'
 IBM=bgxlc++ -DCOMP='"IBM XLC++ Compiler"'
-MPICC=mpicxx -DMPICF
-MPIICC=mpiicpc -DMPICF
+MPICC=mpicxx $(CXXSTD) -DMPICF
+MPIICC=mpiicpc $(CXXSTD) -DMPICF
 
 export LANG=C
 export LC_ALL=C
 
 # Debug Flags
-ICC_DBCFLAGS= -O0 -C -I./hdr -I./src/qvoronoi
-ICC_DBLFLAGS= -C -I./hdr -I./src/qvoronoi
+ICC_DBCFLAGS= -O0 -C -I./hdr
+ICC_DBLFLAGS= -C -I./hdr
 
-GCC_DBCFLAGS= -g -pg -fprofile-arcs -ftest-coverage -Wall -Wextra -O0 -fbounds-check -pedantic -std=c++0x -Wno-long-long -I./hdr -I./src/qvoronoi $(FFTW) -Wsign-compare
-GCC_DBLFLAGS= -g -pg -fprofile-arcs -ftest-coverage -lstdc++ -std=c++0x -fbounds-check -I./hdr -I./src/qvoronoi $(FFTW) -Wsign-compare
+GCC_DBCFLAGS= -g -pg -fprofile-arcs -ftest-coverage -Wall -Wextra -O0 -fbounds-check -pedantic -Wno-long-long -I./hdr $(FFTW) -Wsign-compare
+GCC_DBLFLAGS= -g -pg -fprofile-arcs -ftest-coverage -lstdc++ -fbounds-check -I./hdr $(FFTW) -Wsign-compare
 
-PCC_DBCFLAGS= -O0 -I./hdr -I./src/qvoronoi
-PCC_DBLFLAGS= -O0 -I./hdr -I./src/qvoronoi
+PCC_DBCFLAGS= -O0 -I./hdr
+PCC_DBLFLAGS= -O0 -I./hdr
 
-IBM_DBCFLAGS= -O0 -Wall -pedantic -Wextra -I./hdr -I./src/qvoronoi
-IBM_DBLFLAGS= -O0 -Wall -pedantic -Wextra -I./hdr -I./src/qvoronoi
+IBM_DBCFLAGS= -O0 -Wall -pedantic -Wextra -I./hdr
+IBM_DBLFLAGS= -O0 -Wall -pedantic -Wextra -I./hdr
 
-LLVM_DBCFLAGS= -Wall -Wextra -O0 -pedantic -std=c++11 -Wno-long-long -I./hdr -I./src/qvoronoi $(FFTW) -Wsign-compare
-LLVM_DBLFLAGS= -Wall -Wextra -O0 -lstdc++ -I./hdr -I./src/qvoronoi $(FFTW) -Wsign-compare
+LLVM_DBCFLAGS= -Wall -Wextra -O0 -pedantic -Wno-long-long -I./hdr $(FFTW) -Wsign-compare
+LLVM_DBLFLAGS= -Wall -Wextra -O0 -lstdc++ -I./hdr $(FFTW) -Wsign-compare
 
 # Performance Flags
-ICC_CFLAGS= -O3 -axCORE-AVX2 -fno-alias -align -falign-functions -I./hdr -I./src/qvoronoi
-ICC_LDFLAGS= -I./hdr -I./src/qvoronoi -axCORE-AVX2
+ICC_CFLAGS= -O3 -axCORE-AVX2 -fno-alias -align -falign-functions -I./hdr
+ICC_LDFLAGS= -I./hdr -axCORE-AVX2
 #ICC_CFLAGS= -O3 -xT -ipo -static -fno-alias -align -falign-functions -vec-report -I./hdr
 #ICC_LDFLAGS= -lstdc++ -ipo -I./hdr -xT -vec-report
 
-LLVM_CFLAGS= -Wall -pedantic -O3 -mtune=native -funroll-loops -I./hdr -I./src/qvoronoi $(FFTW)
-LLVM_LDFLAGS= -I./hdr -I./src/qvoronoi $(FFTW)
+LLVM_CFLAGS= -Wall -pedantic -O3 -mtune=native -funroll-loops -I./hdr $(FFTW)
+LLVM_LDFLAGS= -I./hdr $(FFTW)
 
-GCC_CFLAGS=-O3 -mtune=native -funroll-all-loops -fexpensive-optimizations -funroll-loops -I./hdr -I./src/qvoronoi $(FFTW) -std=c++11 -Wsign-compare
-GCC_LDFLAGS= -lstdc++ -I./hdr -I./src/qvoronoi $(FFTW) -Wsign-compare
+GCC_CFLAGS=-O3 -mtune=native -funroll-all-loops -fexpensive-optimizations -funroll-loops -I./hdr $(FFTW) -Wsign-compare
+GCC_LDFLAGS= -lstdc++ -I./hdr $(FFTW) -Wsign-compare
 
-PCC_CFLAGS=-O2 -march=barcelona -ipa -I./hdr -I./src/qvoronoi
-PCC_LDFLAGS= -I./hdr -I./src/qvoronoi -O2 -march=barcelona -ipa
+PCC_CFLAGS=-O2 -march=barcelona -ipa -I./hdr
+PCC_LDFLAGS= -I./hdr -O2 -march=barcelona -ipa
 
-IBM_CFLAGS=-O5 -qarch=450 -qtune=450 -I./hdr -I./src/qvoronoi
-IBM_LDFLAGS= -lstdc++ -I./hdr -I./src/qvoronoi -O5 -qarch=450 -qtune=450
+IBM_CFLAGS=-O5 -qarch=450 -qtune=450 -I./hdr
+IBM_LDFLAGS= -lstdc++ -I./hdr -O5 -qarch=450 -qtune=450
 
-CRAY_CFLAGS= -O3 -hfp3 -I./hdr -I./src/qvoronoi
-CRAY_LDFLAGS= -I./hdr -I./src/qvoronoi
+CRAY_CFLAGS= -O3 -hfp3 -I./hdr
+CRAY_LDFLAGS= -I./hdr
 
-CCC_CFLAGS=-I./hdr -I./src/qvoronoi -O0
-CCC_LDFLAGS=-I./hdr -I./src/qvoronoi -O0
+CCC_CFLAGS=-I./hdr -O0
+CCC_LDFLAGS=-I./hdr -O0
 
 
 # Save git commit in simple function
@@ -89,68 +92,46 @@ GHASH:=$(shell git rev-parse HEAD)
 
 OPTIONS=
 
-# Objects
-OBJECTS= \
-obj/data/atoms.o \
-obj/data/category.o \
-obj/data/grains.o \
-obj/random/mtrand.o \
-obj/random/random.o \
-obj/simulate/energy.o \
-obj/simulate/fields.o \
-obj/simulate/LLB.o \
-obj/simulate/LLGHeun.o \
-obj/simulate/LLGMidpoint.o \
-obj/simulate/sim.o \
-obj/simulate/standard_programs.o \
-obj/spintorque/data.o \
-obj/spintorque/field.o \
-obj/spintorque/initialise.o \
-obj/spintorque/interface.o \
-obj/spintorque/magnetization.o \
-obj/spintorque/matrix.o \
-obj/spintorque/output.o \
-obj/spintorque/spinaccumulation.o \
-obj/utility/checkpoint.o \
-obj/utility/errors.o \
-obj/utility/statistics.o \
-obj/utility/units.o \
-obj/utility/vmath.o\
-
+# Objects (each module makefile appends its own)
+OBJECTS=
 
 # Include supplementary makefiles
 include src/anisotropy/makefile
+include src/atoms/makefile
 include src/cells/makefile
-include src/create/makefile
 include src/config/makefile
 include src/constants/makefile
+include src/create/makefile
 include src/dipole/makefile
 include src/environment/makefile
 include src/exchange/makefile
 include src/gpu/makefile
+include src/grains/makefile
 include src/hamr/makefile
 include src/hierarchical/makefile
+include src/integrate/makefile
 include src/ltmp/makefile
 include src/main/makefile
+include src/material/makefile
 include src/montecarlo/makefile
 include src/micromagnetic/makefile
 include src/mpi/makefile
 include src/neighbours/makefile
+include src/random/makefile
 include src/program/makefile
-include src/qvoronoi/makefile
 include src/simulate/makefile
 include src/spininitialize/makefile
 include src/spinlattice/makefile
-include src/spintextures/makefile
+include src/spintorque/makefile
 include src/spintransport/makefile
 include src/spinwaves/makefile
 include src/statistics/makefile
 include src/unitcell/makefile
+include src/utility/makefile
 include src/vio/makefile
 
 # Cuda must be last for some odd reason
 include src/cuda/makefile
-include src/opencl/makefile
 include src/mgpu/makefile
 
 ICC_OBJECTS=$(OBJECTS:.o=_i.o)
@@ -175,7 +156,6 @@ MPI_IBMDB_OBJECTS=$(OBJECTS:.o=_ibmdb_par.o)
 MPI_CRAYDB_OBJECTS=$(OBJECTS:.o=_craydb_par.o)
 MPI_ARCHER_OBJECTS=$(OBJECTS:.o=_archer_par.o)
 
-CLEXECUTABLE=vampire-opencl
 CUDAEXECUTABLE=vampire-cuda
 EXECUTABLE=vampire-serial
 PEXECUTABLE=vampire-parallel
@@ -335,17 +315,20 @@ tidy:
 	@rm -f src/*/*~
 
 tests:
-	$(MAKE) -C test/integration/
-	$(MAKE) -C test/unit/
+	$(MAKE) -C developers/test/integration/
+	$(MAKE) -C developers/test/unit/
+
+# phony as vdc/ is also a directory name
+.PHONY: vdc vdc-debug vdc-purge
 
 vdc:
-	$(MAKE) -C util/vdc/
+	$(MAKE) -C vdc/
 
 vdc-debug:
-	$(MAKE) -C util/vdc/ gcc-debug
+	$(MAKE) -C vdc/ gcc-debug
 
 vdc-purge:
-	$(MAKE) -C util/vdc/ purge
+	$(MAKE) -C vdc/ purge
 
 install:
 	echo "Preparing installation package"
@@ -353,7 +336,7 @@ install:
 	mkdir vampire.pkg
 	mkdir vampire.pkg/bin
 	cp vampire-* vampire.pkg/bin/
-	cp util/vdc/vdc vampire.pkg/bin/
+	cp vdc/vdc vampire.pkg/bin/
 	mkdir vampire.pkg/examples
 	cp input vampire.pkg/examples/
 	cp Co.mat vampire.pkg/examples/
@@ -363,3 +346,10 @@ install:
 uninstall:
 	rm -rf /opt/vampire
 	rm -f /etc/paths.d/vampire_path
+
+manual:
+	cd manual && xelatex vampire-manual.tex && xelatex vampire-manual.tex
+
+manual-clean:
+	cd manual && rm -f vampire-manual.aux vampire-manual.log vampire-manual.out \
+	    vampire-manual.toc vampire-manual.lof vampire-manual.lot vampire-manual.pdf

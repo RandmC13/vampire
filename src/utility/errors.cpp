@@ -1,42 +1,25 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 ///
 /// @file
 /// @brief Contains Vampire error functions and variables
-
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2010. All Rights Reserved.
 ///
 /// @section info File Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
 /// @version 1.0
 /// @date    10/03/2011
 /// @internal
-///	Created:		10/03/2011
-///	Revision:	  ---
+///   Created:    10/03/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 
@@ -128,10 +111,10 @@ namespace err
 
       // Abort MPI processes for parallel execution
       #ifdef MPICF
-	  terminaltextcolor(RED);
+     terminaltextcolor(RED);
       std::cerr << "Fatal error on rank " << vmpi::my_rank << ": " << message << std::endl;
       std::cerr << "Aborting program." << std::endl;
-	  terminaltextcolor(WHITE);
+     terminaltextcolor(WHITE);
       zlog << zTs() << "Fatal error on rank " << vmpi::my_rank << ": " << message << std::endl;
       zlog << zTs() << "Aborting program." << std::endl;
 
@@ -139,21 +122,51 @@ namespace err
       // MPI program dies ungracefully here
       #else
          // Print Error message to screen and log
-	     terminaltextcolor(RED);
+        terminaltextcolor(RED);
          std::cerr << "Fatal error: " << message << std::endl;
-		 terminaltextcolor(WHITE);
+       terminaltextcolor(WHITE);
          zlog << zTs() << "Fatal error: " << message << std::endl;
 
       #endif
 
       // Print error message to screen and log
       zlog << zTs() << "Aborting program." << std::endl;
-	  terminaltextcolor(RED);
+     terminaltextcolor(RED);
       std::cout << "Aborting program. See log file for details." << std::endl;
-	  terminaltextcolor(WHITE);
+     terminaltextcolor(WHITE);
 
       // Now exit program disgracefully
       exit(EXIT_FAILURE);
+   }
+
+   //-----------------------------------------------------------------------------------------
+   // Fatal error: print message in red to screen and to the log, then exit via vexit.
+   // The message is printed as given (callers include "Error - ..." themselves).
+   //-----------------------------------------------------------------------------------------
+   void fatal(std::string const message){
+
+      terminaltextcolor(RED);
+      std::cerr << message << std::endl;
+      terminaltextcolor(WHITE);
+      zlog << zTs() << message << std::endl;
+
+      err::vexit();
+
+   }
+
+   //-----------------------------------------------------------------------------------------
+   // Warning: print message in yellow to screen (rank 0 only) and to the log (every rank),
+   // then continue. The message is printed as given (callers include "Warning - ..." themselves).
+   //-----------------------------------------------------------------------------------------
+   void warning(std::string const message){
+
+      if(vmpi::my_rank == 0){
+         terminaltextcolor(YELLOW);
+         std::cerr << message << std::endl;
+         terminaltextcolor(WHITE);
+      }
+      zlog << zTs() << message << std::endl;
+
    }
 
 } // end of namespace err

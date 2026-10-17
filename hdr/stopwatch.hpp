@@ -1,5 +1,13 @@
-#ifndef __STOPWATCH_H__
-#define __STOPWATCH_H__
+#ifndef STOPWATCH_H_
+#define STOPWATCH_H_
+//------------------------------------------------------------------------------
+//
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
+//
+//   (c) M A Ellis 2016. All rights reserved.
+//
+//------------------------------------------------------------------------------
 
 #include <chrono>
 

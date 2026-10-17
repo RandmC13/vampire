@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) A J Naden and R F L Evans 2019. All rights reserved.
+//   (c) A J Naden and R F L Evans 2019. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Implementing Welford's algorithm for calculating standard deviation
 // Calculates the standard deviation in each component of the magnetisation
 // vector  - implemented by Andrew Naden 05/2019
@@ -37,11 +37,7 @@ void standard_deviation_statistic_t::initialize(stats::magnetization_statistic_t
 
    // Check that magnetization statistic is properly initialized
    if(!mag_stat.is_initialized()){
-      terminaltextcolor(RED);
-      std::cerr << "Programmer Error - Uninitialized magnetization statistic passed to standard_deviation statistic - please initialize first." << std::endl;
-      terminaltextcolor(WHITE);
-      zlog << zTs() << "Programmer Error - Uninitialized magnetization statistic passed to standard_deviation statistic - please initialize first." << std::endl;
-      err::vexit();
+      err::fatal("Programmer Error - Uninitialized magnetization statistic passed to standard_deviation statistic - please initialize first.");
    }
 
    // Determine number of magnetization statistics*4
@@ -116,7 +112,7 @@ std::string standard_deviation_statistic_t::output_standard_deviation(bool heade
       res.precision(vout::precision);
       if(vout::fixed) res.setf( std::ios::fixed, std::ios::floatfield );
    }
-   vout::fixed_width_output result(res,vout::fw_size); 
+   vout::fixed_width_output result(res,vout::fw_size);
    if(!header){
        // determine inverse mean counter and its square
        const double imean_counter = 1.0/mean_counter;
@@ -136,7 +132,7 @@ std::string standard_deviation_statistic_t::output_standard_deviation(bool heade
        }else{
           for(int id=0; id< num_elements -1; ++id){ // ignore last element as always contains non-magnetic atoms
              result <<name + std::to_string(id) + "_std_x"
-                    <<name + std::to_string(id) + "_std_y" 
+                    <<name + std::to_string(id) + "_std_y"
                     <<name + std::to_string(id) + "_std_z"
                     <<name + std::to_string(id) + "_std_l";
              }

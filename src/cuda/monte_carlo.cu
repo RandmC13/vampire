@@ -1,5 +1,14 @@
+//------------------------------------------------------------------------------
+//
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
+//
+//   (c) M A Ellis & D Meilak 2021. All rights reserved.
+//
+//------------------------------------------------------------------------------
 
 #include "atoms.hpp"
+#include "errors.hpp"
 #include "exchange.hpp"
 #include "vio.hpp"
 #include "cuda_utils.hpp"
@@ -226,7 +235,7 @@ namespace vcuda
                 if(error != cudaSuccess)
                 {
                     printf("CUDA error at %s:%i: %s\n", __FILE__, __LINE__, cudaGetErrorString(error));
-                    exit(-1);
+                    ::err::vexit();
                 }
 
                 initialised = true;

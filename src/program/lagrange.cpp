@@ -1,26 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 
 // Standard Libraries
@@ -30,6 +17,7 @@
 #include "atoms.hpp"
 #include "errors.hpp"
 #include "material.hpp"
+#include "montecarlo.hpp"
 #include "program.hpp"
 #include "random.hpp"
 #include "sim.hpp"
@@ -38,20 +26,20 @@
 #include "vmath.hpp"
 #include "vmpi.hpp"
 
-namespace sim{
+namespace program{
 
 /// Function to update lagrange lambda
 void update_lagrange_lambda(){
 
    // Save initial value of lambda
-   const double lamda_old_x = sim::lagrange_lambda_x;
-   const double lamda_old_y = sim::lagrange_lambda_y;
-   const double lamda_old_z = sim::lagrange_lambda_z;
+   const double lamda_old_x = program::lagrange_lambda_x;
+   const double lamda_old_y = program::lagrange_lambda_y;
+   const double lamda_old_z = program::lagrange_lambda_z;
 
    // Calculate magnetisation
    stats::update();
 
-   //std::cout << "xx " << sim::lagrange_m << std::endl;
+   //std::cout << "xx " << program::lagrange_m << std::endl;
 
    const std::vector<double> mm = stats::system_magnetization.get_magnetization();
 
@@ -59,20 +47,20 @@ void update_lagrange_lambda(){
    const double mx = mm[0];
    const double my = mm[1];
    const double mz = mm[2];
-   sim::lagrange_m = mm[3];
+   program::lagrange_m = mm[3];
 
    // Constraint vector
-   const double nu_x=cos(sim::constraint_theta*M_PI/180.0)*sin(sim::constraint_phi*M_PI/180.0);
-   const double nu_y=sin(sim::constraint_theta*M_PI/180.0)*sin(sim::constraint_phi*M_PI/180.0);
-   const double nu_z=cos(sim::constraint_phi*M_PI/180.0);
+   const double nu_x=cos(montecarlo::constraint_theta*M_PI/180.0)*sin(montecarlo::constraint_phi*M_PI/180.0);
+   const double nu_y=sin(montecarlo::constraint_theta*M_PI/180.0)*sin(montecarlo::constraint_phi*M_PI/180.0);
+   const double nu_z=cos(montecarlo::constraint_phi*M_PI/180.0);
 
-   double lx = -sim::lagrange_N*(mx-nu_x);
-   double ly = -sim::lagrange_N*(my-nu_y);
-   double lz = -sim::lagrange_N*(mz-nu_z);
+   double lx = -program::lagrange_N*(mx-nu_x);
+   double ly = -program::lagrange_N*(my-nu_y);
+   double lz = -program::lagrange_N*(mz-nu_z);
 
-   sim::lagrange_lambda_x = lamda_old_x + lx*mp::dt;
-   sim::lagrange_lambda_y = lamda_old_y + ly*mp::dt;
-   sim::lagrange_lambda_z = lamda_old_z + lz*mp::dt;
+   program::lagrange_lambda_x = lamda_old_x + lx*mp::dt;
+   program::lagrange_lambda_y = lamda_old_y + ly*mp::dt;
+   program::lagrange_lambda_z = lamda_old_z + lz*mp::dt;
 
 }
 
@@ -95,31 +83,31 @@ void lagrange_multiplier(){
    if(err::check==true){std::cout << "program::lagrange_multiplier has been called" << std::endl;}
 
    // Enable LMM fields
-   sim::lagrange_multiplier=true;
+   program::lagrange_multiplier_enabled=true;
 
    // Set prefactor in LaGrange multiplier (Tesla)
-   sim::lagrange_N=10.0;
+   program::lagrange_N=10.0;
 
    // Initialise LaGrange m
-   sim::update_lagrange_lambda();
+   program::update_lagrange_lambda();
 
    // Set temperature to zero
    sim::temperature=0.0;
-   sim::hamiltonian_simulation_flags[3] = 0; // Thermal
+   sim::thermal_field_enabled = false;
 
    // set minimum rotational angle
-   sim::constraint_theta=sim::constraint_theta_min;
+   montecarlo::constraint_theta=montecarlo::constraint_theta_min;
 
    // perform rotational angle sweep
-   while(sim::constraint_theta<=sim::constraint_theta_max){
+   while(montecarlo::constraint_theta<=montecarlo::constraint_theta_max){
 
       // set minimum azimuthal angle
-      sim::constraint_phi=sim::constraint_phi_min;
+      montecarlo::constraint_phi=montecarlo::constraint_phi_min;
 
       // perform azimuthal angle sweep
-      while(sim::constraint_phi<=sim::constraint_phi_max){
+      while(montecarlo::constraint_phi<=montecarlo::constraint_phi_max){
 
-         zlog << zTs() << "Constraint of theta =  " << sim::constraint_theta << ", phi = " << sim::constraint_phi << std::endl;
+         zlog << zTs() << "Constraint of theta =  " << montecarlo::constraint_theta << ", phi = " << montecarlo::constraint_phi << std::endl;
 
          // Reset start time
          int start_time=sim::time;
@@ -148,15 +136,15 @@ void lagrange_multiplier(){
          vout::data();
 
          // Increment azimuthal angle
-         sim::constraint_phi+=sim::constraint_phi_delta;
-         sim::constraint_phi_changed=true;
+         montecarlo::constraint_phi+=montecarlo::constraint_phi_delta;
+         montecarlo::constraint_phi_changed=true;
 
       } // End of azimuthal angle sweep
       if(vout::gnuplot_array_format) zmag << std::endl;
 
       // Increment rotational angle
-      sim::constraint_theta+=sim::constraint_theta_delta;
-      sim::constraint_theta_changed=true;
+      montecarlo::constraint_theta+=montecarlo::constraint_theta_delta;
+      montecarlo::constraint_theta_changed=true;
 
    } // End of rotational angle sweep
 

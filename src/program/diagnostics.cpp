@@ -1,26 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 ///
 /// @file
@@ -28,21 +15,19 @@
 ///
 /// @details Simulates a system for a number of timesteps
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2010. All Rights Reserved.
 ///
 /// @section info File Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
 /// @version 1.1
 /// @date    09/03/2011
 /// @internal
-///	Created:		05/02/2011
-///	Revision:	09/03/2011
+///   Created:    05/02/2011
+///   Revision:   09/03/2011
 ///=====================================================================================
 ///
 
 // Standard Libraries
+#include "constants.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -146,8 +131,8 @@ namespace program{
       double maxPH = 0.0;
       double maxP  = 0.0;
       for(int b=0;b<181;b++){
-         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
-         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
+         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB); // get anisotropy constant for material 0
+         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB); // get anisotropy constant for material 0
          double PK = sin(double (b)*M_PI/180.0)*exp(energyK*sin(double (b)*M_PI/180.0)*sin(double (b)*M_PI/180.0));
          double PH = sin(double (b)*M_PI/180.0)*exp(energyH*cos(double (b)*M_PI/180.0));
          if((bin[b])>maxP) maxP=bin[b];
@@ -158,12 +143,12 @@ namespace program{
       std::ofstream ofile("boltzmann-distribution.txt");
 
       // Output data
-      ofile << "# Anisotropy:          " << anisotropy::get_anisotropy_constant(0) << "\t" << anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23) << std::endl;
-      ofile << "# Field:               " << sim::H_applied << "\t" << sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23) << std::endl;
-      ofile << "# Moment, Temperature: " << mp::material[0].mu_s_SI/9.274e-24 << "\t" << sim::temperature << std::endl;
+      ofile << "# Anisotropy:          " << anisotropy::get_anisotropy_constant(0) << "\t" << anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB) << std::endl;
+      ofile << "# Field:               " << sim::H_applied << "\t" << sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB) << std::endl;
+      ofile << "# Moment, Temperature: " << mp::material[0].mu_s_SI/constants::muB << "\t" << sim::temperature << std::endl;
       for(int b=0;b<181;b++){
-         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
-         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
+         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB); // get anisotropy constant for material 0
+         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB); // get anisotropy constant for material 0
          double PK = sin(double (b)*M_PI/180.0)*exp(energyK*sin(double (b)*M_PI/180.0)*sin(double (b)*M_PI/180.0));
          double PH = sin(double (b)*M_PI/180.0)*exp(energyH*cos(double (b)*M_PI/180.0));
          ofile << b << "\t" << bin[b]/maxP << "\t" << (bin[b]+bin[180-b])/(2.0*maxP) << "\t" << PK/maxPK << "\t" << PH/maxPH << std::endl;
@@ -216,8 +201,8 @@ namespace program{
       double maxPH = 0.0;
       double maxP  = 0.0;
       for(int b=0;b<181;b++){
-         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
-         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
+         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB); // get anisotropy constant for material 0
+         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB); // get anisotropy constant for material 0
          double PK = sin(double (b)*M_PI/180.0)*exp(energyK*sin(double (b)*M_PI/180.0)*sin(double (b)*M_PI/180.0));
          double PH = sin(double (b)*M_PI/180.0)*exp(energyH*cos(double (b)*M_PI/180.0));
          if((bin[b])>maxP) maxP=bin[b];
@@ -228,12 +213,12 @@ namespace program{
       std::ofstream ofile("boltzmann-distribution.txt");
 
       // Output data
-      ofile << "# Anisotropy:          " << anisotropy::get_anisotropy_constant(0) << "\t" << anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23) << std::endl;
-      ofile << "# Field:               " << sim::H_applied << "\t" << sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23) << std::endl;
-      ofile << "# Moment, Temperature: " << mp::material[0].mu_s_SI/9.274e-24 << "\t" << sim::temperature << std::endl;
+      ofile << "# Anisotropy:          " << anisotropy::get_anisotropy_constant(0) << "\t" << anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB) << std::endl;
+      ofile << "# Field:               " << sim::H_applied << "\t" << sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB) << std::endl;
+      ofile << "# Moment, Temperature: " << mp::material[0].mu_s_SI/constants::muB << "\t" << sim::temperature << std::endl;
       for(int b=0;b<181;b++){
-         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
-         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*1.3806503e-23); // get anisotropy constant for material 0
+         double energyK = anisotropy::get_anisotropy_constant(0)/(sim::temperature*constants::kB); // get anisotropy constant for material 0
+         double energyH = sim::H_applied*mp::material[0].mu_s_SI/(sim::temperature*constants::kB); // get anisotropy constant for material 0
          double PK = sin(double (b)*M_PI/180.0)*exp(energyK*sin(double (b)*M_PI/180.0)*sin(double (b)*M_PI/180.0));
          double PH = sin(double (b)*M_PI/180.0)*exp(energyH*cos(double (b)*M_PI/180.0));
          ofile << b << "\t" << bin[b]/maxP << "\t" << (bin[b]+bin[180-b])/(2.0*maxP) << "\t" << PK/maxPK << "\t" << PH/maxPH << std::endl;

@@ -1,42 +1,26 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 ///
 /// @file
 /// @brief Contains the Time Series program
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2010. All Rights Reserved.
 ///
 /// @section info File Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
 /// @version 1.0
 /// @date    30/03/2011
 /// @internal
-///	Created:		30/03/2011
-///	Revision:	--
+///   Created:    30/03/2011
+///   Revision:   --
 ///=====================================================================================
 ///
 
@@ -107,8 +91,8 @@ namespace tp{
 // }
 
 double sign(double a){
-		if(a<0.0) return -1.0;
-		else return 1.0;
+      if(a<0.0) return -1.0;
+      else return 1.0;
 }
 
 
@@ -120,22 +104,22 @@ double sign(double a){
 
 std::vector <double > calculate_field(double cx, double cy, double cz, int step){
 
-   sim::track_pos_z = sim::initial_down_track_position  + sim::down_track_velocity*step;
-   sim::track_pos_x = sim::initial_cross_track_position + sim::cross_track_velocity*step;
+   program::track_pos_z = program::initial_down_track_position  + program::down_track_velocity*step;
+   program::track_pos_x = program::initial_cross_track_position + program::cross_track_velocity*step;
 
-   //std::cout << sim::track_pos_x << "\t" << sim::cross_track_velocity << '\t' << step << std::endl;
+   //std::cout << program::track_pos_x << "\t" << program::cross_track_velocity << '\t' << step << std::endl;
 
    //prefactor includes a conversion from Telsa  to A/m (dived by 4*pi*1e-7) and a divide by 4 pi from the equation in the prism paper
    //this converts the output field to Oe - oh noooo
-   double prefactor = sim::Ms/(4*M_PI);//sim::Ms;//(4.0*M_PI * 4*M_PI* 1e-7);
+   double prefactor = program::Ms/(4*M_PI);//program::Ms;//(4.0*M_PI * 4*M_PI* 1e-7);
    //convert Oe to Tesla by diving by 1e4
    //prefactor = prefactor*1e-4;
 
 
    //cell position in Angstrom
-   double x_cell = sim::track_pos_x + cx;
+   double x_cell = program::track_pos_x + cx;
    double y_cell = cy;
-   double z_cell = sim::track_pos_z  + cz;
+   double z_cell = program::track_pos_z  + cz;
 
    //track sizes/2
    const double xb = tp::bit_size  * 0.5;
@@ -216,32 +200,32 @@ std::vector <double > calculate_field(double cx, double cy, double cz, int step)
 void tracks(){
 
 
-     tp::num_bits_per_track = sim::track_num_bits_per_track;
-     tp::num_tracks = sim::track_num_tracks;
+     tp::num_bits_per_track = program::track_num_bits_per_track;
+     tp::num_tracks = program::track_num_tracks;
 
 
 
      // distance of tracks from read head
-     tp::fly_height = sim::track_fly_height; // Angstroms
+     tp::fly_height = program::track_fly_height; // Angstroms
 
-     tp::bit_size =  sim::track_bit_size; // size of bits in x-direction (cross track)
+     tp::bit_size =  program::track_bit_size; // size of bits in x-direction (cross track)
     // std::cout << tp::bit_size <<std::endl;
-     tp::bit_width = sim::track_bit_width; // size of bits in z-direction (down track)
-     tp::bit_depth = sim::track_bit_depth; // depth of bits along y-direction
+     tp::bit_width = program::track_bit_width; // size of bits in z-direction (down track)
+     tp::bit_depth = program::track_bit_depth; // depth of bits along y-direction
 
-     tp::track_gap = sim::track_track_gap;
-     tp::bit_gap = sim::track_bit_gap;
+     tp::track_gap = program::track_track_gap;
+     tp::bit_gap = program::track_bit_gap;
 
      tp::total_bit_size = tp::bit_size + tp::bit_gap;
      tp::total_bit_width = tp::bit_width + tp::track_gap;
      tp::total_bit_depth = tp::bit_depth;
 
    //  std:: cout << tp::bit_size << '\t' << tp::bit_width << '\t' << std::endl;
-     sim::Ms = sim::track_Ms;// mu0 Ms in Tesla
+     program::Ms = program::track_Ms;// mu0 Ms in Tesla
 
-     sim::track_field_x.resize(cells::num_cells,0.0);
-     sim::track_field_y.resize(cells::num_cells,0.0);
-     sim::track_field_z.resize(cells::num_cells,0.0);
+     program::track_field_x.resize(cells::num_cells,0.0);
+     program::track_field_y.resize(cells::num_cells,0.0);
+     program::track_field_z.resize(cells::num_cells,0.0);
 
    // define total number of bits
     tp::num_bits = (tp::num_bits_per_track)*(tp::num_tracks);
@@ -265,7 +249,7 @@ void tracks(){
     int bits = 0;
     std::vector <double > bitms(tp::num_tracks*tp::num_bits_per_track,0.0);
 
-    if (sim::track_ms_file == true){
+    if (program::track_ms_file == true){
       std::cout << "Creating track from file" << std::endl;
 
      // read number of atoms in this file
@@ -324,7 +308,7 @@ void tracks(){
     }
 
     //run a scan over bits
-   if (sim::LFA == false){
+   if (program::LFA == false){
      std::cout << "NO LFAAAAAA" << "\t" << cells::num_local_cells <<std::endl;
 
    for (int lc = 0; lc < cells::num_local_cells; lc++){
@@ -335,9 +319,9 @@ void tracks(){
     const double cz = cells::pos_and_mom_array[4*cell+2];
     B = calculate_field(cx,cy,cz,sim::time);
 
-    sim::track_field_x[cell] = B[0];
-    sim::track_field_y[cell] = B[1];
-    sim::track_field_z[cell] = B[2];
+    program::track_field_x[cell] = B[0];
+    program::track_field_y[cell] = B[1];
+    program::track_field_z[cell] = B[2];
 
   }
 
@@ -349,8 +333,8 @@ void tracks(){
 
    while(sim::time <sim::equilibration_time+sim::total_time){
 
-     sim::track_pos_x = sim::initial_cross_track_position + sim::cross_track_velocity*step;
-     sim::track_pos_z = sim::initial_down_track_position + sim::down_track_velocity*step;
+     program::track_pos_x = program::initial_cross_track_position + program::cross_track_velocity*step;
+     program::track_pos_z = program::initial_down_track_position + program::down_track_velocity*step;
 
    double avBx = 0;
    double avBy = 0;
@@ -364,24 +348,24 @@ void tracks(){
       const double cz = cells::pos_and_mom_array[4*cell+2];
 
       B = calculate_field(cx,cy,cz,step);
-      sim::track_field_x[cell] = B[0];
-      sim::track_field_y[cell] = B[1];
-      sim::track_field_z[cell] = B[2];
+      program::track_field_x[cell] = B[0];
+      program::track_field_y[cell] = B[1];
+      program::track_field_z[cell] = B[2];
       avBx = avBx + B[0];
       avBy = avBy + B[1];
       avBz = avBz + B[2];
 
-      //   std::cout  <<"returned B\t" << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
+      //   std::cout  <<"returned B\t" << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
     }
     avBx =avBx/cells::num_local_cells;
     avBy =avBy/cells::num_local_cells;
     avBz =avBz/cells::num_local_cells;
-    ofile << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
+    ofile << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
 
          // Integrate system
   sim::integrate(sim::partial_time);
 
-  //ofile << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
+  //ofile << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
   step++;
 
     // Calculate magnetisation statistics
@@ -391,7 +375,7 @@ void tracks(){
     vout::data();
 
 
-	}
+   }
  }
 
 
@@ -422,13 +406,13 @@ else {
 
       line_stream >> start_ms >> end_ms >> ms_step;
       //std::cout << "ENTER" << std::endl;
-      sim::Ms = start_ms;
+      program::Ms = start_ms;
       ms_step = sqrt(ms_step*ms_step);
-      sim::LFA_scan_field_step = ms_step;
+      program::LFA_scan_field_step = ms_step;
       //std::cout << start_ms << '\t' << end_ms << "\t" << ms_step <<std::endl;
       if (start_ms > end_ms){
     //  std::cout << "here" <<std::endl;
-        while(sim::Ms > end_ms){
+        while(program::Ms > end_ms){
     //  std::cout << "also here" <<std::endl;
 
          double avBx = 0;
@@ -442,20 +426,20 @@ else {
             const double cz = cells::pos_and_mom_array[4*cell+2];
 
             std::vector < double > B2 = calculate_field(cx,cy,cz,0);
-            sim::track_field_x[cell] = B2[0];
-            sim::track_field_y[cell] = B2[1];
-            sim::track_field_z[cell] = B2[2];
+            program::track_field_x[cell] = B2[0];
+            program::track_field_y[cell] = B2[1];
+            program::track_field_z[cell] = B2[2];
 
             avBx = avBx + B2[0];
             avBy = avBy + B2[1];
             avBz = avBz + B2[2];
 
-      //   std::cout << "RETURNED B\t" <<sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B2[0] << '\t' << B2[1] << '\t' << B2[2] <<  std::endl;
+      //   std::cout << "RETURNED B\t" <<sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B2[0] << '\t' << B2[1] << '\t' << B2[2] <<  std::endl;
           }
           avBx =avBx/cells::num_local_cells;
           avBy =avBy/cells::num_local_cells;
           avBz =avBz/cells::num_local_cells;
-          ofile << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz <<  std::endl;
+          ofile << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz <<  std::endl;
 
           //      std::cout << "and here" <<std::endl;
 
@@ -468,15 +452,15 @@ else {
           // Output data
           vout::data();
 
-          sim::Ms = sim::Ms - sim::LFA_scan_field_step;
+          program::Ms = program::Ms - program::LFA_scan_field_step;
 
-	       }
+          }
        }
 
        else {
 
 
-         while(sim::Ms < end_ms){
+         while(program::Ms < end_ms){
 
             double avBx = 0;
             double avBy = 0;
@@ -490,15 +474,15 @@ else {
              const double cz = cells::pos_and_mom_array[4*cell+2];
 
              B = calculate_field(cx,cy,cz,0);
-             sim::track_field_x[cell] = B[0];
-             sim::track_field_y[cell] = B[1];
-             sim::track_field_z[cell] = B[2];
+             program::track_field_x[cell] = B[0];
+             program::track_field_y[cell] = B[1];
+             program::track_field_z[cell] = B[2];
 
              avBx = avBx + B[0];
              avBy = avBy + B[1];
              avBz = avBz + B[2];
 
-      //   std::cout << "RETURNED B\t" <<sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B2[0] << '\t' << B2[1] << '\t' << B2[2] <<  std::endl;
+      //   std::cout << "RETURNED B\t" <<sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B2[0] << '\t' << B2[1] << '\t' << B2[2] <<  std::endl;
           }
           avBx =avBx/cells::num_local_cells;
           avBy =avBy/cells::num_local_cells;
@@ -512,12 +496,12 @@ else {
 
           // Output data
           vout::data();
-                   std::cout << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
-                   ofile << sim::time << '\t' << sim::track_pos_z << "\t" << sim::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz <<  std::endl;
+                   std::cout << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << B[0] << '\t' << B[1] << '\t' << B[2] <<  std::endl;
+                   ofile << sim::time << '\t' << program::track_pos_z << "\t" << program::track_pos_x << '\t' << micromagnetic::MR_resistance << "\t" << avBx<< '\t' << avBy<< '\t' << avBz <<  std::endl;
 
-         sim::Ms = sim::Ms + sim::LFA_scan_field_step;
+         program::Ms = program::Ms + program::LFA_scan_field_step;
 
-	      }
+         }
       }
 
     }

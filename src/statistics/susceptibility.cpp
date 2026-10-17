@@ -1,13 +1,14 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
+#include "constants.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -48,11 +49,7 @@ void susceptibility_statistic_t::initialize(stats::magnetization_statistic_t& ma
 
    // Check that magnetization statistic is properly initialized
    if(!mag_stat.is_initialized()){
-      terminaltextcolor(RED);
-      std::cerr << "Programmer Error - Uninitialized magnetization statistic passed to susceptibility statistic - please initialize first." << std::endl;
-      terminaltextcolor(WHITE);
-      zlog << zTs() << "Programmer Error - Uninitialized magnetization statistic passed to susceptibility statistic - please initialize first." << std::endl;
-      err::vexit();
+      err::fatal("Programmer Error - Uninitialized magnetization statistic passed to susceptibility statistic - please initialize first.");
    }
 
    // Determine number of magnetization statistics*4
@@ -220,7 +217,7 @@ std::string susceptibility_statistic_t::output_mean_susceptibility(const double 
    if(!header){
 
       // determine inverse temperature mu_B/(kB T) (flushing to zero for very low temperatures)
-      const double itemp = temperature < 1.e-300 ? 0.0 : 9.274e-24/(1.3806503e-23*temperature);
+      const double itemp = temperature < 1.e-300 ? 0.0 : constants::muB/(constants::kB*temperature);
 
       // determine inverse mean counter and its square
       const double imean_counter = 1.0/mean_counter;
@@ -229,7 +226,7 @@ std::string susceptibility_statistic_t::output_mean_susceptibility(const double 
       // loop over all elements
       for(int id=0; id< num_elements - 1; ++id){ // ignore last element as always contains non-magnetic atoms
 
-         const double prefactor = itemp*saturation[id]; // in mu_B
+         const double prefactor = itemp*saturation[id]; // in 1/T
          const double sus_x = prefactor*(mean_susceptibility_squared[4*id + 0]*imean_counter-mean_susceptibility[4*id + 0]*mean_susceptibility[4*id + 0]*imean_counter_sq);
          const double sus_y = prefactor*(mean_susceptibility_squared[4*id + 1]*imean_counter-mean_susceptibility[4*id + 1]*mean_susceptibility[4*id + 1]*imean_counter_sq);
          const double sus_z = prefactor*(mean_susceptibility_squared[4*id + 2]*imean_counter-mean_susceptibility[4*id + 2]*mean_susceptibility[4*id + 2]*imean_counter_sq);

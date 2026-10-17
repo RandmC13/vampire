@@ -1,26 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 ///
 /// @file
@@ -32,17 +19,14 @@
 /// This is a list of other notes, not related to functionality but rather to implementation.
 /// Also include references, formulae and other notes here.
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2010. All Rights Reserved.
 ///
 /// @section info File Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
 /// @version 1.0
 /// @date    07/02/2011
 /// @internal
-///	Created:		07/02/2011
-///	Revision:	  ---
+///   Created:    07/02/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 
@@ -55,6 +39,7 @@
 #include "anisotropy.hpp"
 #include "atoms.hpp"
 #include "exchange.hpp"
+#include "integrate.hpp"
 #include "material.hpp"
 #include "errors.hpp"
 #include "dipole.hpp"
@@ -75,9 +60,6 @@ namespace sim{
 
 /// @brief Calculates the applied field energy for a single spin.
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2011. All Rights Reserved.
 ///
 /// @section Information
 /// @author  Richard Evans, rfle500@york.ac.uk
@@ -92,32 +74,29 @@ namespace sim{
 /// @return applied field energy
 ///
 /// @internal
-///	Created:		07/02/2011
-///	Revision:	  ---
+///   Created:    07/02/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 double spin_applied_field_energy(const double Sx, const double Sy, const double Sz){
 
-	return -sim::H_applied*(sim::H_vec[0]*Sx + sim::H_vec[1]*Sy + sim::H_vec[2]*Sz);
+   return -sim::H_applied*(sim::H_vec[0]*Sx + sim::H_vec[1]*Sy + sim::H_vec[2]*Sz);
 
 }
 
 double spin_local_applied_field_energy(const int mat, const double sx, const double sy, const double sz){
 
-	const double B = mp::material[mat].applied_field_strength;
-	const double hx = B * mp::material[mat].applied_field_unit_vector[0];
-	const double hy = B * mp::material[mat].applied_field_unit_vector[1];
-	const double hz = B * mp::material[mat].applied_field_unit_vector[2];
+   const double B = mp::material[mat].applied_field_strength;
+   const double hx = B * mp::material[mat].applied_field_unit_vector[0];
+   const double hy = B * mp::material[mat].applied_field_unit_vector[1];
+   const double hz = B * mp::material[mat].applied_field_unit_vector[2];
 
-	return -(hx*sx + hy*sy + hz*sz);
+   return -(hx*sx + hy*sy + hz*sz);
 
 }
 
 /// @brief Calculates the magnetostatic energy for a single spin.
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2012. All Rights Reserved.
 ///
 /// @section Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
@@ -132,8 +111,8 @@ double spin_local_applied_field_energy(const int mat, const double sx, const dou
 /// @return magnetostatic energy
 ///
 /// @internal
-///	Created:		08/06/2012
-///	Revision:	  ---
+///   Created:    08/06/2012
+///   Revision:     ---
 ///=====================================================================================
 ///
 double spin_magnetostatic_energy(const int atom, const double Sx, const double Sy, const double Sz){
@@ -154,9 +133,8 @@ double spin_longitudinal_energy(const int atom){
    double mod_S4_i = mod_S2_i * mod_S2_i;
    double mod_S6_i = mod_S4_i * mod_S2_i;
 
-   double A = sim::internal::lsf_second_order_coefficient[imaterial];
-   double B = sim::internal::lsf_fourth_order_coefficient[imaterial];
-   double C = sim::internal::lsf_sixth_order_coefficient[imaterial];
+   double A, B, C;
+   integrate::get_lsf_coefficients(imaterial, A, B, C);
 
    double landau_energy = (1 / mp::material[imaterial].mu_s_SI) * ((A * mod_S2_i) + (B * mod_S4_i) + (C * mod_S6_i));
 
@@ -165,9 +143,6 @@ double spin_longitudinal_energy(const int atom){
 
 /// @brief Calculates the total energy for a single spin.
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2011. All Rights Reserved.
 ///
 /// @section Information
 /// @author  Richard Evans, rfle500@york.ac.uk
@@ -178,27 +153,27 @@ double spin_longitudinal_energy(const int atom){
 /// @return total spin energy
 ///
 /// @internal
-///	Created:		07/02/2011
-///	Revision:	  ---
+///   Created:    07/02/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 double calculate_spin_energy(const int atom){
 
-	// check calling of routine if error checking is activated
-	if(err::check==true) std::cout << "calculate_spin_energy has been called" << std::endl;
+   // check calling of routine if error checking is activated
+   if(err::check==true) std::cout << "calculate_spin_energy has been called" << std::endl;
 
-	// Local spin value
-	const double Sx=atoms::x_spin_array[atom];
-	const double Sy=atoms::y_spin_array[atom];
-	const double Sz=atoms::z_spin_array[atom];
+   // Local spin value
+   const double Sx=atoms::x_spin_array[atom];
+   const double Sy=atoms::y_spin_array[atom];
+   const double Sz=atoms::z_spin_array[atom];
 
-	// Determine neighbour material
-	const int imaterial=atoms::type_array[atom];
+   // Determine neighbour material
+   const int imaterial=atoms::type_array[atom];
 
-	// Initialise energy to zero
-	double energy=0.0;
+   // Initialise energy to zero
+   double energy=0.0;
 
-	// Calculate total spin energy
+   // Calculate total spin energy
    energy += exchange::single_spin_energy(atom, Sx, Sy, Sz);
    energy += exchange::single_spin_biquadratic_energy(atom, Sx, Sy, Sz);
    energy += exchange::single_spin_four_spin_energy(atom, Sx, Sy, Sz);
@@ -206,22 +181,22 @@ double calculate_spin_energy(const int atom){
    // calculate anisotropy energy for atom
    energy += anisotropy::single_spin_energy(atom, imaterial, Sx, Sy, Sz, sim::temperature);
 
-	// Landau energy
-	if(sim::integrator==sim::lsf_mc){
-		energy += spin_longitudinal_energy(atom);
-	}
+   // Landau energy
+   if(integrate::integrator==integrate::integrator_t::lsf_mc){
+      energy += spin_longitudinal_energy(atom);
+   }
 
-	energy+=spin_applied_field_energy(Sx, Sy, Sz);
-	energy+=spin_magnetostatic_energy(atom, Sx, Sy, Sz);
+   energy+=spin_applied_field_energy(Sx, Sy, Sz);
+   energy+=spin_magnetostatic_energy(atom, Sx, Sy, Sz);
 
-	// local applied fields
-	if(sim::local_applied_field) energy += spin_local_applied_field_energy(imaterial, Sx, Sy, Sz);
+   // local applied fields
+   if(sim::local_applied_field) energy += spin_local_applied_field_energy(imaterial, Sx, Sy, Sz);
 
-	// vcma energy
-	const double vcma = program::fractional_electric_field_strength * spin_transport::get_voltage() * sim::internal::vcmak[imaterial];
-	energy -= vcma * Sz * Sz;
+   // vcma energy
+   const double vcma = program::fractional_electric_field_strength * spin_transport::get_voltage() * sim::internal::vcmak[imaterial];
+   energy -= vcma * Sz * Sz;
 
-	return energy; // Tesla
+   return energy; // Tesla
 }
 
 } // end of namespace sim

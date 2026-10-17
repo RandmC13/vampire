@@ -60,12 +60,12 @@ int main(int argc, char* argv[]){
       std::cout << std::endl;
       std::cout << "             Git commit: " << vinfo::githash() << std::endl;
       std::cout << std::endl;
-      std::cout << "  Licensed under the GNU Public License(v2). See licence file for details." << std::endl;
+      std::cout << "  Licensed under the GNU Public License(v2). See licence-gpl for details." << std::endl;
       std::cout << std::endl;
       std::cout << "      Main Developers: Richard F L Evans, Sarah Jenkins, Andrea Meo, " << std::endl;
       std::cout << "                       Matthew Ellis, Mara Strungaru, Sergiu Ruta" << std::endl;
       std::cout << " " << std::endl;
-      std::cout << "                       See developers.txt for details" << std::endl;
+      std::cout << "                       See developers/authors.txt for details" << std::endl;
       std::cout << " " << std::endl;
       #ifdef COMP
       std::cout << "                       Compiled with:  " << COMP << std::endl;
@@ -78,9 +78,6 @@ int main(int argc, char* argv[]){
       std::cout << "MPI ";
       #endif
       std::cout << std::endl;
-      std::cout << std::endl;
-      std::cout << "  Vampire includes a copy of the qhull library from C.B. Barber and The "<< std::endl;
-      std::cout << "  Geometry Center and may be obtained via http from www.qhull.org." << std::endl;
       std::cout << std::endl;
       std::cout << "================================================================================" << std::endl;
       time_t rawtime = time(NULL);

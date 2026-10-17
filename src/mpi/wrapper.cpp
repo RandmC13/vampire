@@ -1,14 +1,15 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2016. All rights reserved.
+//   (c) R F L Evans 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <iostream>
+#include <sstream>
 
 // Vampire headers
 #include "errors.hpp"
@@ -63,6 +64,19 @@ double reduce_sum(double local){
    #else
       // set global variable equal to local for serial calls
       global = local;
+   #endif
+
+   return global;
+
+}
+
+double reduce_max(double local){
+
+   double global = local;
+
+   #ifdef MPICF
+      // Perform MPI reduce for MPI code
+      MPI_Reduce(&local, &global, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
    #endif
 
    return global;
@@ -152,8 +166,9 @@ void collate(std::vector<double>& input, std::vector<double>& output){
       const int op_size = output.size();
       if( op_size != disp ){
          std::cerr << "Programmer error in vmpi::collate() due to output array being the wrong size." << std::endl;
-         std::cerr << "\t Function call requires " << disp << " elements in output buffer which only has " << output.size() << " elements on master process" << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "\t Function call requires " << disp << " elements in output buffer which only has " << output.size() << " elements on master process";
+         err::fatal(message.str());
       }
    }
 
@@ -172,8 +187,9 @@ void collate(std::vector<double>& input, std::vector<double>& output){
    // Check input and output are the same size
    if( output.size() != input.size() ){
       std::cerr << "Programmer error in serial vmpi::collate() due to output array being the wrong size." << std::endl;
-      std::cerr << "\t Function call requires " << input.size() << " elements in output buffer which only has " << output.size() << " elements on master process" << std::endl;
-      err::vexit();
+      std::ostringstream message;
+      message << "\t Function call requires " << input.size() << " elements in output buffer which only has " << output.size() << " elements on master process";
+      err::fatal(message.str());
    }
 
    // Now hard copy array elements
@@ -219,8 +235,9 @@ void counts_and_displacements(std::vector<double>& input, std::vector<double>& o
       const int op_size = output.size();
       if( op_size != disp ){
          std::cerr << "Programmer error in vmpi::collate() due to output array being the wrong size." << std::endl;
-         std::cerr << "\t Function call requires " << disp << " elements in output buffer which only has " << output.size() << " elements on master process" << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "\t Function call requires " << disp << " elements in output buffer which only has " << output.size() << " elements on master process";
+         err::fatal(message.str());
       }
    }
 
@@ -256,8 +273,9 @@ void fast_collate(std::vector<double>& input, std::vector<double>& output, std::
    // Check input and output are the same size
    if( output.size() != input.size() ){
       std::cerr << "Programmer error in serial vmpi::collate() due to output array being the wrong size." << std::endl;
-      std::cerr << "\t Function call requires " << input.size() << " elements in output buffer which only has " << output.size() << " elements on master process" << std::endl;
-      err::vexit();
+      std::ostringstream message;
+      message << "\t Function call requires " << input.size() << " elements in output buffer which only has " << output.size() << " elements on master process";
+      err::fatal(message.str());
    }
 
    // Now hard copy array elements

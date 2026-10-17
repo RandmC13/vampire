@@ -1,13 +1,13 @@
 #ifndef GPU_H_
 #define GPU_H_
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This header file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2015, 2016. All rights reserved.
+//   (c) R F L Evans 2015, 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 #include <string>
 
 namespace gpu{
@@ -19,12 +19,7 @@ namespace gpu{
    extern bool cpu_stats; // flag to calculate stats using cpu
    extern bool initialized; // flag to check for successful initialization
 
-   extern int num_threads; // number of threads to run per kernel on main device
-   extern int num_threads_other; // as above on other device
-   extern int platform; // which platform to use for acceleration (OpenCL)
-   extern int platform_other; // other platform to use for some calculations (OpenCL)
    extern int device; // int specifying gpu device to use for simulation
-   extern int device_other; // other device to use (under platform_other)
 
 
    //-----------------------------------------------------------------------------

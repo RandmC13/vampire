@@ -1,13 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This header file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2015. All rights reserved.
+//   (c) R F L Evans 2015. All rights reserved.
 //
-//
-//
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 
 //-----------------------------------------------------------------------------
@@ -17,10 +15,12 @@
 //-----------------------------------------------------------------------------
 
 
-#ifndef __CUDA_UTILS_HPP__
-#define __CUDA_UTILS_HPP__
+#ifndef CUDA_UTILS_H_
+#define CUDA_UTILS_H_
 
 #include <stdio.h>
+
+#include "errors.hpp"
 
 //-----------------------------------------------------------------------------
 // Wrapper function to test for errors in kernels if the debug flag is set
@@ -36,7 +36,7 @@ inline void check_cuda_errors(const char *filename, const int line_number)
    if(error != cudaSuccess)
    {
       printf("CUDA error at %s:%i: %s\n", filename, line_number, cudaGetErrorString(error));
-      exit(-1);
+      ::err::vexit();
    }
 #endif
 }
