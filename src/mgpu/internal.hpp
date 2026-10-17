@@ -1,9 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-//-----------------------------------------------------------------------------
+//   (c) S Jenkins 2026. All rights reserved.
+//
+//------------------------------------------------------------------------------
 #ifndef MGPU_INTERNAL_H_
 #define MGPU_INTERNAL_H_
 
