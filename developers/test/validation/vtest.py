@@ -25,7 +25,7 @@ REFERENCE = os.path.join(ROOT, "reference")  # committed reference outputs
 
 KB = 1.380649e-23        # Boltzmann constant (J/K)
 MU_B = 9.2740100783e-24  # Bohr magneton (J/T)
-GAMMA = 1.76e11          # gyromagnetic ratio used by vampire (1/(T s))
+GAMMA = 1.76085963023e11 # gyromagnetic ratio used by vampire (1/(T s))
 
 #------------------------------------------------------------------------------
 # helpers
