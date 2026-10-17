@@ -12,7 +12,7 @@
 
 // C++ standard library headers
 #include <string>
-#include<algorithm> 
+#include <algorithm>
 
 // Vampire headers
 #include "errors.hpp"
@@ -28,12 +28,30 @@ namespace vio{
    //---------------------------------------------------------------------------
    bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
 
+      std::string test="";
+
+      //-------------------------------------------------------------------
+      // Screen output list
+      //-------------------------------------------------------------------
+      std::string prefix="screen";
+      if(key==prefix){
+         return vout::match_vout_list(word, value, line, vout::screen_output_list);
+      }
+
+      //-------------------------------------------------------------------
+      // Grain output list
+      //-------------------------------------------------------------------
+      prefix="grain";
+      if(key==prefix){
+         return vout::match_vout_grain_list(word, value, line, vout::grain::output_list);
+      }
+
       // Check for valid key, if no match return false
-      std::string prefix="output";
+      prefix="output";
       if(key!=prefix) return false;
 
       //-------------------------------------------------------------------
-      std::string test="precision";
+      test="precision";
       if(word==test){
          int p=atoi(value.c_str());
          vin::check_for_valid_int(p, word, line, prefix, 4, 16,"input","4 - 16");
@@ -54,21 +72,10 @@ namespace vio{
         vout::header_option = true;
          return true;
       }
-      //--------------------------------------------------------------------
-      // Keyword not found
-      //--------------------------------------------------------------------
-      return false;
-
-   }
-
-   //---------------------------------------------------------------------------
-   // Function to process material parameters
-   //---------------------------------------------------------------------------
-   bool match_material_parameter(std::string const word, std::string const value, std::string const unit, int const line, int const super_index, const int sub_index){
-
-      // add prefix string
-      std::string prefix="material:";
-
+      //-------------------------------------------------------------------
+      // File output list
+      //-------------------------------------------------------------------
+      if(vout::match_vout_list(word, value, line, vout::file_output_list)) return true;
       //--------------------------------------------------------------------
       // Keyword not found
       //--------------------------------------------------------------------

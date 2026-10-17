@@ -27,7 +27,7 @@ namespace stats
    extern double max_torque();
 
    /// Statistics energy types
-   enum energy_t { total = 0, exchange = 1, anisotropy = 2, applied_field = 3, magnetostatic = 4};
+   enum energy_t { total = 0, exchange = 1, anisotropy = 2, applied_field = 3, magnetostatic = 4, dmi = 5};
 
    /// SLD Statistics energy types
    enum sld_energy_t { sld_total = 0, sld_exchange = 1, sld_coupling = 2, potential = 3, kinetic = 4};
@@ -56,10 +56,21 @@ namespace stats
    // Function to reset average statistics counters
    void reset();
 
+   //---------------------------------------------------------------------------
+   // Function to process input file parameters for statistics module
+   //---------------------------------------------------------------------------
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line);
+
+   //---------------------------------------------------------------------------
+   // Function to process material parameters
+   //---------------------------------------------------------------------------
+   bool match_material_parameter(std::string const word, std::string const value, std::string const unit, int const line, int const super_index, const int sub_index);
+
    // Statistics control flags (to be moved internally when long-awaited refactoring of vio is done)
    extern bool calculate_system_energy;
    extern bool calculate_grain_energy;
    extern bool calculate_material_energy;
+   extern bool calculate_dmi_energy; // flag to calculate dmi component of exchange energy
 
    extern bool calculate_system_sld_energy;
    extern bool calculate_grain_sld_energy;
@@ -142,6 +153,7 @@ namespace stats
       const std::vector<double>& get_anisotropy_energy();
       const std::vector<double>& get_applied_field_energy();
       const std::vector<double>& get_magnetostatic_energy();
+      const std::vector<double>& get_dmi_energy();
 
       void update_mean_counter(long counter);
 
@@ -161,12 +173,14 @@ namespace stats
       std::vector<double> anisotropy_energy;
       std::vector<double> applied_field_energy;
       std::vector<double> magnetostatic_energy;
+      std::vector<double> dmi_energy;
 
       std::vector<double> mean_total_energy;
       std::vector<double> mean_exchange_energy;
       std::vector<double> mean_anisotropy_energy;
       std::vector<double> mean_applied_field_energy;
       std::vector<double> mean_magnetostatic_energy;
+      std::vector<double> mean_dmi_energy;
 
       std::vector<int> zero_list;
       std::vector<double> normalisation;
@@ -326,6 +340,9 @@ namespace stats
    //----------------------------------
   // Spin temperature class definition
   //----------------------------------
+  // Recalculates effective fields for current spins (spin-only or SLD), once per statistics pass
+  void update_fields();
+
   class spin_temp_statistic_t{
 
      public:

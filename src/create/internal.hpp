@@ -1,13 +1,13 @@
 #ifndef CREATE_INTERNAL_H_
 #define CREATE_INTERNAL_H_
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This header file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2016. All rights reserved.
+//   (c) R F L Evans 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 //---------------------------------------------------------------------
 // Defines shared internal data structures and functions for the
@@ -62,7 +62,7 @@ namespace create{
          slave_alloy_d_t slave_alloy_distribution;
          // constructor
          slave_material_t ():
-         	fraction(0.0),
+            fraction(0.0),
             variance(0.1),
             slave_alloy_distribution(native)
             {};
@@ -91,11 +91,11 @@ namespace create{
          double max; // maximum material height
 
          bool geometry = false; // define geometry for material
-   		std::vector<points_t> geometry_points; // array of geometry coordinates
+         std::vector<points_t> geometry_points; // array of geometry coordinates
 
          // constructor
          mp_t ():
-         	alloy_master(false),
+            alloy_master(false),
             host_alloy_smoothness(2.0),
             host_alloy_scale (50.0),
             save_host_alloy_profile(false),
@@ -119,7 +119,11 @@ namespace create{
       extern MTRand grnd; // general random number generator for create functions
 
       extern int alloy_seed;  // random seed to control alloying of atoms
-      extern int grain_seed;  // random seed to control grain structure generation
+      // create:grain-random-seed - seeds per-atom material selection during
+      // granular ALLOYING (see alloy.cpp). Despite the name, this does NOT
+      // seed the grain tessellation itself; that is grains::internal::grain_structure_seed
+      // (create:grain-structure-random-seed), owned by the grains module.
+      extern int grain_seed;
       extern int dilute_seed; // random seed to control dilution of atoms
       extern int mixing_seed; // random seed to control intermixing of atoms
       extern int spin_init_seed; // random seed to control ranomised spin directions
@@ -132,25 +136,13 @@ namespace create{
       extern double bubble_radius;
       extern double bubble_nucleation_height;
 
-      extern bool generate_voronoi_substructure;
-      extern double voronoi_grain_substructure_size;    // mean grain size of the substructure within a particle
-      extern double voronoi_grain_substructure_spacing; // spacing between substructure grains
-      extern double voronoi_grain_substructure_crystallization_radius;
-      extern double voronoi_grain_substructure_overlap_factor;
-
-      extern double voronoi_elliptical_rounding;        // degree of elliptical grain rounding (0-1)
-      extern double voronoi_elliptical_rounding_height; // height of widest grain cross-section as a fraction of system size z
-
-      extern bool select_material_by_geometry;	// Toggle override of input material type by geometry
+      extern bool select_material_by_geometry;  // Toggle override of input material type by geometry
       extern bool select_material_by_z_height;
-      extern bool output_gv_file; // toggle output of grain positions to file
 
       //-----------------------------------------------------------------------------
       // Internal functions for create module
       //-----------------------------------------------------------------------------
       void set_atom_vars(std::vector<cs::catom_t> &, neighbours::list_t& bilinear, neighbours::list_t& biquadratic);
-
-      bool point_in_polygon2(const create::internal::points_t test, std::vector<create::internal::points_t>& points);
 
       extern void alloy(std::vector<cs::catom_t> & catom_array);
       extern void layers(std::vector<cs::catom_t> & catom_array);
@@ -176,27 +168,6 @@ namespace create{
       extern void centre_particle_on_atom(std::vector<double>& particle_origin, std::vector<cs::catom_t>& catom_array);
       extern void sort_atoms_by_grain(std::vector<cs::catom_t> & catom_array);
       extern void clear_atoms(std::vector<cs::catom_t> &);
-
-      extern void voronoi_substructure(std::vector<cs::catom_t> & catom_array);
-
-      void voronoi_grain_rounding(std::vector <std::vector <double> > & grain_coord_array,
-                                  std::vector <std::vector <std::vector <double> > > &  grain_vertices_array);
-
-      double elliptical_rounding_factor(const double z);
-
-      void populate_vertex_points(std::vector <std::vector <double> > & grain_coord_array,
-                                  std::vector <std::vector <std::vector <double> > > &  grain_vertices_array,
-                                  bool include_boundary_grains,
-                                  const double grain_size);
-
-      int generate_bimodal_voronoi_seeds(std::vector <std::vector <double> >& grain_coord_array,
-                                          std::vector<bool>& is_small_grain,
-                                          const double domain_x, const double domain_y,
-                                          const double std_diameter,   const double std_variance,
-                                          const double small_diameter, const double small_variance,
-                                          const double small_fraction);
-
-      extern void write_grain_vertices(int id, double dx, double dy, std::ofstream& ofile, std::vector< std::vector <double> >& vertices);
 
       extern bool compare_radius(core_radius_t first,core_radius_t second);
       extern void calculate_atomic_composition(std::vector<cs::catom_t> & catom_array);

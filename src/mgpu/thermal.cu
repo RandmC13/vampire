@@ -195,7 +195,7 @@ namespace internal{
       const uint64_t step = noise_step++;
 
       // HAMR simulation: laser profile and head field, or the global temperature with the laser off
-      if(::program::program == 7){
+      if(::program::program == ::program::program_t::hamr_simulation){
          if(::hamr::head_laser_on){
             const cu::cu_real_t Tmin = sim::Tmin;
             const cu::cu_real_t DeltaT = sim::Tmax - sim::Tmin;

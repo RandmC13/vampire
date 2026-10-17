@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <iostream>
@@ -15,6 +15,7 @@
 // Vampire headers
 #include "anisotropy.hpp"
 #include "gpu.hpp"
+#include "integrate.hpp"
 #include "cuda.hpp"
 #include "dipole.hpp"
 #include "errors.hpp"
@@ -27,7 +28,6 @@
 #include "stats.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
-#include "vopencl.hpp"
 
 namespace gpu{
 
@@ -48,8 +48,8 @@ namespace gpu{
       // spins would be overwritten by the (never updated) device spins at every
       // statistics update. Monte Carlo has a GPU version, which does not yet reproduce
       // the CPU results.
-      if(sim::integrator == sim::monte_carlo) unsupported.push_back("the monte-carlo integrator");
-      else if(sim::integrator != sim::llg_heun) unsupported.push_back("integrators other than llg-heun");
+      if(integrate::integrator == integrate::integrator_t::monte_carlo) unsupported.push_back("the monte-carlo integrator");
+      else if(integrate::integrator != integrate::integrator_t::llg_heun) unsupported.push_back("integrators other than llg-heun");
 
       // exchange
       if(::exchange::biquadratic) unsupported.push_back("biquadratic exchange");
@@ -66,12 +66,12 @@ namespace gpu{
       if(sim::local_applied_field)        unsupported.push_back("material specific applied fields");
       if(sim::ext_demag)                  unsupported.push_back("the thin film demagnetising field (sim:demagnetisation-factor)");
       if(sim::local_temperature)          unsupported.push_back("material specific temperatures");
-      if(program::program == 13)          unsupported.push_back("the localised-temperature-pulse program");
+      if(program::program == program::program_t::localised_temperature_pulse) unsupported.push_back("the localised-temperature-pulse program");
       if(::dipole::activated)             unsupported.push_back("dipole fields");
       if(sim::spin_torque_fields_enabled()) unsupported.push_back("spin transfer and spin orbit torque fields");
       if(::st::is_enabled())              unsupported.push_back("the spin torque module");
       if(::spin_transport::is_enabled())  unsupported.push_back("spin transport");
-      if(sim::lagrange_multiplier)        unsupported.push_back("the Lagrange multiplier");
+      if(program::lagrange_multiplier_enabled)unsupported.push_back("the Lagrange multiplier");
 
       // statistics
       if(::stats::calculate_system_torque || ::stats::calculate_grain_torque || ::stats::calculate_material_torque)
@@ -89,21 +89,15 @@ namespace gpu{
 
       if(unsupported.empty()) return;
 
-      if(vmpi::my_rank == 0){
-         terminaltextcolor(RED);
-         std::cerr << "Error: GPU acceleration does not support the following features of this simulation:" << std::endl;
-         for(size_t i = 0; i < unsupported.size(); i++) std::cerr << "\t" << unsupported[i] << std::endl;
-         std::cerr << "Run without GPU acceleration (gpu:acceleration = false) to use them." << std::endl;
-         terminaltextcolor(WHITE);
-      }
-      zlog << zTs() << "Error: GPU acceleration does not support the following features of this simulation:" << std::endl;
-      for(size_t i = 0; i < unsupported.size(); i++) zlog << zTs() << "\t" << unsupported[i] << std::endl;
-      err::vexit();
+      std::string message = "Error: GPU acceleration does not support the following features of this simulation:\n";
+      for(size_t i = 0; i < unsupported.size(); i++) message += "\t" + unsupported[i] + "\n";
+      message += "Run without GPU acceleration (gpu:acceleration = false) to use them.";
+      err::fatal(message);
 
    }
 
    //-------------------------------------------------------------------------------
-   // Function to call correct initialization function depending on cuda,opencl etc
+   // Function to call correct initialization function depending on the backend (cuda)
    //-------------------------------------------------------------------------------
    void initialize(){
 
@@ -117,8 +111,6 @@ namespace gpu{
 
       #ifdef CUDA
          initialized = vcuda::initialize(gpu::cpu_stats);
-      #elif OPENCL
-         initialized = vopencl::initialize(gpu::cpu_stats);
       #endif
 
       // Check for no initialization
@@ -139,7 +131,7 @@ namespace gpu{
 
 
    //-------------------------------------------------------------------------------
-   // Function to call correct initialization function depending on cuda,opencl etc
+   // Function to call correct initialization function depending on the backend (cuda)
    //-------------------------------------------------------------------------------
    void initialize_dipole(){
 
@@ -148,8 +140,6 @@ namespace gpu{
 
       #ifdef CUDA
          vcuda::initialize_dipole();
-      #elif OPENCL
-         vopencl::initialize_dipole();
       #endif
 
       return;

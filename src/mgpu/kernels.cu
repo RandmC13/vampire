@@ -10,6 +10,7 @@
 // C++ standard library headers
 #include <algorithm>
 #include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -118,9 +119,7 @@ namespace internal{
       cudaEventCreate(&next_wait_start);
 
       if(cudaGetLastError() != cudaSuccess){
-         std::cerr << "Error: unable to allocate multi-GPU halo buffers on rank " << vmpi::my_rank << std::endl;
-         zlog << zTs() << "Error: unable to allocate multi-GPU halo buffers" << std::endl;
-         err::vexit();
+         err::fatal("Error: unable to allocate multi-GPU halo buffers on rank " + std::to_string(vmpi::my_rank));
       }
 
    }

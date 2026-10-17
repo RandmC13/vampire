@@ -142,18 +142,12 @@ namespace micromagnetic{
 
                case 1: // vector
                terminaltextcolor(RED);
-               std::cerr << "Error! Vectoral exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-               terminaltextcolor(WHITE);
-               zlog << zTs() << "Error! Vectoral exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-               err::vexit();
+               err::fatal("Error! Vectoral exchange calculation not yet implemented in micromagnetic mode");
                break;
 
                case 2: // tensor
                terminaltextcolor(RED);
-               std::cerr << "Error! Tensor exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-               terminaltextcolor(WHITE);
-               zlog << zTs() << "Error! Tensor exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-               err::vexit();
+               err::fatal("Error! Tensor exchange calculation not yet implemented in micromagnetic mode");
                break;
             }
 
@@ -218,7 +212,7 @@ namespace micromagnetic{
                         macro_neighbour_list_array.push_back(cellj);                                        //if the interaction is non zero add the cell to the neighbourlist
                         a.push_back(-(a2d[celli][cellj]/(4*atomic_volume)));//*cell_size)/(2.0*ms[celli]*atomic_volume*num_interactions_cell[celli][cellj]));
                         //calcualtes the exchange interaction for the cells.                           //the end index is updated for each cell so is given the value for the last cell.
-                        
+
                         a[array_index] = (a[array_index]*2*cell_size)/(ms[celli]*N); //*N instead od numinteraction                        a[array_index] = (a[array_index]*2*cell_size)/(ms[celli]*N); //*N instead od numinteraction
                        // std::cout << celli << '\t' << cellj << '\t' << a[array_index] << '\t' << cell_size << '\t' << ms[celli] << '\t' << N << "\t" << (a[array_index]*2*cell_size)/(ms[celli]*N) << std::endl;
                         macro_neighbour_list_end_index[celli] = array_index;

@@ -1,14 +1,15 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2016. All rights reserved.
+//   (c) R F L Evans 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <string>
+#include <sstream>
 
 // Vampire headers
 #include "errors.hpp"
@@ -21,7 +22,7 @@ namespace gpu{
    //-----------------------------------------------------------------------------
    // Function to process input file parameters for ltmp settings
    //-----------------------------------------------------------------------------
-   bool match_input_parameter(string const key, string const word, string const value, string const unit, int const line){
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
 
       // Check for valid key, if no match return false
       std::string prefix="gpu";
@@ -104,48 +105,6 @@ namespace gpu{
          }
       }
 
-      test = "num-threads";
-      if (word == test) {
-         int val = atoi(value.c_str());
-         if (val > 0) {
-            gpu::num_threads = val;
-            return true;
-         } else {
-            terminaltextcolor(RED);
-            std::cerr << "Error: Value for \'" << prefix << ':' << word << "\' must be a positive integer" << std::endl;
-            terminaltextcolor(WHITE);
-            err::vexit();
-         }
-      }
-
-      test = "num-threads-other";
-      if (word == test) {
-         int val = atoi(value.c_str());
-         if (val > 0) {
-            gpu::num_threads_other = val;
-            return true;
-         } else {
-            terminaltextcolor(RED);
-            std::cerr << "Error: Value for \'" << prefix << ':' << word << "\' must be a positive integer" << std::endl;
-            terminaltextcolor(WHITE);
-            err::vexit();
-         }
-      }
-
-      test = "platform";
-      if (word == test) {
-         int val = atoi(value.c_str());
-         if (val >= 0) {
-            gpu::platform = val;
-            return true;
-         } else {
-            terminaltextcolor(RED);
-            std::cerr << "Error: Value for \'" << prefix << ':' << word << "\' must be zero or a positive integer" << std::endl;
-            terminaltextcolor(WHITE);
-            err::vexit();
-         }
-      }
-
       //--------------------------------------------------------------------
       test="device";
       if(word==test){
@@ -156,35 +115,11 @@ namespace gpu{
          return true;
       }
 
-      test="platform-other";
-      if (word == test) {
-         int val = atoi(value.c_str());
-         if (val >= 0) {
-            gpu::platform_other = val;
-            return true;
-         } else {
-            terminaltextcolor(RED);
-            std::cerr << "Error: Value for \'" << prefix << ':' << word << "\' must be zero or a positive integer" << std::endl;
-            terminaltextcolor(WHITE);
-            err::vexit();
-         }
-      }
-
-      test="device-other";
-      if(word==test){
-         int dev=atoi(value.c_str());
-         // Test for valid range
-         vin::check_for_valid_int(dev, word, line, prefix, 0, 16,"input","0-16");
-         gpu::device_other = dev;
-         return true;
-      }
-
       //--------------------------------------------------------------------
       else{
-         terminaltextcolor(RED);
-         std::cerr << "Error - Unknown control statement \'"<< prefix << ":" << word << "\' on line " << line << " of input file" << std::endl;
-         terminaltextcolor(WHITE);
-         err::vexit();
+         std::ostringstream message;
+         message << "Error - Unknown control statement \'" << prefix << ":" << word << "\' on line " << line << " of input file";
+         err::fatal(message.str());
       }
       return false;
    }

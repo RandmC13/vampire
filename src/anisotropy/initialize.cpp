@@ -3,8 +3,8 @@
 //   This file is part of the VAMPIRE open source package under the
 //   Free BSD licence (see licence file for details).
 //
-//   (c) Jack Collings (2022), Sam Westmoreland and Richard Evans 2017. All
-//   rights reserved.
+//   (c) Jack Collings (2022), Sam Westmoreland and Richard Evans 2017.
+//   All rights reserved.
 //
 //   Email: sw766@york.ac.uk
 //          jbc525@york.ac.uk
@@ -13,7 +13,9 @@
 //
 
 // C++ standard library headers
+#include "constants.hpp"
 #include <vector>
+#include <sstream>
 
 // Vampire headers
 #include "anisotropy.hpp"
@@ -112,7 +114,7 @@ namespace anisotropy{
       //---------------------------------------------------------------------
       // Unroll inverse mu_S array for materials to convert Joules to Tesla
       //---------------------------------------------------------------------
-      const double mu_B = 9.27400915e-24; // Bohr magneton
+      const double mu_B = constants::muB; // Bohr magneton
       std::vector <double> inverse_mu_s(num_materials); // array storing inverse spin moment in J/T
       for(int m = 0; m < num_materials; m++) inverse_mu_s[m] = 1.0 / ( mu_s_array[m] * mu_B );
 
@@ -327,9 +329,9 @@ namespace anisotropy{
                         }
                      }
                      else {
-                        std::cerr << "Basis 1,2 are not orthogonal for material:" << mat << std::endl;
-                        zlog << zTs() << "Basis 1,2 are not orthogonal for material:" << mat << std::endl;
-                        err::vexit();
+                        std::ostringstream message;
+                        message << "Basis 1,2 are not orthogonal for material:" << mat;
+                        err::fatal(message.str());
                      }
 
                   }
@@ -348,16 +350,16 @@ namespace anisotropy{
 
                      }
                      else {
-                        std::cerr << "Basis 1,3 are not orthogonal for material:" << mat << std::endl;
-                        zlog << zTs() << "Basis 1,3 are not orthogonal for material:" << mat << std::endl;
-                        err::vexit();
+                        std::ostringstream message;
+                        message << "Basis 1,3 are not orthogonal for material:" << mat;
+                        err::fatal(message.str());
                      }
 
                   }
                   else {
-                     std::cerr << "Only one basis vector set for material:" << mat << " Please specify another basis vector" << std::endl;
-                     zlog << zTs() << "Only one basis vector set for material:" << mat << " Please specify another basis vector" << std::endl;
-                     err::vexit();
+                     std::ostringstream message;
+                     message << "Only one basis vector set for material:" << mat << " Please specify another basis vector";
+                     err::fatal(message.str());
                   }
                }
 
@@ -451,9 +453,9 @@ namespace anisotropy{
                         }
                      }
                      else {
-                        std::cerr << "Basis 1,2 are not orthogonal for material:" << mat << std::endl;
-                        zlog << zTs() << "Basis 1,2 are not orthogonal for material:" << mat << std::endl;
-                        err::vexit();
+                        std::ostringstream message;
+                        message << "Basis 1,2 are not orthogonal for material:" << mat;
+                        err::fatal(message.str());
                      }
 
                   }
@@ -472,16 +474,16 @@ namespace anisotropy{
 
                      }
                      else {
-                        std::cerr << "Basis 1,3 are not orthogonal for material:" << mat << std::endl;
-                        zlog << zTs() << "Basis 1,3 are not orthogonal for material:" << mat << std::endl;
-                        err::vexit();
+                        std::ostringstream message;
+                        message << "Basis 1,3 are not orthogonal for material:" << mat;
+                        err::fatal(message.str());
                      }
 
                   }
                   else {
-                     std::cerr << "Only one basis vector set for material:" << mat << " Please specify another basis vector" << std::endl;
-                     zlog << zTs() << "Only one basis vector set for material:" << mat << " Please specify another basis vector" << std::endl;
-                     err::vexit();
+                     std::ostringstream message;
+                     message << "Only one basis vector set for material:" << mat << " Please specify another basis vector";
+                     err::fatal(message.str());
                   }
                }
 

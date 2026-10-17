@@ -21,8 +21,8 @@
 
 // comparison function
 bool compare(cs::catom_t first,cs::catom_t second){
-	if(first.grain<second.grain) return true;
-	else return false;
+   if(first.grain<second.grain) return true;
+   else return false;
 }
 
 namespace create{
@@ -53,4 +53,14 @@ void sort_atoms_by_grain(std::vector<cs::catom_t> & catom_array){
 }
 
 } // end of namespace internal
+
+//------------------------------------------------------------------------------
+// Public wrapper, for use by other modules (e.g. grains) that need to sort
+// atoms by grain number but must not reach into create::internal directly.
+//------------------------------------------------------------------------------
+void sort_atoms_by_grain(std::vector<cs::catom_t> & catom_array){
+   internal::sort_atoms_by_grain(catom_array);
+   return;
+}
+
 } // end of namespace create

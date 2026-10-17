@@ -1,10 +1,12 @@
 //------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) O Arbelaez Echeverri, M A Ellis & R F L Evans 2015. All rights reserved.
-// Reviewd: Andrea Meo 2022
+//   (c) O Arbelaez Echeverri, M A Ellis & R F L Evans 2015.
+//   All rights reserved.
+//
+//   Reviewd: Andrea Meo 2022
 //
 //------------------------------------------------------------------------------
 
@@ -204,7 +206,7 @@ namespace internal{
       const int num_atoms = ::atoms::num_atoms;
 
       // update hamr fields (Happ and Hth) if program is hamr simulations
-      if(program::program==7){
+      if(program::program == program::program_t::hamr_simulation){
          cu::update_hamr_field();
       }
       // Otherwise calculate global thermal field and applied fields

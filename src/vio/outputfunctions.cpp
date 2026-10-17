@@ -4,9 +4,10 @@
 //   Free BSD licence (see licence file for details).
 //
 //   (c) Andrew J Naden, Richard F L Evans and Rory Pond 2016-2019.
-//       All rights reserved.
+//   All rights reserved.
 //
-//   Email: richard.evans@york.ac.uk and rory.pond@york.ac.uk
+//   Email: richard.evans@york.ac.uk
+//          rory.pond@york.ac.uk
 //
 //------------------------------------------------------------------------------
 //
@@ -29,7 +30,7 @@
 #include "internal.hpp"
 
 namespace vout{
-	// Output Function 0
+   // Output Function 0
    std::string generic_output_int(std::string str,uint64_t i, bool header){
       std::ostringstream res;
       vout::fixed_width_output result(res, vout::fw_size_int);
@@ -67,7 +68,7 @@ namespace vout{
          mean_hy = sum_hy / n_atoms_double;
          mean_hz = sum_hz / n_atoms_double;
       }
-      
+
       stream << generic_output_double("", mean_hx, header);
       stream << generic_output_double("", mean_hy, header);
       stream << generic_output_double("", mean_hz, header);
@@ -173,12 +174,12 @@ namespace vout{
 
    // Output Function 16 - with Header
    void constraint_phi(std::ostream& stream, bool header){
-      stream << generic_output_double("Con_phi",sim::constraint_phi,header);
+      stream << generic_output_double("Con_phi",montecarlo::constraint_phi,header);
    }
 
    // Output Function 17 - with Header
    void constraint_theta(std::ostream& stream, bool header){
-      stream << generic_output_double("Con_theta",sim::constraint_theta,header);
+      stream << generic_output_double("Con_theta",montecarlo::constraint_theta,header);
    }
 
    // Output Function 18 - with Header
@@ -236,7 +237,7 @@ namespace vout{
    }
    // Output Function 22
    void phonon_temperature(std::ostream& stream, bool header){
-     stream << generic_output_double("Phonon_temp",sim::TTTp,header);
+     stream << generic_output_double("Phonon_temp",program::TTTp,header);
    }
 
    // Output Function 23 - with Header
@@ -288,153 +289,163 @@ namespace vout{
       stream << result.str();
    }
 
-	// Output Function 26 - with Header
-	void mat_mdoth(std::ostream& stream, bool header){
-		// initialise vector of H
-		std::vector<double> H(&sim::H_vec[0], &sim::H_vec[0]+3);
-		stream << stats::material_magnetization.output_normalized_magnetization_dot_product(H,header);
-	}
+   // Output Function 26 - with Header
+   void mat_mdoth(std::ostream& stream, bool header){
+      // initialise vector of H
+      std::vector<double> H(&sim::H_vec[0], &sim::H_vec[0]+3);
+      stream << stats::material_magnetization.output_normalized_magnetization_dot_product(H,header);
+   }
 
-	// Output Function 27 - with Header
-	void total_energy(std::ostream& stream, bool header){
+   // Output Function 27 - with Header
+   void total_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_energy(stats::total,header);
-	}
+   }
 
-	// Output Function 28 - with Header
-	void mean_total_energy(std::ostream& stream, bool header){
+   // Output Function 28 - with Header
+   void mean_total_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_mean_energy(stats::total,header);
-	}
+   }
 
-	// Output Function 29 - with Header
-	void total_anisotropy_energy(std::ostream& stream, bool header){
+   // Output Function 29 - with Header
+   void total_anisotropy_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_energy(stats::anisotropy,header);
-	}
+   }
 
-	// Output Function 30 - with Header
-	void mean_total_anisotropy_energy(std::ostream& stream, bool header){
+   // Output Function 30 - with Header
+   void mean_total_anisotropy_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_mean_energy(stats::anisotropy,header);
-	}
+   }
 
-	// Output Function 31
-	/*void total_cubic_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::cubic_anisotropy, stats::total);
-	}
+   // Output Function 31
+   /*void total_cubic_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::cubic_anisotropy, stats::total);
+   }
 
-	// Output Function 32
-	void mean_total_cubic_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::cubic_anisotropy, stats::mean);
-	}
+   // Output Function 32
+   void mean_total_cubic_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::cubic_anisotropy, stats::mean);
+   }
 
-	// Output Function 33
-	void total_surface_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::surface_anisotropy, stats::total);
-	}
+   // Output Function 33
+   void total_surface_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::surface_anisotropy, stats::total);
+   }
 
-	// Output Function 34
-	void mean_total_surface_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::surface_anisotropy, stats::mean);
-	}*/
+   // Output Function 34
+   void mean_total_surface_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::surface_anisotropy, stats::mean);
+   }*/
 
-	// Output Function 35 - with Header
-	void total_exchange_energy(std::ostream& stream, bool header){
+   // Output Function 35 - with Header
+   void total_exchange_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_energy(stats::exchange,header);
-	}
+   }
 
-	// Output Function 36 - with Header
-	void mean_total_exchange_energy(std::ostream& stream, bool header){
+   // Output Function 36 - with Header
+   void mean_total_exchange_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_mean_energy(stats::exchange,header);
-	}
+   }
 
-	// Output Function 37 - with Header
-	void total_applied_field_energy(std::ostream& stream, bool header){
+   // Output Function 37 - with Header
+   void total_applied_field_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_energy(stats::applied_field,header);
-	}
+   }
 
-	// Output Function 38 - with Header
-	void mean_total_applied_field_energy(std::ostream& stream, bool header){
+   // Output Function 38 - with Header
+   void mean_total_applied_field_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_mean_energy(stats::applied_field,header);
-	}
+   }
 
-	// Output Function 39 - with Header
-	void total_magnetostatic_energy(std::ostream& stream, bool header){
+   // Output Function 39 - with Header
+   void total_magnetostatic_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_energy(stats::magnetostatic,header);
-	}
+   }
 
-	// Output Function 40 - with Header
-	void mean_total_magnetostatic_energy(std::ostream& stream, bool header){
+   // Output Function 40 - with Header
+   void mean_total_magnetostatic_energy(std::ostream& stream, bool header){
       stream << stats::system_energy.output_mean_energy(stats::magnetostatic,header);
-	}
+   }
 
-	// Output Function 41
-	/*void total_so_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::second_order_anisotropy, stats::total);
-	}
+   // Output DMI energy - with Header
+   void total_dmi_energy(std::ostream& stream, bool header){
+      stream << stats::system_energy.output_energy(stats::dmi,header);
+   }
 
-	// Output Function 42
-	void mean_total_so_anisotropy_energy(std::ostream& stream,bool header){
-		stats::output_energy(stream, stats::second_order_anisotropy, stats::mean);
-	}*/
+   // Output mean DMI energy - with Header
+   void mean_total_dmi_energy(std::ostream& stream, bool header){
+      stream << stats::system_energy.output_mean_energy(stats::dmi,header);
+   }
 
-	// Output Function 43 - with Header
-	void height_mvec(std::ostream& stream, bool header){
-		stream << stats::height_magnetization.output_normalized_magnetization(header);
-	}
+   // Output Function 41
+   /*void total_so_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::second_order_anisotropy, stats::total);
+   }
 
-	// Output Function 44 - with Header
-	void material_height_mvec(std::ostream& stream, bool header){
-		stream << stats::material_height_magnetization.output_normalized_magnetization(header);
-	}
+   // Output Function 42
+   void mean_total_so_anisotropy_energy(std::ostream& stream,bool header){
+      stats::output_energy(stream, stats::second_order_anisotropy, stats::mean);
+   }*/
 
-	// Output Function 45 - with Header
-	void height_mvec_actual(std::ostream& stream, bool header){
-		stream << stats::height_magnetization.output_magnetization(header);
-	}
+   // Output Function 43 - with Header
+   void height_mvec(std::ostream& stream, bool header){
+      stream << stats::height_magnetization.output_normalized_magnetization(header);
+   }
 
-	// Output Function 46 - with Header
-	void material_height_mvec_actual(std::ostream& stream, bool header){
-		stream << stats::material_height_magnetization.output_magnetization(header);
-	}
+   // Output Function 44 - with Header
+   void material_height_mvec(std::ostream& stream, bool header){
+      stream << stats::material_height_magnetization.output_normalized_magnetization(header);
+   }
 
-	// Output Function 47 - with Header
-	void fmr_field_strength(std::ostream& stream, bool header){
-		stream << sim::fmr_field << "\t";
-	}
+   // Output Function 45 - with Header
+   void height_mvec_actual(std::ostream& stream, bool header){
+      stream << stats::height_magnetization.output_magnetization(header);
+   }
+
+   // Output Function 46 - with Header
+   void material_height_mvec_actual(std::ostream& stream, bool header){
+      stream << stats::material_height_magnetization.output_magnetization(header);
+   }
+
+   // Output Function 47 - with Header
+   void fmr_field_strength(std::ostream& stream, bool header){
+      stream << sim::fmr_field << "\t";
+   }
 
    // Output Function 48 - with Header
-	void mean_mvec(std::ostream& stream, bool header){
-		stream << stats::system_magnetization.output_normalized_mean_magnetization(header);
-	}
+   void mean_mvec(std::ostream& stream, bool header){
+      stream << stats::system_magnetization.output_normalized_mean_magnetization(header);
+   }
 
    // Output Function 49 - with Header
-	void mat_mean_mvec(std::ostream& stream, bool header){
-		stream << stats::material_magnetization.output_normalized_mean_magnetization(header);
-	}
+   void mat_mean_mvec(std::ostream& stream, bool header){
+      stream << stats::material_magnetization.output_normalized_mean_magnetization(header);
+   }
 
    // Output Function 50 - with Header
    void mean_material_susceptibility(std::ostream& stream, bool header){
-		stream << stats::material_susceptibility.output_mean_susceptibility(sim::temperature,header);
-	}
+      stream << stats::material_susceptibility.output_mean_susceptibility(sim::temperature,header);
+   }
 
    // Output Function 997 - with Header
    void material_binder_cumulant(std::ostream& stream, bool header){
-		stream << stats::material_binder_cumulant.output_binder_cumulant(header);
+      stream << stats::material_binder_cumulant.output_binder_cumulant(header);
    }
 
-	// Output Function 51 - with Header
+   // Output Function 51 - with Header
    void mean_height_magnetisation_length(std::ostream& stream, bool header){
-		stream << stats::height_magnetization.output_mean_magnetization_length(header);
-	}
+      stream << stats::height_magnetization.output_mean_magnetization_length(header);
+   }
 
-	// Output Function 51 - with Header
+   // Output Function 51 - with Header
    void mean_height_magnetisation(std::ostream& stream, bool header){
-		stream << stats::height_magnetization.output_mean_magnetization(header);
-	}
+      stream << stats::height_magnetization.output_mean_magnetization(header);
+   }
 
-	// Output Function 60
-	void MPITimings(std::ostream& stream, bool header){
-		stream << vmpi::AverageComputeTime+vmpi::AverageWaitTime << "\t" << vmpi::AverageComputeTime << "\t" << vmpi::AverageWaitTime;
-		stream << "\t" << vmpi::MaximumComputeTime << "\t" << vmpi::MaximumWaitTime << "\t";
-	}
+   // Output Function 60
+   void MPITimings(std::ostream& stream, bool header){
+      stream << vmpi::AverageComputeTime+vmpi::AverageWaitTime << "\t" << vmpi::AverageComputeTime << "\t" << vmpi::AverageWaitTime;
+      stream << "\t" << vmpi::MaximumComputeTime << "\t" << vmpi::MaximumWaitTime << "\t";
+   }
 
    // Output Function 61 - with Header
    void mean_system_specific_heat(std::ostream& stream, bool header){
@@ -456,6 +467,16 @@ namespace vout{
       stream << stats::material_energy.output_mean_energy(stats::total,header);
    }
 
+   // Output material DMI energy - with Header
+   void material_dmi_energy(std::ostream& stream, bool header){
+      stream << stats::material_energy.output_energy(stats::dmi,header);
+   }
+
+   // Output material mean DMI energy - with Header
+   void material_mean_dmi_energy(std::ostream& stream, bool header){
+      stream << stats::material_energy.output_mean_energy(stats::dmi,header);
+   }
+
    // Output Function 65
    void resistance(std::ostream& stream, bool header){
       stream << generic_output_double("resistance", spin_transport::total_resistance, header);
@@ -468,7 +489,7 @@ namespace vout{
 
    // Output Function 67
    void domain_wall_position(std::ostream& stream, bool header){
-      stream << sim::domain_wall_centre;
+      stream << program::domain_wall_centre;
    }
 
    // Output Function 68
@@ -487,7 +508,7 @@ namespace vout{
          stream << "MS" << "\t";
       }
       else{
-         stream << sim::Ms << "\t";
+         stream << program::Ms << "\t";
       }
    }
 
@@ -497,7 +518,7 @@ namespace vout{
          stream << "x-pos" << "\t";
       }
       else{
-         stream << sim::track_pos_x << "\t";
+         stream << program::track_pos_x << "\t";
       }
    }
 
@@ -507,7 +528,7 @@ namespace vout{
          stream << "z pos" << "\t";
       }
       else{
-         stream << sim::track_pos_z << "\t";
+         stream << program::track_pos_z << "\t";
       }
    }
 

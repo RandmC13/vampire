@@ -3,7 +3,8 @@
 //   This file is part of the VAMPIRE open source package under the
 //   Free BSD licence (see licence file for details).
 //
-//   (c) Andrea Meo, Sarah Jenkins and Richard F L Evans 2020. All rights reserved.
+//   (c) Andrea Meo, Sarah Jenkins and Richard F L Evans 2020.
+//   All rights reserved.
 //
 //------------------------------------------------------------------------------
 //
@@ -65,20 +66,20 @@ namespace dipole{
 
             //std::cout << dipole::atomistic_cutoff <<std::endl;
             // define unitarian distance vectors
-	         const double ex = rx*rij;
-	         const double ey = ry*rij;
-	         const double ez = rz*rij;
+            const double ex = rx*rij;
+            const double ey = ry*rij;
+            const double ez = rz*rij;
 
-	         const double rij3 = (rij*rij*rij); // Angstroms
+            const double rij3 = (rij*rij*rij); // Angstroms
 
             // calculate dipolar matrix for 6 entries because of symmetry
-	         dipole::internal::rij_tensor_xx[lc][cellj] = ((3.0*ex*ex - 1.0)*rij3);
-	         dipole::internal::rij_tensor_xy[lc][cellj] = ( 3.0*ex*ey      )*rij3 ;
-	         dipole::internal::rij_tensor_xz[lc][cellj] = ( 3.0*ex*ez      )*rij3 ;
+            dipole::internal::rij_tensor_xx[lc][cellj] = ((3.0*ex*ex - 1.0)*rij3);
+            dipole::internal::rij_tensor_xy[lc][cellj] = ( 3.0*ex*ey      )*rij3 ;
+            dipole::internal::rij_tensor_xz[lc][cellj] = ( 3.0*ex*ez      )*rij3 ;
 
-	         dipole::internal::rij_tensor_yy[lc][cellj] = ((3.0*ey*ey - 1.0)*rij3);
-	         dipole::internal::rij_tensor_yz[lc][cellj] = ( 3.0*ey*ez      )*rij3 ;
-	         dipole::internal::rij_tensor_zz[lc][cellj] = ((3.0*ez*ez - 1.0)*rij3);
+            dipole::internal::rij_tensor_yy[lc][cellj] = ((3.0*ey*ey - 1.0)*rij3);
+            dipole::internal::rij_tensor_yz[lc][cellj] = ( 3.0*ey*ez      )*rij3 ;
+            dipole::internal::rij_tensor_zz[lc][cellj] = ((3.0*ez*ez - 1.0)*rij3);
 
          }
 

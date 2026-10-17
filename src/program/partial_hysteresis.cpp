@@ -36,9 +36,6 @@ namespace program{
 ///          As with the full hysteresis loop, the minimum resolution of the applied field
 ///          increment is 1 uT.
 ///
-/// @section License
-/// Use of this code, either in source or compiled form, is subject to license from the authors.
-/// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2010. All Rights Reserved.
 ///
 /// @section Information
 /// @author  Richard Evans, richard.evans@york.ac.uk
@@ -48,8 +45,8 @@ namespace program{
 /// @return EXIT_SUCCESS
 ///
 /// @internal
-///	Created:		02/12/2013
-///	Revision:	  ---
+///   Created:    02/12/2013
+///   Revision:     ---
 ///=====================================================================================
 ///
 void partial_hysteresis_loop(){

@@ -16,6 +16,7 @@
 #include "vio.hpp"
 #include "grains.hpp"
 #include "gpu.hpp"
+#include "montecarlo.hpp"
 #include "sim.hpp"
 #include "stats.hpp"
 
@@ -84,11 +85,11 @@ void write_grain_file(){
                   break;
                //------------------------------------------
                case grain::constraint_phi:
-                  zgrain << generic_output_double("con_phi",sim::constraint_phi,header);
+                  zgrain << generic_output_double("con_phi",montecarlo::constraint_phi,header);
                   break;
                //------------------------------------------
                case grain::constraint_theta:
-                  zgrain << generic_output_double("con_theta",sim::constraint_theta,header);
+                  zgrain << generic_output_double("con_theta",montecarlo::constraint_theta,header);
                   break;
                //------------------------------------------
                case grain::magnetisation:
@@ -130,6 +131,14 @@ void write_grain_file(){
                //   // inline function to output grain data
                //   zgrain << stats::grain_specific_heat.output_mean_specific_heat(sim::temperature, header);
                //   break;
+               //------------------------------------------
+               // not implemented for grain output (never added to output list)
+               case grain::mean_spin_temp:
+               case grain::mean_lattice_temp:
+               case grain::SxH2:
+               case grain::SH:
+               case grain::mean_coupling_field_vec:
+                  break;
                //------------------------------------------
 
             } // end of case statement

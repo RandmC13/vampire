@@ -16,12 +16,7 @@
 #include <vector>
 #include <cstdint>
 
-// Load standard forms of fixed-width types (needed for some compilers)
-using std::uint64_t;
-using std::int64_t;
-
 // Vampire headers
-#include "dipole.hpp"
 
 //--------------------------------------------------------------------------------
 // Namespace for variables and functions for dipole module
@@ -67,7 +62,7 @@ namespace dipole{
    //-----------------------------------------------------------------------------
    // Function to unroll cells dipolar field into atomic field
    //-----------------------------------------------------------------------------
-   void calculate_field(const uint64_t sim_time,
+   void calculate_field(const std::uint64_t sim_time,
                         std::vector <double>& x_spin_array, // atomic spin directions
                         std::vector <double>& y_spin_array,
                         std::vector <double>& z_spin_array,

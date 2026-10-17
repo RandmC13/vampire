@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <sstream>
@@ -23,7 +23,7 @@ namespace ltmp{
    //-----------------------------------------------------------------------------
    // Function to process input file parameters for ltmp settings
    //-----------------------------------------------------------------------------
-   bool match_input_parameter(string const key, string const word, string const value, string const unit, int const line){
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
 
       // Check for valid key, if no match return false
       std::string prefix="local-temperature-pulse";
@@ -140,18 +140,14 @@ namespace ltmp{
             line_stream >> z >> ab;
             // check for valid ranges
             if(z < 0.0 || z > 10000.0){
-              terminaltextcolor(RED);
-              std::cerr << "Error on line " << line << " of absorption profile file. Height value " << z << " is outside of valid range (0.0-10000.0 A). Exiting." << std::endl;
-              zlog << zTs() << "Error on line " << line << " of absorption profile file. Height value " << z << " is outside of valid range (0.0-10000.0 A). Exiting." << std::endl;
-              terminaltextcolor(WHITE);
-              err::vexit();
+              std::ostringstream message;
+              message << "Error on line " << line << " of absorption profile file. Height value " << z << " is outside of valid range (0.0-10000.0 A). Exiting.";
+              err::fatal(message.str());
             }
             if(ab < 0.0 || ab > 1.0){
-              terminaltextcolor(RED);
-              std::cerr << "Error on line " << line << " of absorption profile file. Absorption value " << ab << " value is outside of valid range (0.0-1.0). Exiting." << std::endl;
-              zlog << zTs() << "Error on line " << line << " of absorption profile file. Absorption value " << ab << " value is outside of valid range (0.0-1.0). Exiting." << std::endl;
-              terminaltextcolor(WHITE);
-              err::vexit();
+              std::ostringstream message;
+              message << "Error on line " << line << " of absorption profile file. Absorption value " << ab << " value is outside of valid range (0.0-1.0). Exiting.";
+              err::fatal(message.str());
             }
             // everything is safe, so add point to class
             ltmp::absorption_profile.add_point(z,ab);

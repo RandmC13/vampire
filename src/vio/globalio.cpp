@@ -5,7 +5,8 @@
 //
 //   (c) Richard F L Evans and Rory Pond 2016. All rights reserved.
 //
-//   Email: richard.evans@york.ac.uk and rory.pond@york.ac.uk
+//   Email: richard.evans@york.ac.uk
+//          rory.pond@york.ac.uk
 //
 //------------------------------------------------------------------------------
 //
@@ -29,7 +30,7 @@ void terminaltextcolor(enum textcolor color){
 #else
   std::ostringstream fincolor;
   fincolor<< color;
-	std::cout << "\033["<<fincolor.str()<<"m";
-	std::cerr << "\033["<<fincolor.str()<<"m";
+   std::cout << "\033["<<fincolor.str()<<"m";
+   std::cerr << "\033["<<fincolor.str()<<"m";
 #endif
 }

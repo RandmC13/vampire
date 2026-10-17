@@ -11,6 +11,7 @@
 //
 
 // C++ standard library headers
+#include <sstream>
 
 // Vampire headers
 #include "errors.hpp"
@@ -27,12 +28,12 @@ namespace unitcell{
    //----------------------------------------------------------------------------
    void initialise(unit_cell_t & unit_cell){
 
-   	// check for read-in of unit cell
-   	std::string blank="";
-   	if(uc::internal::unit_cell_filename.c_str()!=blank){
-   		uc::internal::read_unit_cell(unit_cell, uc::internal::unit_cell_filename);
-   		return;
-   	}
+      // check for read-in of unit cell
+      std::string blank="";
+      if(uc::internal::unit_cell_filename.c_str()!=blank){
+         uc::internal::read_unit_cell(unit_cell, uc::internal::unit_cell_filename);
+         return;
+      }
 
       //------------------------------------------------------------------------
       // Determine which unit cell to build
@@ -58,11 +59,9 @@ namespace unitcell{
       else if(uc::internal::crystal_structure == "SmFeN"              ) uc::internal::build_SmFeN(                  unit_cell );
       // Otherwise print an error to user
       else{
-         terminaltextcolor(RED);
-         std::cerr << "Error: Unknown crystal_type "<< uc::internal::crystal_structure << " found during unit cell initialisation. Exiting." << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Error: Unknown crystal_type "<< uc::internal::crystal_structure << " found during unit cell initialisation. Exiting." << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "Error: Unknown crystal_type " << uc::internal::crystal_structure << " found during unit cell initialisation. Exiting.";
+         err::fatal(message.str());
       }
 
       // optionally write generated unit cell file to disk
