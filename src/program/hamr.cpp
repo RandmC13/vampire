@@ -36,8 +36,8 @@
 /// @version 1.0
 /// @date    10/06/2011
 /// @internal
-///	Created:		10/06/2011
-///	Revision:	Andrea Meo, Feb 2022
+///   Created:    10/06/2011
+///   Revision:   Andrea Meo, Feb 2022
 ///=====================================================================================
 ///
 
@@ -75,8 +75,8 @@ namespace program {
 /// @date    10/06/2011
 ///
 /// @internal
-///	Created:		10/06/2011
-///	Revision:	Andrea Meo, 2022
+///   Created:    10/06/2011
+///   Revision:   Andrea Meo, 2022
 ///=====================================================================================
 ///
 void hamr() {
