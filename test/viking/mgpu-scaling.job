@@ -38,7 +38,7 @@ bin=$MGPU/scaling/bin-$partition
 mkdir -p $bin
 for pr in dp sp; do
    make -C $src clean > /dev/null
-   make -C $src -j16 cuda-multigpu CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}" > $bin/build-$pr.log 2>&1 \
+   make -C $src -j$(nproc) cuda-multigpu CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}" > $bin/build-$pr.log 2>&1 \
       || { tail -n 30 $bin/build-$pr.log; exit 1; }
    mv $src/vampire-cuda-multigpu $bin/vampire-mgpu-$pr
 done
@@ -70,7 +70,7 @@ for layout in "${layouts[@]}"; do
             run=$case-$pr-np$n-ppn$ppn-r$repeat
             dir=$runs/$run
             rm -rf $dir; mkdir -p $dir
-            cp $src/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
+            cp $src/developers/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
             if [[ $case == *@* ]]; then
                size=${case#*@}
                sed -i -e "s/^dimensions:system-size-x.*/dimensions:system-size-x = ${size%x*} !nm/" \

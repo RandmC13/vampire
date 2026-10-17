@@ -10,7 +10,7 @@
 #   Free BSD licence (see licence file for details).
 #
 #------------------------------------------------------------------------------
-# Profiles the whole hamr-perf run with test/validation/profile_gpu.sh
+# Profiles the whole hamr-perf run with developers/test/validation/profile_gpu.sh
 # (Nsight Systems plus an Nsight Compute attempt) in double and single
 # precision for the "after" version, on the GPU of the partition it is submitted to (--partition=gpu or
 # gh). Archives go to $WORK/profiles/<partition>/.
@@ -29,8 +29,8 @@ echo "commit: $(awk '$1 == "after" { print $2 }' $WORK/commits.txt)" | tee $dest
 # build for the GPU in this node (the variable is passed to make as an override)
 export MAKEFLAGS="CUDA_ARCH=-arch=native"
 for pr in dp sp; do
-   NCU=1 NSYS_DELAY=0 NSYS_DURATION=3600 JOBS=$(nproc) $src/test/validation/profile_gpu.sh hamr-perf $pr
+   NCU=1 NSYS_DELAY=0 NSYS_DURATION=3600 $src/developers/test/validation/profile_gpu.sh hamr-perf $pr
 done
-mv $src/test/validation/results/*.tar.gz $dest/
+mv $src/developers/test/validation/results/*.tar.gz $dest/
 rm -rf $src
 ls -l $dest

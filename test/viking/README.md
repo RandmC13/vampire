@@ -44,7 +44,7 @@ The multi-GPU version (`make cuda-multigpu`, one MPI rank per GPU) is checked an
 which submits, on two A40 nodes (6 GPUs; `NODES` changes the number of nodes) and one H100
 node (2 GPUs):
 
-- `mgpu-check.job`: `test/validation/mgpu_check.sh` on 1, 2, one node's and all GPUs
+- `mgpu-check.job`: `developers/test/validation/mgpu_check.sh` on 1, 2, one node's and all GPUs
   (bit-identical spins on any number of GPUs, comparison with the CPU versions)
 - `mgpu-scaling.job` (after the check succeeded): strong scaling of `hamr-perf` and
   `thermal-perf` at 100 x 100 and 200 x 200 nm, and weak scaling of `thermal-perf` at

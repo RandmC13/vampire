@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -14,12 +14,11 @@
 #include "cuda.hpp"
 #include "mgpu.hpp"
 #include "errors.hpp"
-#include "vopencl.hpp"
 
 namespace gpu{
 
    //----------------------------------------------------------------------------------
-   // Function to call correct de-initialization function depending on cuda,opencl etc
+   // Function to call correct de-initialization function depending on the backend (cuda)
    //----------------------------------------------------------------------------------
    void finalize(){
 
@@ -29,8 +28,6 @@ namespace gpu{
 
       #ifdef CUDA
          vcuda::finalize();
-      #elif OPENCL
-         vopencl::finalize();
       #endif
 
       return;

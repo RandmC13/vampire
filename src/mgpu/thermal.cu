@@ -1,9 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-//-----------------------------------------------------------------------------
+//   (c) S Jenkins 2026. All rights reserved.
+//
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <cstdint>
@@ -193,7 +195,7 @@ namespace internal{
       const uint64_t step = noise_step++;
 
       // HAMR simulation: laser profile and head field, or the global temperature with the laser off
-      if(::program::program == 7){
+      if(::program::program == ::program::program_t::hamr_simulation){
          if(::hamr::head_laser_on){
             const cu::cu_real_t Tmin = sim::Tmin;
             const cu::cu_real_t DeltaT = sim::Tmax - sim::Tmin;

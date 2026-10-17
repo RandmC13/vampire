@@ -10,6 +10,7 @@
 
 #ifdef MPICF
 // Standard Libraries
+#include "constants.hpp"
 #include <cmath>
 #include <math.h>
 #include <cstdlib>
@@ -102,15 +103,13 @@ void lsf_mc_parallel_init(std::vector<double> &x, // atomic coordinates
    int num_atoms_in_octants = 0;
    for(int i=0; i< 8; i++) num_atoms_in_octants += internal::c_octants[i].size();
    if(num_atoms_in_octants != catoms){
-      std::cerr << "Programmer error: missing atoms in core octants in parallel monte carlo - LSF initialisation" << std::endl;
-      err::vexit();
+      err::fatal("Programmer error: missing atoms in core octants in parallel monte carlo - LSF initialisation");
    }
    // boundary atoms
    num_atoms_in_octants = 0;
    for(int i=0; i< 8; i++) num_atoms_in_octants += internal::b_octants[i].size();
    if(num_atoms_in_octants != batoms){
-      std::cerr << "Programmer error: missing atoms in boundary octants in parallel monte carlo - LSF initialisation" << std::endl;
-      err::vexit();
+      err::fatal("Programmer error: missing atoms in boundary octants in parallel monte carlo - LSF initialisation");
    }
 
    // set flag to indicate that parallel LSF-MC has been initialised
@@ -167,7 +166,7 @@ void lsf_mc_step_parallel(std::vector<double> &x_spin_array,
       double alpha = internal::temperature_rescaling_alpha[m];
       double Tc = internal::temperature_rescaling_Tc[m];
       double rescaled_temperature = sim::temperature < Tc ? Tc*pow(sim::temperature/Tc,alpha) : sim::temperature;
-      rescaled_material_kBTBohr[m] = 9.27400915e-24/(rescaled_temperature*1.3806503e-23);
+      rescaled_material_kBTBohr[m] = constants::muB/(rescaled_temperature*constants::kB);
       sigma_array[m] = rescaled_temperature < 1.0 ? 0.02 : pow(1.0/rescaled_material_kBTBohr[m],0.2)*0.08;
    }
 
@@ -177,7 +176,7 @@ void lsf_mc_step_parallel(std::vector<double> &x_spin_array,
    // Initialise LSF-MC
    if(montecarlo::mc_set==false) montecarlo::mcinit();
 
-	// loop over all octants
+   // loop over all octants
    for(int octant = 0; octant < 8; octant++) {
 
       int nmoves = internal::c_octants[octant].size();
@@ -192,52 +191,52 @@ void lsf_mc_step_parallel(std::vector<double> &x_spin_array,
          // add one to number of moves counter
          statistics_moves+=1.0;
 
-      	// pick random atom in octant
-      	atom = internal::c_octants[octant][int(nmoves*mtrandom::grnd())];
+         // pick random atom in octant
+         atom = internal::c_octants[octant][int(nmoves*mtrandom::grnd())];
 
-      	// get material id
-      	const int imaterial=type_array[atom];
+         // get material id
+         const int imaterial=type_array[atom];
 
          // Calculate range for move
          internal::delta_angle=sigma_array[imaterial];
 
-      	// Save old spin position
-      	internal::Sold[0] = x_spin_array[atom];
-      	internal::Sold[1] = y_spin_array[atom];
-      	internal::Sold[2] = z_spin_array[atom];
+         // Save old spin position
+         internal::Sold[0] = x_spin_array[atom];
+         internal::Sold[1] = y_spin_array[atom];
+         internal::Sold[2] = z_spin_array[atom];
 
          // Make LSF-Monte Carlo move
          mc_transverse(internal::Sold, internal::Snew, montecarlo::internal::adaptive_sigma);
 
-      	// Calculate current energy
-      	Eold = sim::calculate_spin_energy(atom);
+         // Calculate current energy
+         Eold = sim::calculate_spin_energy(atom);
 
-      	// Copy new spin position
-      	x_spin_array[atom] = internal::Snew[0];
+         // Copy new spin position
+         x_spin_array[atom] = internal::Snew[0];
          y_spin_array[atom] = internal::Snew[1];
-      	z_spin_array[atom] = internal::Snew[2];
+         z_spin_array[atom] = internal::Snew[2];
 
-      	// Calculate new energy
-      	Enew = sim::calculate_spin_energy(atom);
+         // Calculate new energy
+         Enew = sim::calculate_spin_energy(atom);
 
-      	// Calculate difference in Joules/mu_B
-      	DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*1.07828231e23; //1/9.27400915e-24
+         // Calculate difference in Joules/mu_B
+         DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*constants::i_muB; //1/constants::muB
 
-      	// Check for lower energy state and accept unconditionally
-      	if(DE<0) continue;
-      	// Otherwise evaluate probability for move
-      	else{
-      		if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
-      		// If rejected reset spin coordinates and continue
-      		else{
-      			x_spin_array[atom] = internal::Sold[0];
-      			y_spin_array[atom] = internal::Sold[1];
-      			z_spin_array[atom] = internal::Sold[2];
+         // Check for lower energy state and accept unconditionally
+         if(DE<0) continue;
+         // Otherwise evaluate probability for move
+         else{
+            if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
+            // If rejected reset spin coordinates and continue
+            else{
+               x_spin_array[atom] = internal::Sold[0];
+               y_spin_array[atom] = internal::Sold[1];
+               z_spin_array[atom] = internal::Sold[2];
                // add one to rejection counter
                statistics_reject += 1.0;
-      			continue;
-      		}
-      	}
+               continue;
+            }
+         }
       }
 
       // Finish non-blocking data send/receive
@@ -252,53 +251,53 @@ void lsf_mc_step_parallel(std::vector<double> &x_spin_array,
          // add one to number of moves counter
          statistics_moves+=1.0;
 
-   		// pick atom
-   		atom = internal::b_octants[octant][int(nmoves*mtrandom::grnd())];
+         // pick atom
+         atom = internal::b_octants[octant][int(nmoves*mtrandom::grnd())];
 
-   		// get material id
-   		const int imaterial=type_array[atom];
+         // get material id
+         const int imaterial=type_array[atom];
 
          // Calculate range for move
          internal::delta_angle=sigma_array[imaterial];
 
-   		// Save old spin position
-   		internal::Sold[0] = x_spin_array[atom];
-   		internal::Sold[1] = y_spin_array[atom];
-   		internal::Sold[2] = z_spin_array[atom];
+         // Save old spin position
+         internal::Sold[0] = x_spin_array[atom];
+         internal::Sold[1] = y_spin_array[atom];
+         internal::Sold[2] = z_spin_array[atom];
 
          // Make LSF-Monte Carlo move
          mc_transverse(internal::Sold, internal::Snew, montecarlo::internal::adaptive_sigma);
 
-   		// Calculate current energy
-   		Eold = sim::calculate_spin_energy(atom);
+         // Calculate current energy
+         Eold = sim::calculate_spin_energy(atom);
 
-   		// Copy new spin position
-   		x_spin_array[atom] = internal::Snew[0];
-   		y_spin_array[atom] = internal::Snew[1];
-   		z_spin_array[atom] = internal::Snew[2];
+         // Copy new spin position
+         x_spin_array[atom] = internal::Snew[0];
+         y_spin_array[atom] = internal::Snew[1];
+         z_spin_array[atom] = internal::Snew[2];
 
-   		// Calculate new energy
-   		Enew = sim::calculate_spin_energy(atom);
+         // Calculate new energy
+         Enew = sim::calculate_spin_energy(atom);
 
-   		// Calculate difference in Joules/mu_B
-   		DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*1.07828231e23; //1/9.27400915e-24
+         // Calculate difference in Joules/mu_B
+         DE = (Enew-Eold)*internal::mu_s_SI[imaterial]*constants::i_muB; //1/constants::muB
 
-   		// Check for lower energy state and accept unconditionally
-   		if(DE<0) continue;
-   		// Otherwise evaluate probability for move
-   		else{
-   			if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
-   			// If rejected reset spin coordinates and continue
-   			else{
-   				x_spin_array[atom] = internal::Sold[0];
-   				y_spin_array[atom] = internal::Sold[1];
-   				z_spin_array[atom] = internal::Sold[2];
+         // Check for lower energy state and accept unconditionally
+         if(DE<0) continue;
+         // Otherwise evaluate probability for move
+         else{
+            if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
+            // If rejected reset spin coordinates and continue
+            else{
+               x_spin_array[atom] = internal::Sold[0];
+               y_spin_array[atom] = internal::Sold[1];
+               z_spin_array[atom] = internal::Sold[2];
                // add one to rejection counter
                statistics_reject += 1.0;
-   				continue;
-   			}
-   		}
-   	}
+               continue;
+            }
+         }
+      }
 
       // Swap timers compute -> wait
       vmpi::TotalComputeTime+=vmpi::SwapTimer(vmpi::ComputeTime, vmpi::WaitTime);

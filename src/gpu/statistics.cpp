@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -13,7 +13,6 @@
 #include "gpu.hpp"
 #include "cuda.hpp"
 #include "errors.hpp"
-#include "vopencl.hpp"
 
 namespace gpu{
 
@@ -26,8 +25,6 @@ namespace gpu{
 
          #ifdef CUDA
             vcuda::stats::update();
-         #elif OPENCL
-            vopencl::stats::update();
          #endif
 
          return;
@@ -46,8 +43,6 @@ namespace gpu{
 
          #ifdef CUDA
             vcuda::stats::get();
-         #elif OPENCL
-            vopencl::stats::get();
          #endif
 
          return;
@@ -60,8 +55,6 @@ namespace gpu{
 
          #ifdef CUDA
             vcuda::stats::reset();
-         #elif OPENCL
-            vopencl::stats::reset();
          #endif
 
          return;

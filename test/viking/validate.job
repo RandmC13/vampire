@@ -12,7 +12,7 @@
 #   Free BSD licence (see licence file for details).
 #
 #------------------------------------------------------------------------------
-# Runs the physics validation suite (test/validation/run_gpu_suite.sh: double
+# Runs the physics validation suite (developers/test/validation/run_gpu_suite.sh: double
 # and single precision, statistics on GPU and CPU, CPU code path, NaN scan) on
 # the GPU of the partition it is submitted to (--partition=gpu or gpuplus),
 # built for that GPU, using the "after" sources from submit.sh.
@@ -36,7 +36,7 @@ echo "commit: $(awk '$1 == "after" { print $2 }' $WORK/commits.txt)" | tee $dest
 src=$WORK/validate-$SLURM_JOB_ID
 rm -rf $src; cp -r $WORK/src-after $src
 export MAKEFLAGS="CUDA_ARCH=-arch=native"   # passed to make as an override
-$src/test/validation/run_gpu_suite.sh viking-$partition
-mv $src/test/validation/results/gpu-suite-*.tar.gz $dest/
+$src/developers/test/validation/run_gpu_suite.sh viking-$partition
+mv $src/developers/test/validation/results/gpu-suite-*.tar.gz $dest/
 rm -rf $src
 ls -l $dest

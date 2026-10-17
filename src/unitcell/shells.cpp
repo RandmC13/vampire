@@ -34,8 +34,8 @@ struct shell_t{
 
 // comparison function
 bool compare(shell_t first, shell_t second){
-	if( first.range < second.range) return true;
-	else return false;
+   if( first.range < second.range) return true;
+   else return false;
 }
 
 //------------------------------------------------------------------------
@@ -70,8 +70,7 @@ void unitcell::exchange_template_t::find_shells(){
    double current_range = 0.0;
    if(interaction_list.size() > 0) current_range = interaction_list[0].range; // updating value of shell range
    else{
-      std::cerr << "Programmer error!: Interaction list contains no atoms causing seg fault in shell calculation!" << std::endl;
-      err::vexit();
+      err::fatal("Programmer error!: Interaction list contains no atoms causing seg fault in shell calculation!");
    }
 
    std::vector<int> shell_count(1,0); // list of number of neighbours in each shell

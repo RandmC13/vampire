@@ -43,7 +43,7 @@ mkdir -p $WORK/results/$partition
 rm -rf $dir; mkdir -p $dir
 
 # inputs always come from the newer checkout so both versions run the same case
-cp $REPO/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
+cp $REPO/developers/test/validation/cases/${case%@*}/* $dir/; rm -f $dir/case.json
 if [[ $case == *@* ]]; then
    size=${case#*@}
    sed -i -e "s/^dimensions:system-size-x.*/dimensions:system-size-x = $size !nm/" \

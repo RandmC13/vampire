@@ -1,15 +1,16 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
 // Vampire headers
+#include "program.hpp"
 #include "stats.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
@@ -297,6 +298,20 @@ namespace stats{
             else mask[atom] = material_type_array[atom];
          }
          stats::material_torque.set_mask(num_materials+1,mask,magnetic_moment_array);
+      }
+
+      //------------------------------------------------------------------------
+      // warn that spin temperature excludes the HAMR applied field, which is
+      // calculated together with the thermal field in hamr::fields()
+      //------------------------------------------------------------------------
+      if(program::program == program::program_t::hamr_simulation && (stats::calculate_system_spin_temp || stats::calculate_grain_spin_temp || stats::calculate_material_spin_temp)){
+         const std::string message = "Warning - spin temperature in the HAMR program does not include the HAMR applied field (only spin-dependent and non-thermal external fields)";
+         if(vmpi::my_rank == 0){
+            terminaltextcolor(YELLOW);
+            std::cerr << message << std::endl;
+            terminaltextcolor(WHITE);
+         }
+         zlog << zTs() << message << std::endl;
       }
 
       //------------------------------------------------------------------------

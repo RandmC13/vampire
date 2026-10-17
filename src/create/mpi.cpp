@@ -15,6 +15,7 @@
 #include <list>
 #include <vector>
 #include <fstream>
+#include <sstream>
 
 // Vampire headers
 #include "atoms.hpp"
@@ -325,7 +326,7 @@ namespace create{
          std::vector<int> recv_mpi_uc_id_array(num_halo_atoms,0);
 
          // Pack up data for sending
-         int counter=0;	// array index
+         int counter=0; // array index
 
          /* for(int cpu=0;cpu<vmpi::num_processors;cpu++){
          if(cpu!=vmpi::my_rank){
@@ -340,7 +341,7 @@ namespace create{
          send_mpi_atom_supercell_array[3*counter+1] = catom_array[atom].scy;
          send_mpi_atom_supercell_array[3*counter+2] = catom_array[atom].scz;
          send_material_array[counter]  = catom_array[atom].material;
-         send_cpuid_array[counter]  	= vmpi::my_rank; //catom_array[atom].mpi_cpu;
+         send_cpuid_array[counter]     = vmpi::my_rank; //catom_array[atom].mpi_cpu;
          send_mpi_atom_num_array[counter] = atom;
          send_mpi_uc_id_array[counter] = catom_array[atom].uc_id;
          counter++;
@@ -449,9 +450,6 @@ namespace create{
    ///
    /// @details Sets atom CPU ID for replicated data decomposition
    ///
-   /// @section License
-   /// Use of this code, either in source or compiled form, is subject to license from the authors.
-   /// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2011. All Rights Reserved.
    ///
    /// @section Information
    /// @author  Richard Evans, richard.evans@york.ac.uk
@@ -461,8 +459,8 @@ namespace create{
    /// @return EXIT_SUCCESS
    ///
    /// @internal
-   ///	Created:		15/03/2011
-   ///	Revision:	  ---
+   ///   Created:    15/03/2011
+   ///   Revision:     ---
    ///=====================================================================================
    ///
    int set_replicated_data(std::vector<cs::catom_t> & catom_array){
@@ -473,10 +471,7 @@ namespace create{
       // check for num_atoms > num_CPUS
       const int catom_size = catom_array.size();
       if( catom_size < vmpi::num_processors ){
-         terminaltextcolor(RED);
-         std::cerr << "Error! - number of atoms is less than number of CPUs - replicated data parallelisation is not possible!" << std::endl;
-         terminaltextcolor(WHITE);
-         err::vexit();
+         err::fatal("Error! - number of atoms is less than number of CPUs - replicated data parallelisation is not possible!");
       }
 
       // arrays to store atom ranges on each CPU
@@ -523,9 +518,6 @@ namespace create{
    ///          Non-interacting halo atoms (catom_array[atom].mpi_type=3) are marked for
    ///          deletion and removed after sorting atoms to core | boundary | halo
    ///
-   /// @section License
-   /// Use of this code, either in source or compiled form, is subject to license from the authors.
-   /// Copyright \htmlonly &copy \endhtmlonly Richard Evans, 2009-2011. All Rights Reserved.
    ///
    /// @section Information
    /// @author  Richard Evans, richard.evans@york.ac.uk
@@ -535,8 +527,8 @@ namespace create{
    /// @return EXIT_SUCCESS
    ///
    /// @internal
-   ///	Created:		15/03/2011
-   ///	Revision:	  ---
+   ///   Created:    15/03/2011
+   ///   Revision:     ---
    ///=====================================================================================
    ///
    void identify_mpi_boundary_atoms(std::vector<cs::catom_t>& catom_array, neighbours::list_t& cneighbourlist){
@@ -643,9 +635,9 @@ namespace create{
          mpi_type_list.resize(0);
 
          //if(vmpi::my_rank==1){
-         //	for (unsigned int atom=0;atom<catom_array.size();atom++){
-         //		std::cout << atom << "\t" << mpi_type_vec[atom].mpi_type << "\t" << mpi_type_vec[atom].atom_number << std::endl;
-         //	}
+         // for (unsigned int atom=0;atom<catom_array.size();atom++){
+         //    std::cout << atom << "\t" << mpi_type_vec[atom].mpi_type << "\t" << mpi_type_vec[atom].atom_number << std::endl;
+         // }
          //}
 
          //Calculate number of atoms excluding non-interacting halo atoms
@@ -671,14 +663,14 @@ namespace create{
 
          // Print out neighbourlist before sorting
          //for (unsigned int atom=0;atom<catom_array.size();atom++){
-         //	std::cout << atom << " MPI_t: " <<  catom_array[atom].mpi_type << "NL: ";
-         //	for(int i=0;i<cneighbourlist[atom].size();i++) std::cout << cneighbourlist[atom][i].nn << "\t";
-         //	std::cout << " on rank " << vmpi::my_rank << std::endl;
+         // std::cout << atom << " MPI_t: " <<  catom_array[atom].mpi_type << "NL: ";
+         // for(int i=0;i<cneighbourlist[atom].size();i++) std::cout << cneighbourlist[atom][i].nn << "\t";
+         // std::cout << " on rank " << vmpi::my_rank << std::endl;
          //}
 
          //for (unsigned int atom=0;atom<catom_array.size();atom++){
          //if(vmpi::my_rank==1){
-         //	std::cout << atom << " "<< inv_mpi_type_vec[atom] << " mpi type " << catom_array[atom].mpi_type << std::endl;
+         // std::cout << atom << " "<< inv_mpi_type_vec[atom] << " mpi type " << catom_array[atom].mpi_type << std::endl;
          //}
          //}
          //std::cout << vmpi::num_core_atoms << " " << vmpi::num_core_atoms+vmpi::num_bdry_atoms << " " << vmpi::num_core_atoms+vmpi::num_bdry_atoms + vmpi::num_halo_atoms << std::endl;
@@ -783,11 +775,11 @@ namespace create{
 
          // Print out final neighbourlist
          //for (unsigned int atom=0;atom<new_num_atoms;atom++){
-         //	std::cout << "Atom: " << atom << " MPI_type: " << catom_array[atom].mpi_type;
-         //	for(unsigned int nn=0;nn<cneighbourlist[atom].size();nn++){
-         //		std::cout << "\t" << cneighbourlist[atom][nn].nn;
-         //	}
-         //	std::cout << std::endl;
+         // std::cout << "Atom: " << atom << " MPI_type: " << catom_array[atom].mpi_type;
+         // for(unsigned int nn=0;nn<cneighbourlist[atom].size();nn++){
+         //    std::cout << "\t" << cneighbourlist[atom][nn].nn;
+         // }
+         // std::cout << std::endl;
          //}
 
          return;
@@ -940,10 +932,9 @@ namespace create{
             int old_atom_num=catom_array[atom].mpi_old_atom_number;
             //std::cout << "Rank: " << vmpi::my_rank << " Old: " << old_atom_num << " New: " << atom << " Highest: " << highest << std::endl;
             if((old_atom_num>highest) || (old_atom_num < 0)){ // || (old_atom_num>catom_array.size())){
-               terminaltextcolor(RED);
-               std::cerr << "Old atom number out of range! on rank " << vmpi::my_rank << "; Old atom number: " << old_atom_num << " ; New atom number: " << atom << std::endl;
-               terminaltextcolor(WHITE);
-               err::vexit();
+               std::ostringstream message;
+               message << "Old atom number out of range! on rank " << vmpi::my_rank << "; Old atom number: " << old_atom_num << " ; New atom number: " << atom;
+               err::fatal(message.str());
             }
             inv_atom_translation_array[old_atom_num]=atom;
          }

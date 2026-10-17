@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) R F L Evans and P Chureemart 2014. All rights reserved.
+//   (c) R F L Evans and P Chureemart 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <vector>
@@ -28,7 +28,7 @@ namespace st{
                                   const std::vector<double>& z_spin_array,
                                   const std::vector<int>& atom_type_array,
                                   const std::vector<double>& mu_s_array){
-       
+
       if(st::internal::enabled==false) return;
 
 
@@ -61,7 +61,7 @@ namespace st{
                                std::vector<double>& z_total_external_field_array,
                                const int start_index,
                                const int end_index){
-     
+
       if(st::internal::enabled==false) return;
 
 

@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <iostream>
@@ -34,7 +34,7 @@ namespace ltmp{
          // 2/(delta sqrt(pi/ln 2))*0.1, delta = 10 nm, J/m^2 -> mJ/cm^2 (factor 0.1)
          const double two_delta_sqrt_pi_ln_2 = 9394372.787;
          const double pump=ltmp::internal::pump_power*two_delta_sqrt_pi_ln_2*
-   								exp(-four_ln_2*reduced_time*reduced_time)*i_pump_time;
+                           exp(-four_ln_2*reduced_time*reduced_time)*i_pump_time;
 
          const double G  = ltmp::internal::TTG;
          const double Ce = ltmp::internal::TTCe;

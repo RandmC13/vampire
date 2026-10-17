@@ -6,14 +6,11 @@
 mpi_objects =\
 data.o \
 decomposition.o \
-LLGHeun-mpi.o \
-LLGMidpoint-mpi.o \
+interface.o \
 mpi_generic.o \
 mpi_comms.o \
 parallel_rng_seed.o \
-wrapper.o \
-lsf_mpi.o \
-lsf_rk4_mpi.o
+wrapper.o
 
 # Append module objects to global tree
 OBJECTS+=$(addprefix obj/mpi/,$(mpi_objects))

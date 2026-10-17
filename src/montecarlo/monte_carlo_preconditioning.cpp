@@ -13,6 +13,7 @@
 // C++ standard library headers
 
 // Vampire headers
+#include "constants.hpp"
 #include "atoms.hpp"
 #include "material.hpp"
 #include "random.hpp"
@@ -56,7 +57,7 @@ void monte_carlo_preconditioning(){
    // calculate number of steps to calculate
    // Note: In parallel this includes boundary spin leading to
    // spurious edge dynamics
-	const int num_moves = atoms::num_atoms;
+   const int num_moves = atoms::num_atoms;
 
    // Material dependent temperature rescaling unrolled for speed
    std::vector<double> rescaled_material_kBTBohr(mp::num_materials);
@@ -66,12 +67,12 @@ void monte_carlo_preconditioning(){
       double alpha = mp::material[m].temperature_rescaling_alpha;
       double Tc = mp::material[m].temperature_rescaling_Tc;
       double rescaled_temperature = sim::temperature < Tc ? Tc*pow(sim::temperature/Tc,alpha) : sim::temperature;
-      rescaled_material_kBTBohr[m] = 9.27400915e-24/(rescaled_temperature*1.3806503e-23);
+      rescaled_material_kBTBohr[m] = constants::muB/(rescaled_temperature*constants::kB);
       sigma_array[m] = rescaled_temperature < 1.0 ? 0.02 : pow(1.0/rescaled_material_kBTBohr[m],0.2)*0.08;
-      moment_array[m] = mp::material[m].mu_s_SI/9.27400915e-24;
+      moment_array[m] = mp::material[m].mu_s_SI/constants::muB;
    }
 
-	for(int s = 0; s < sim::num_monte_carlo_preconditioning_steps; s++){
+   for(int s = 0; s < sim::num_monte_carlo_preconditioning_steps; s++){
 
       //std::cout << s << std::endl;
       if( (s % (sim::num_monte_carlo_preconditioning_steps/10)) == 0) std::cout << "." << std::flush;
@@ -79,13 +80,13 @@ void monte_carlo_preconditioning(){
       // loop over natoms to form a single Monte Carlo step
       for(int i = 0; i < num_moves; i++){
 
-   		// pick atom
-   		const int atom = int(num_moves * mtrandom::grnd());
+         // pick atom
+         const int atom = int(num_moves * mtrandom::grnd());
 
          //std::cout << atom << std::endl;
 
-   		// get material id
-   		const int imaterial = atoms::type_array[atom];
+         // get material id
+         const int imaterial = atoms::type_array[atom];
 
          //std::cout << "here-2 " << imaterial << std::endl;
 
@@ -94,10 +95,10 @@ void monte_carlo_preconditioning(){
 
          //std::cout << "here-1 " << sim::mc_delta_angle << std::endl;
 
-   		// Save old spin position
-   		internal::Sold[0] = atoms::x_spin_array[atom];
-   		internal::Sold[1] = atoms::y_spin_array[atom];
-   		internal::Sold[2] = atoms::z_spin_array[atom];
+         // Save old spin position
+         internal::Sold[0] = atoms::x_spin_array[atom];
+         internal::Sold[1] = atoms::y_spin_array[atom];
+         internal::Sold[2] = atoms::z_spin_array[atom];
 
          //std::cout << "here0" << std::endl;
 
@@ -106,38 +107,38 @@ void monte_carlo_preconditioning(){
 
          //std::cout << "here" << std::endl;
 
-   		// Calculate current energy
-   		double old_energy = sim::calculate_spin_energy(atom);
+         // Calculate current energy
+         double old_energy = sim::calculate_spin_energy(atom);
 
-   		// Copy new spin position
-   		atoms::x_spin_array[atom] = internal::Snew[0];
-   		atoms::y_spin_array[atom] = internal::Snew[1];
-   		atoms::z_spin_array[atom] = internal::Snew[2];
+         // Copy new spin position
+         atoms::x_spin_array[atom] = internal::Snew[0];
+         atoms::y_spin_array[atom] = internal::Snew[1];
+         atoms::z_spin_array[atom] = internal::Snew[2];
 
          //std::cout << "here2" << std::endl;
 
 
-   		// Calculate new energy
-   		const double new_energy = sim::calculate_spin_energy(atom);
+         // Calculate new energy
+         const double new_energy = sim::calculate_spin_energy(atom);
 
-   		// Calculate difference in Joules/mu_B
-   		const double DE = (new_energy - old_energy) * moment_array[imaterial];
+         // Calculate difference in Joules/mu_B
+         const double DE = (new_energy - old_energy) * moment_array[imaterial];
 
-   		// Check for lower energy state and accept unconditionally
-   		if(DE<0) continue;
-   		// Otherwise evaluate probability for move
-   		else{
-   			if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
-   			// If rejected reset spin coordinates and continue
-   			else{
-   				atoms::x_spin_array[atom] = internal::Sold[0];
-   				atoms::y_spin_array[atom] = internal::Sold[1];
-   				atoms::z_spin_array[atom] = internal::Sold[2];
-   				continue;
-   			}
-   		}
+         // Check for lower energy state and accept unconditionally
+         if(DE<0) continue;
+         // Otherwise evaluate probability for move
+         else{
+            if(exp(-DE*rescaled_material_kBTBohr[imaterial]) >= mtrandom::grnd()) continue;
+            // If rejected reset spin coordinates and continue
+            else{
+               atoms::x_spin_array[atom] = internal::Sold[0];
+               atoms::y_spin_array[atom] = internal::Sold[1];
+               atoms::z_spin_array[atom] = internal::Sold[2];
+               continue;
+            }
+         }
 
-   	} // end of each MC move
+      } // end of each MC move
 
       // update halo data
       vmpi::mpi_init_halo_swap();

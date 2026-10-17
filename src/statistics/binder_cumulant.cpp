@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
@@ -33,11 +33,7 @@ void binder_cumulant_statistic_t::initialize(stats::magnetization_statistic_t& m
 
    // Check that magnetization statistic is properly initialized
    if(!mag_stat.is_initialized()){
-      terminaltextcolor(RED);
-      std::cerr << "Programmer Error - Uninitialized magnetization statistic passed to binder cumulant statistic - please initialize first." << std::endl;
-      terminaltextcolor(WHITE);
-      zlog << zTs() << "Programmer Error - Uninitialized magnetization statistic passed to binder cumulant statistic - please initialize first." << std::endl;
-      err::vexit();
+      err::fatal("Programmer Error - Uninitialized magnetization statistic passed to binder cumulant statistic - please initialize first.");
    }
 
    // Determine number of magnetization statistics*4
@@ -116,7 +112,7 @@ std::string binder_cumulant_statistic_t::output_binder_cumulant(bool header){
       res.precision(vout::precision);
       if(vout::fixed) res.setf( std::ios::fixed, std::ios::floatfield );
    }
-   vout::fixed_width_output result(res,vout::fw_size); 
+   vout::fixed_width_output result(res,vout::fw_size);
    if(!header){
 
    // determine inverse mean counter and its square

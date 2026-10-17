@@ -3,8 +3,8 @@
 //   This file is part of the VAMPIRE open source package under the
 //   Free BSD licence (see licence file for details).
 //
-//   (c) Jack Collings, Roberto Moreno Ortega, Sam Westmoreland and
-//   Richard Evans 2017. All rights reserved.
+//   (c) Jack Collings, Roberto Moreno Ortega, Sam Westmoreland
+//   and Richard Evans 2017. All rights reserved.
 //
 //   Email: richard.evans@york.ac.uk
 //
@@ -26,9 +26,6 @@
 // Vampire headers
 #include "material.hpp"
 #include "anisotropy.hpp"
-
-// anisotropy module headers
-#include "internal.hpp"
 
 namespace anisotropy{
 
@@ -141,12 +138,12 @@ namespace anisotropy{
             lattice_anis_t lattice_anisotropy; // class containing lattice anisotropy data
 
             bool random_anisotropy; // flag to control random anisotropy by material
-      		bool random_grain_anisotropy; // flag to control random anisotropy by grain
+            bool random_grain_anisotropy; // flag to control random anisotropy by grain
 
             // constructor
             mp_t ( const unsigned int max_materials = 100 ):
                need_rotated_basis(false), // in genetral we do not need a rotated basis
-            	ku2( 0.0 ),       // set initial value of ku2 to zero
+               ku2( 0.0 ),       // set initial value of ku2 to zero
                k2r1( 0.0 ),      // set initial value of k2r1 to zero
                k2r1_odd( 0.0 ),  // set initial value of k2r1_odd to zero
                k2r2( 0.0 ),      // set initial value of k2r2 to zero

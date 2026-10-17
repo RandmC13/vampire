@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2016. All rights reserved.
+//   (c) R F L Evans 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <vector>
@@ -20,40 +20,7 @@ namespace sim{
    //----------------------------------------------------------------------------
    // Shared variables used with main vampire code
    //---------------------------------------------------------------------------
-   integrator_t integrator = llg_heun; // variable to specify integrator
 
-
-   std::vector < double > track_field_x;
-   std::vector < double > track_field_y;
-   std::vector < double > track_field_z;
-
-   double track_Ms = 0.1;
-   double track_bit_width = 800;
-   double track_bit_size = 1000;
-   double track_bit_depth = 600;
-   double cross_track_velocity = 0.0;
-   double down_track_velocity = 0.0;
-   double track_pos_x;
-   double track_pos_z;
-   double Ms;
-
-
-   double initial_down_track_position = 0.0;
-   double initial_cross_track_position = 0.0;
-
-   int track_num_bits_per_track = 1;
-   int track_num_tracks = 1;
-
-   double track_bit_gap = 10.0;
-	 double track_track_gap = 10.0;
-
-   // distance of tracks from read head
-   double track_fly_height = 100.0; // Angstroms
-
-   double LFA_scan_field_step = 0.01;
-   bool LFA = false;
-
-   bool track_ms_file = false;
 
    int num_monte_carlo_preconditioning_steps(0);
 
@@ -62,16 +29,6 @@ namespace sim{
    uint64_t loop_time    = 10000; // loop time steps (hysteresis/temperature loops)
    uint64_t partial_time = 1000; // same as time-step-increment
    uint64_t equilibration_time = 0; // equilibration time steps
-
-   int domain_wall_axis = 0;
-   double domain_wall_position = 0.25;
-   double domain_wall_discretisation = 10;
-   double domain_wall_centre = 0;
-   double domain_wall_width = 10.0;
-   std::vector <bool > anti_PBC(3,false);
-   std::vector < double > domain_wall_second_vector_x(100,0);
-   std::vector < double > domain_wall_second_vector_y(100,0);
-   std::vector < double > domain_wall_second_vector_z(100,1.0);
 
    namespace internal{
 
@@ -102,9 +59,6 @@ namespace sim{
 
       std::vector<double> vcmak;   // voltage controlled anisotropy coefficient
 
-      std::vector<double> lsf_second_order_coefficient;
-      std::vector<double> lsf_fourth_order_coefficient; // LSF coefficients
-      std::vector<double> lsf_sixth_order_coefficient;
 
    } // end of internal namespace
 

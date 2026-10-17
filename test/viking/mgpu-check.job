@@ -10,7 +10,7 @@
 #   Free BSD licence (see licence file for details).
 #
 #------------------------------------------------------------------------------
-# Runs the multi-GPU check (test/validation/mgpu_check.sh) with one GPU per
+# Runs the multi-GPU check (developers/test/validation/mgpu_check.sh) with one GPU per
 # rank on the nodes of the job, submitted by mgpu-submit.sh with --partition,
 # --nodes, --ntasks-per-node and --gres=gpu:<ranks per node>. Rank counts:
 # 1, 2, the ranks of one node and all ranks (e.g. 1 2 3 6 on two A40 nodes).
@@ -23,7 +23,7 @@ dest=$MGPU/check/$partition
 mkdir -p $dest
 cp $MGPU/commit.txt $dest/
 
-JOBS=16 $src/test/validation/mgpu_check.sh $ranks 2>&1 | tee $dest/summary.txt
-mv $src/test/validation/results/mgpu-check-*.tar.gz $dest/
+$src/developers/test/validation/mgpu_check.sh $ranks 2>&1 | tee $dest/summary.txt
+mv $src/developers/test/validation/results/mgpu-check-*.tar.gz $dest/
 rm -rf $src
 ls -l $dest

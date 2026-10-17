@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2018. All rights reserved.
+//   (c) R F L Evans 2018. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <algorithm>
@@ -54,11 +54,9 @@ void energy_statistic_t::set_mask(const int in_mask_size, const std::vector<int>
    // Check that mask values never exceed mask_size
    for(unsigned int atom=0; atom<in_mask.size(); ++atom){
       if(in_mask[atom] > in_mask_size-1){
-         terminaltextcolor(RED);
-         std::cerr << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask "<< in_mask_size << std::endl;
-         err::vexit();
+         std::ostringstream message;
+         message << "Programmer Error - mask id " << in_mask[atom] << " is greater than number of elements for mask " << in_mask_size;
+         err::fatal(message.str());
       }
    }
 
@@ -74,12 +72,14 @@ void energy_statistic_t::set_mask(const int in_mask_size, const std::vector<int>
    anisotropy_energy.resize(in_mask_size, 0.0);
    applied_field_energy.resize(in_mask_size, 0.0);
    magnetostatic_energy.resize(in_mask_size, 0.0);
+   dmi_energy.resize(in_mask_size, 0.0);
 
    mean_total_energy.resize(in_mask_size, 0.0);
    mean_exchange_energy.resize(in_mask_size, 0.0);
    mean_anisotropy_energy.resize(in_mask_size, 0.0);
    mean_applied_field_energy.resize(in_mask_size, 0.0);
    mean_magnetostatic_energy.resize(in_mask_size, 0.0);
+   mean_dmi_energy.resize(in_mask_size, 0.0);
 
    normalisation.resize(in_mask_size, 0.0);
 
@@ -151,6 +151,7 @@ void energy_statistic_t::calculate(const std::vector<double>& sx,  // spin unit 
    std::fill(    anisotropy_energy.begin(),    anisotropy_energy.end(), 0.0 );
    std::fill( applied_field_energy.begin(), applied_field_energy.end(), 0.0 );
    std::fill( magnetostatic_energy.begin(), magnetostatic_energy.end(), 0.0 );
+   std::fill(           dmi_energy.begin(),           dmi_energy.end(), 0.0 );
 
    //---------------------------------------------------------------------------
    // Calculate exchange energy (in Tesla)
@@ -176,6 +177,25 @@ void energy_statistic_t::calculate(const std::vector<double>& sx,  // spin unit 
    // save total energy accounting for factor 1/2 in double summation
    for( int mask_id = 0; mask_id < mask_size; ++mask_id ){
       exchange_energy[mask_id] = 0.5 * exchange_energy[mask_id];
+   }
+
+   //---------------------------------------------------------------------------
+   // Optionally calculate DMI energy (in Tesla). This is a component of the
+   // exchange energy and so is not added to the total energy.
+   //---------------------------------------------------------------------------
+   if(stats::calculate_dmi_energy){
+
+      // loop over all atoms in mask
+      for( int atom = 0; atom < num_atoms; ++atom ){
+         const int mask_id = mask[atom]; // get mask id
+         dmi_energy[mask_id] += exchange::single_spin_dmi_energy(atom, sx[atom], sy[atom], sz[atom]) * mm[atom];
+      }
+
+      // save total energy accounting for factor 1/2 in double summation
+      for( int mask_id = 0; mask_id < mask_size; ++mask_id ){
+         dmi_energy[mask_id] = 0.5 * dmi_energy[mask_id];
+      }
+
    }
 
    //---------------------------------------------------------------------------
@@ -225,6 +245,7 @@ void energy_statistic_t::calculate(const std::vector<double>& sx,  // spin unit 
       MPI_Allreduce(MPI_IN_PLACE,    &anisotropy_energy[0], mask_size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
       MPI_Allreduce(MPI_IN_PLACE, &applied_field_energy[0], mask_size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
       MPI_Allreduce(MPI_IN_PLACE, &magnetostatic_energy[0], mask_size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(MPI_IN_PLACE,           &dmi_energy[0], mask_size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
       MPI_Allreduce(MPI_IN_PLACE,         &total_energy[0], mask_size, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
    #endif
 
@@ -237,6 +258,7 @@ void energy_statistic_t::calculate(const std::vector<double>& sx,  // spin unit 
       mean_anisotropy_energy[mask_id]    += anisotropy_energy[mask_id];
       mean_applied_field_energy[mask_id] += applied_field_energy[mask_id];
       mean_magnetostatic_energy[mask_id] += magnetostatic_energy[mask_id];
+      mean_dmi_energy[mask_id]           += dmi_energy[mask_id];
    }
 
    // increment mean counter
@@ -251,6 +273,7 @@ void energy_statistic_t::calculate(const std::vector<double>& sx,  // spin unit 
          anisotropy_energy[ zero_list[id] ] = 0.0;
       applied_field_energy[ zero_list[id] ] = 0.0;
       magnetostatic_energy[ zero_list[id] ] = 0.0;
+                dmi_energy[ zero_list[id] ] = 0.0;
    }
 
    return;
@@ -299,6 +322,15 @@ const std::vector<double>& energy_statistic_t::get_applied_field_energy(){
 const std::vector<double>& energy_statistic_t::get_magnetostatic_energy(){
 
    return magnetostatic_energy;
+
+}
+
+//------------------------------------------------------------------------------------------------------
+// Function to get const reference for dmi energy data
+//------------------------------------------------------------------------------------------------------
+const std::vector<double>& energy_statistic_t::get_dmi_energy(){
+
+   return dmi_energy;
 
 }
 
@@ -400,6 +432,7 @@ void energy_statistic_t::reset_averages(){
    std::fill(   mean_anisotropy_energy.begin(),    mean_anisotropy_energy.end(), 0.0);
    std::fill(mean_applied_field_energy.begin(), mean_applied_field_energy.end(), 0.0);
    std::fill(mean_magnetostatic_energy.begin(), mean_magnetostatic_energy.end(), 0.0);
+   std::fill(          mean_dmi_energy.begin(),           mean_dmi_energy.end(), 0.0);
 
    // reset data counter
    mean_counter = 0.0;
@@ -450,6 +483,10 @@ std::string energy_statistic_t::output_energy(enum energy_t energy_type,bool hea
 
           case magnetostatic :
              for(int mask_id=0; mask_id<mask_size; ++mask_id) result << magnetostatic_energy[mask_id] * constants::muB;
+             break;
+
+          case dmi :
+             for(int mask_id=0; mask_id<mask_size; ++mask_id) result <<           dmi_energy[mask_id] * constants::muB;
              break;
 
           default :
@@ -506,6 +543,10 @@ std::string energy_statistic_t::output_mean_energy(enum energy_t energy_type,boo
 
           case magnetostatic :
              for(int mask_id=0; mask_id<mask_size; ++mask_id) result << mean_magnetostatic_energy[mask_id] * constants::muB / mean_counter;
+             break;
+
+          case dmi :
+             for(int mask_id=0; mask_id<mask_size; ++mask_id) result <<           mean_dmi_energy[mask_id] * constants::muB / mean_counter;
              break;
 
           default :

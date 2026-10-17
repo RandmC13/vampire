@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) Andrea Meo Meo 2021. All rights reserved.
+//   (c) Andrea Meo 2021. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 
 // C++ standard library headers
@@ -47,7 +47,7 @@ namespace dipole{
             break;
       }
       for(int64_t lc=0; lc<dipole::internal::cells_num_local_cells; lc++){
-      	for(size_t j=0; j<in[lc].size(); j++){ out.push_back( in[lc][j] ); }
+         for(size_t j=0; j<in[lc].size(); j++){ out.push_back( in[lc][j] ); }
       }
       return out;
    }
@@ -77,7 +77,7 @@ namespace dipole{
             break;
       }
       for(int64_t lc=0; lc<dipole::internal::cells_num_local_cells; lc++){
-      	for(size_t j=0; j<in[lc].size(); j++){ out.push_back( in[lc][j] ); }
+         for(size_t j=0; j<in[lc].size(); j++){ out.push_back( in[lc][j] ); }
       }
       return out;
    }

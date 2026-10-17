@@ -1,26 +1,13 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-//  Vampire - A code for atomistic simulation of magnetic materials
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-//  Copyright (C) 2009-2012 R.F.L.Evans
+//   (c) R F L Evans 2009-2012. All rights reserved.
 //
-//  Email:richard.evans@york.ac.uk
+//   Email: richard.evans@york.ac.uk
 //
-//  This program is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU General Public License as published by
-//  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version.
-//
-//  This program is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  General Public License for more details.
-//
-//  You should have received a copy of the GNU General Public License
-//  along with this program; if not, write to the Free Software Foundation,
-//  Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-//
-// ----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 #ifndef VIO_H_
 #define VIO_H_
@@ -44,10 +31,6 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
-
-// Load standard forms of fixed-width types (needed for some compilers)
-using std::uint64_t;
-using std::int64_t;
 
 // Global Output Streams
 extern std::ofstream zinfo;
@@ -85,8 +68,8 @@ namespace vin{
    extern void check_for_valid_int(  unsigned int& value, std::string word, int line, std::string prefix, unsigned int range_min,
                               unsigned int range_max, std::string input_file_type, std::string range_text);
 
-   extern void check_for_valid_int(  uint64_t& value, std::string word, int line, std::string prefix,
-                                     uint64_t range_min, uint64_t range_max, std::string input_file_type, std::string range_text);
+   extern void check_for_valid_int(  std::uint64_t& value, std::string word, int line, std::string prefix,
+                                     std::uint64_t range_min, std::uint64_t range_max, std::string input_file_type, std::string range_text);
 
    extern bool check_for_valid_bool( std::string value, std::string word, int line, std::string prefix, std::string input_file_type);
 
@@ -100,8 +83,8 @@ namespace vin{
    extern void check_for_valid_vector(std::vector<double>& u, std::string word, int line, std::string prefix, std::string unit, std::string unit_type,
                                       const std::vector<double>& range_min, const std::vector<double>& range_max, std::string input_file_type, std::string range_text);
 
-	extern void check_for_valid_bitsequence(std::vector<int>& u, std::string word, int line, std::string prefix, const int range_min,
-													const int range_max, std::string input_file_type, std::string range_text);
+   extern void check_for_valid_bitsequence(std::vector<int>& u, std::string word, int line, std::string prefix, const int range_min,
+                                       const int range_max, std::string input_file_type, std::string range_text);
 
    extern std::vector<double> doubles_from_string(std::string value);
    extern std::vector<int> integers_from_string(std::string value);
@@ -110,41 +93,147 @@ namespace vin{
    extern std::string get_string(std::string const filename, std::string source_file_name, int line);
 
    // simple functions to extract variables from strings
-   extern uint64_t str_to_uint64(std::string input_str);
+   extern std::uint64_t str_to_uint64(std::string input_str);
    extern int str_to_int(std::string input_str);
    extern double str_to_double(std::string input_str);
-
-   extern std::vector<mp::materials_t> read_material;
 
 }
 
 namespace vout{
 
+   //---------------------------------------------------------------------------
+   // Enumerated list of data columns for output: and screen: keywords
+   //---------------------------------------------------------------------------
+   enum class output_t {
+      // simulation time, temperature and fields
+      time_steps,
+      real_time,
+      temperature,
+      phonon_temperature,
+      material_temperature,
+      applied_field_strength,
+      applied_field_unit_vector,
+      applied_field_alignment,
+      material_applied_field_strength,
+      material_applied_field_alignment,
+      fmr_field_strength,
+      material_fmr_field_strength,
+      fractional_electric_field_strength,
+
+      // system magnetisation
+      magnetisation,
+      magnetisation_length,
+      mean_magnetisation_length,
+      mean_magnetisation,
+
+      // material magnetisation
+      material_magnetisation,
+      material_mean_magnetisation_length,
+      material_mean_magnetisation,
+
+      // height magnetisation
+      height_magnetisation,
+      height_magnetisation_normalised,
+      mean_height_magnetisation,
+      mean_height_magnetisation_length,
+      material_height_magnetisation,
+      material_height_magnetisation_normalised,
+
+      // torque and constraint angles
+      total_torque,
+      mean_total_torque,
+      material_torque,
+      material_mean_torque,
+      constraint_phi,
+      constraint_theta,
+      material_constraint_phi,
+      material_constraint_theta,
+
+      // susceptibility, specific heat and fluctuations
+      mean_susceptibility,
+      material_mean_susceptibility,
+      mean_specific_heat,
+      material_mean_specific_heat,
+      binder_cumulant,
+      material_binder_cumulant,
+      material_standard_deviation,
+
+      // energies
+      total_energy,
+      mean_total_energy,
+      material_total_energy,
+      material_mean_total_energy,
+      anisotropy_energy,
+      mean_anisotropy_energy,
+      exchange_energy,
+      mean_exchange_energy,
+      applied_field_energy,
+      mean_applied_field_energy,
+      magnetostatic_energy,
+      mean_magnetostatic_energy,
+      dmi_energy,
+      mean_dmi_energy,
+      material_dmi_energy,
+      material_mean_dmi_energy,
+
+      // spin temperature and spin length
+      spin_temperature,
+      mean_spin_temperature,
+      material_spin_temperature,
+      material_mean_spin_temperature,
+      mean_spin_length,
+      material_mean_spin_length,
+      mean_height_spin_length,
+
+      // spin-lattice dynamics
+      potential_energy,
+      kinetic_energy,
+      sld_exchange_energy,
+      sld_coupling_energy,
+      sld_total_energy,
+      mean_coupling_field_vec,
+      lattice_temperature,
+      mean_lattice_temperature,
+      material_lattice_temperature,
+      material_mean_lattice_temperature,
+
+      // transport, micromagnetic and domain walls
+      resistance,
+      current,
+      magneto_resistance,
+      lfa_ms,
+      domain_wall_centre,
+      track_pos_x,
+      track_pos_z,
+
+      // diagnostics
+      mpi_timings
+   };
+
    extern bool custom_precision; // enable user selectable precision for data output
    extern unsigned int precision; // variable to control output precision (digits)
    extern bool fixed; // fixed precision output
    extern bool header_option; // column headers
-	extern std::vector<unsigned int> file_output_list;
-	extern std::vector<unsigned int> screen_output_list;
+   extern std::vector<output_t> file_output_list;
+   extern std::vector<output_t> screen_output_list;
 
    extern int output_rate;
 
    extern bool gnuplot_array_format;
 
-	//extern bool output_povray;
-	//extern int output_povray_rate;
+   //extern bool output_povray;
+   //extern int output_povray_rate;
 
-	//extern bool output_povray_cells;
-	//extern int output_povray_cells_rate;
+   //extern bool output_povray_cells;
+   //extern int output_povray_cells_rate;
 
-	extern void data();
-	extern void zLogTsInit(std::string);
-    void output_switch(std::ostream&, unsigned int);
-    extern void write_out(std::ostream&,std::vector<unsigned int>&);
-	//extern int pov_file();
+   extern void data();
+   extern void zLogTsInit(std::string);
+    extern void write_out(std::ostream&,std::vector<output_t>&);
+   //extern int pov_file();
 
-	void redirect(std::ostream& strm, std::string filename);
-	void nullify(std::ostream& strm);
+   void redirect(std::ostream& strm, std::string filename);
+   void nullify(std::ostream& strm);
 
     extern int fw_size;
     extern int fw_size_int;
@@ -203,13 +292,8 @@ class fixed_width_output{
 
 }
 
-// Checkpoint load/save functions
-void load_checkpoint();
-void save_checkpoint();
-
 namespace vio{
    bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line);
-
 }
 
 #endif /*VIO_H_*/

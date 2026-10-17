@@ -27,8 +27,7 @@ namespace cells{
    //---------------------------------------------------------------------------
    // Function to process input file parameters for cells module
    //---------------------------------------------------------------------------
-   bool match_input_parameter(string const key, string const word, string const value, string const unit, int const line){
-  // int match_dimension(std::string const word,std::string const value,std::string const unit, int const line){
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
 
       // Check for valid key, if no match return false
       std::string prefix="cells";
@@ -76,6 +75,21 @@ namespace cells{
          return true;
       }
 
+      //----------------------------------
+      // cells:probe-non-magnetic-cells (bool, default false)
+      //
+      // When enabled, macrocells containing only non-magnetic atoms (e.g. a
+      // dense non-magnetic "sensor" layer used to sample the stray field
+      // above a magnetic film) are exposed to the dipole-field solvers as
+      // valid field-evaluation points, without their (zero) moment ever
+      // contributing to the moment sums that drive the field felt by other
+      // cells. Default behaviour (flag off) is unchanged.
+      //----------------------------------
+      test="probe-non-magnetic-cells";
+      if(word==test){
+         cells::internal::probe_non_magnetic_cells = true;
+         return true;
+      }
 
       //--------------------------------------------------------------------
       // Keyword not found

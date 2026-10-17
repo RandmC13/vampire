@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2018. All rights reserved.
+//   (c) R F L Evans 2018. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -35,10 +35,10 @@ namespace vmpi{
    // timing variables
    double start_time;
    double end_time;
-   double ComputeTime;			/// Temporary for storing time
-   double WaitTime;				/// Temporary for storing time
-   double TotalComputeTime;	/// Total time spent in computation
-   double TotalWaitTime;		/// Total time spent waiting
+   double ComputeTime;        /// Temporary for storing time
+   double WaitTime;           /// Temporary for storing time
+   double TotalComputeTime;   /// Total time spent in computation
+   double TotalWaitTime;      /// Total time spent waiting
    double AverageComputeTime;
    double AverageWaitTime;
    double MaximumComputeTime;

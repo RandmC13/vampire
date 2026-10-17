@@ -1,15 +1,16 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) R F L Evans and P Chureemart 2014. All rights reserved.
+//   (c) R F L Evans and P Chureemart 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
 //-----------------------------------------------------------------------------
 
 // C++ standard library headers
+#include "constants.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -57,8 +58,8 @@ namespace st{
          //---------------------------------------------------------------------------------------------------
          //set parameters for TMR calculation
          if(st::internal::TMRenable == true){
-            int FL =	st::internal::free_layer;
-            int RL =	st::internal::reference_layer;
+            int FL = st::internal::free_layer;
+            int RL = st::internal::reference_layer;
             double dot = st::internal::magx_mat[RL]*st::internal::magx_mat[FL]+
                          st::internal::magy_mat[RL]*st::internal::magy_mat[FL]+
                          st::internal::magz_mat[RL]*st::internal::magz_mat[FL];
@@ -115,7 +116,7 @@ namespace st{
 
          //---------------------------------------------------------------------------------------------------
 
-         const double i_muB = 1.0/9.274e-24; // J/T
+         const double i_muB = constants::i_muB; // J/T
          const double i_e = 1.0/1.60217662e-19; // electronic charge (Coulombs)
 
          //volume unit normalisation needs to be material dependent; hard coding here to make independent of microcell size
@@ -352,7 +353,7 @@ namespace st{
                const double plus_perp =  (pm_b2*pm_b2 + pm_b3*pm_b3);
                // const double minus_perp = (pm_b2*pm_b2 - pm_b3*pm_b3); // unused variable
 
-	            double aj; // the ST parameter describing Slonczewski torque
+               double aj; // the ST parameter describing Slonczewski torque
                double bj; // the ST parameter describing field-like torque
 
 

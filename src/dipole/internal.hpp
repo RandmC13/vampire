@@ -25,9 +25,6 @@
 #ifdef FFT
 #include <fftw3.h>
 #endif
-// dipole module headers
-#include "internal.hpp"
-
 namespace dipole{
 
    namespace internal{
@@ -184,6 +181,9 @@ namespace dipole{
       extern void update_field();
 
       void allocate_memory(const int cells_num_local_cells, const int cells_num_cells);
+
+      // Human-readable name for the active solver, for scaling-study log output
+      const char* dipole_solver_name();
 
       void initialize_tensor_solver(const int cells_num_atoms_in_unit_cell,
                                     int cells_num_cells, /// number of macrocells

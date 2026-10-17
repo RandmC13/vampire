@@ -9,6 +9,7 @@
 //
 
 // C++ standard library headers
+#include "constants.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -42,7 +43,7 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
             std::vector < bool >& magnetic){ // is magnetic
 
    // inverse Bohr magneton
-   const double imuB = 1.0/9.27400915e-24;
+   const double imuB = constants::i_muB;
 
    // update hierarchical magnetization in cells
    hierarchical::internal::calculate_hierarchical_magnetisation(x_spin_array, y_spin_array, z_spin_array, m_spin_array, magnetic);
@@ -61,7 +62,7 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
    }
 
    // Compute dipole fields for all cells with atoms (local cells)
-	for(int lc = 0; lc < dipole::cells_num_local_cells; lc++){
+   for(int lc = 0; lc < dipole::cells_num_local_cells; lc++){
 
       // get global cell ID from local cell list
       int cell_i = cells::cell_id_array[lc];
@@ -70,16 +71,27 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       const int start = ha::interaction_list_start_index[lc];
       const int end = ha::interaction_list_end_index[lc];
 
-      // Self demagnetisation factor multiplying m(i)
+      // Self demagnetisation factor multiplying m(i). Only meaningful for a
+      // cell that actually has magnetic atoms: a non-magnetic-only probe
+      // cell (cells:probe-non-magnetic-cells) has V==0 and zero
+      // magnetisation, so skip this term entirely rather than divide by
+      // zero volume (which would otherwise silently produce
+      // 8pi/(3*0)*0 = NaN). Such a cell is still a valid *receiver* below
+      // via the ha::interaction_list loop -- it just has no self term.
       const double V = dipole::cells_volume_array[cell_i];
-      const double eightPI_three_cell_volume = 8.0*M_PI/(3.0*V);
-      const double self_demag = eightPI_three_cell_volume;
-      //std::cout << self_demag << std::endl;
+      double self_demag = 0.0;
+      double mx_i = 0.0;
+      double my_i = 0.0;
+      double mz_i = 0.0;
+      if( V > 0.0 ){
+         const double eightPI_three_cell_volume = 8.0*M_PI/(3.0*V);
+         self_demag = eightPI_three_cell_volume;
 
-      // Normalise cell magnetisation by the Bohr magneton
-      const double mx_i = cells::mag_array_x[cell_i]*imuB;
-      const double my_i = cells::mag_array_y[cell_i]*imuB;
-      const double mz_i = cells::mag_array_z[cell_i]*imuB;
+         // Normalise cell magnetisation by the Bohr magneton
+         mx_i = cells::mag_array_x[cell_i]*imuB;
+         my_i = cells::mag_array_y[cell_i]*imuB;
+         mz_i = cells::mag_array_z[cell_i]*imuB;
+      }
       // std::cout << cell_i << '\t' << mx_i << '\t' << my_i << '\t' << mz_i << std::endl;
 
       // Add self-demagnetisation as mu_0/4_PI * 8PI*m_cell/3V
@@ -120,16 +132,16 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       //   std::cout <<"D\t" << cell_i << '\t' << dipole::cells_field_array_x[cell_i] <<'\t' << dipole::cells_field_array_y[cell_i] <<'\t' << dipole::cells_field_array_z[cell_i] <<std::endl;
 
       // Multiply Hdemg by mu_0/4pi * 1e30 * mu_B to account for normalisation of magnetisation and volume in angstrom
-      dipole::cells_field_array_x[cell_i] = dipole::cells_field_array_x[cell_i] * 9.27400915e-01;
-      dipole::cells_field_array_y[cell_i] = dipole::cells_field_array_y[cell_i] * 9.27400915e-01;
-      dipole::cells_field_array_z[cell_i] = dipole::cells_field_array_z[cell_i] * 9.27400915e-01;
+      dipole::cells_field_array_x[cell_i] = dipole::cells_field_array_x[cell_i] * constants::dipole_prefactor;
+      dipole::cells_field_array_y[cell_i] = dipole::cells_field_array_y[cell_i] * constants::dipole_prefactor;
+      dipole::cells_field_array_z[cell_i] = dipole::cells_field_array_z[cell_i] * constants::dipole_prefactor;
       //std::cout << sim::time << '\t' << cell_i << '\t' << dipole::cells_field_array_x[cell_i] << '\t' << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i] << '\t' << std::endl;
       //std::cout << "SP" << dipole::cells_field_array_x[cell_i] << "\t" << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i]<< std::endl;
 
       // Multiply Hdemg by mu_0/4pi * 1e30 * mu_B to account for normalisation of magnetisation and volume in angstrom
-      dipole::cells_mu0Hd_field_array_x[cell_i] = dipole::cells_mu0Hd_field_array_x[cell_i] * 9.27400915e-01;
-      dipole::cells_mu0Hd_field_array_y[cell_i] = dipole::cells_mu0Hd_field_array_y[cell_i] * 9.27400915e-01;
-      dipole::cells_mu0Hd_field_array_z[cell_i] = dipole::cells_mu0Hd_field_array_z[cell_i] * 9.27400915e-01;
+      dipole::cells_mu0Hd_field_array_x[cell_i] = dipole::cells_mu0Hd_field_array_x[cell_i] * constants::dipole_prefactor;
+      dipole::cells_mu0Hd_field_array_y[cell_i] = dipole::cells_mu0Hd_field_array_y[cell_i] * constants::dipole_prefactor;
+      dipole::cells_mu0Hd_field_array_z[cell_i] = dipole::cells_mu0Hd_field_array_z[cell_i] * constants::dipole_prefactor;
       //if (cell_i == 0) std::cout << sim::time << '\t' << cell_i << '\t' <<  dipole::cells_field_array_x[cell_i] << '\t' << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i] << '\t' << std::endl;
 
    }

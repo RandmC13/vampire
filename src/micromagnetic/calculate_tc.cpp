@@ -56,7 +56,7 @@ std::vector<double> calculate_tc(int num_local_cells,
 
    switch(exchange_type){
 
- 		case 0: // isotropic
+      case 0: // isotropic
          for (int atom = 0; atom < num_atoms; atom++){
             const int cell  = cell_array[atom];
             const int start = atoms::neighbour_list_start_index[atom];
@@ -72,18 +72,12 @@ std::vector<double> calculate_tc(int num_local_cells,
 
       case 1: // vector
          terminaltextcolor(RED);
-         std::cerr << "Error! Vectoral exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Error! Vectoral exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-         err::vexit();
+         err::fatal("Error! Vectoral exchange calculation not yet implemented in micromagnetic mode");
          break;
 
       case 2: // tensor
          terminaltextcolor(RED);
-         std::cerr << "Error! Tensor exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-         terminaltextcolor(WHITE);
-         zlog << zTs() << "Error! Tensor exchange calculation not yet implemented in micromagnetic mode" << std::endl;
-         err::vexit();
+         err::fatal("Error! Tensor exchange calculation not yet implemented in micromagnetic mode");
          break;
    }
 

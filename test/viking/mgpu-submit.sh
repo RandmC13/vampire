@@ -7,7 +7,7 @@
 #------------------------------------------------------------------------------
 # Submits the multi-GPU jobs (one GPU per rank) on Viking:
 #
-#   mgpu-check     multi-GPU validation (test/validation/mgpu_check.sh)
+#   mgpu-check     multi-GPU validation (developers/test/validation/mgpu_check.sh)
 #   mgpu-scaling   strong and weak scaling timings, after the check succeeded
 #
 # on NODES A40 nodes (gpu, 3 GPUs each; default 2 nodes = 6 GPUs, the most a

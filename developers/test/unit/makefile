@@ -1,0 +1,78 @@
+#===================================================================
+#
+#             Makefile for Vampire Test Suite
+#
+#===================================================================
+
+# Compilers
+GCC=g++
+
+# LIBS
+LIBS= #-lstdc++
+
+# Flags
+GCC_CFLAGS=-O3 -std=c++17 -I../../../hdr/ -I../../../src/
+
+# Objects
+TEST_OBJECTS= \
+obj/unit_tests.o \
+obj/utility/units_test.o \
+obj/utility/utility_test.o\
+obj/utility/spin_temperature_test.o \
+obj/utility/vmath_test.o \
+obj/create/create_tests.o \
+obj/grains/grains_tests.o \
+obj/grains/grain_geometry_test.o \
+obj/grains/grain_tessellation_test.o \
+obj/grains/grain_packing_test.o \
+obj/grains/grain_seeds_test.o \
+obj/grains/grain_shape_test.o \
+obj/integrate/integrate_tests.o \
+obj/integrate/rotations_test.o
+
+
+VAMPIRE_OBJECTS= \
+../../../obj/main/githash.o \
+../../../obj/main/version.o \
+../../../obj/material/material.o \
+../../../obj/utility/errors.o \
+../../../obj/utility/units.o \
+../../../obj/utility/vmath.o \
+../../../obj/vio/data.o \
+../../../obj/vio/globalio.o \
+../../../obj/vio/timestamp.o\
+../../../obj/constants/constants.o\
+../../../obj/spinlattice/temperatures.o\
+../../../obj/spinlattice/data.o\
+../../../obj/random/mtrand.o\
+../../../obj/random/random.o\
+../../../obj/grains/grain_geometry.o\
+../../../obj/grains/grain_packing.o\
+../../../obj/grains/grain_seeds.o\
+../../../obj/grains/grain_shape.o\
+../../../obj/grains/grain_tessellation.o
+
+
+EXECUTABLE=unit_tests
+
+all: $(TEST_OBJECTS) $(VAMPIRE_OBJECTS) gcc
+
+# Serial Targets
+gcc: $(TEST_OBJECTS) $(VAMPIRE_OBJECTS)
+	$(GCC) $(TEST_OBJECTS) $(VAMPIRE_OBJECTS) $(GCC_CFLAGS) $(LIBS) -o $(EXECUTABLE)
+
+$(TEST_OBJECTS): obj/%.o: src/%.cpp
+	@mkdir -p $(@D)
+	$(GCC) -c -o $@ $(GCC_CFLAGS) $<
+
+# compile vampire objects to vampire object folder
+$(VAMPIRE_OBJECTS): ../../../obj/%.o: ../../../src/%.cpp
+	@mkdir -p $(@D)
+	$(GCC) -c -o $@ $(GCC_CFLAGS) $<
+
+# vampire objects are shared with the main build - use make clean in the root directory to remove them
+clean:
+	@rm -f $(TEST_OBJECTS)
+
+purge: clean
+	@rm -f $(EXECUTABLE)

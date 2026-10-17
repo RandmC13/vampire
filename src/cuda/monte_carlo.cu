@@ -1,5 +1,14 @@
+//------------------------------------------------------------------------------
+//
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
+//
+//   (c) M A Ellis & D Meilak 2021. All rights reserved.
+//
+//------------------------------------------------------------------------------
 
 #include "atoms.hpp"
+#include "errors.hpp"
 #include "exchange.hpp"
 #include "vio.hpp"
 #include "cuda_utils.hpp"
@@ -226,7 +235,7 @@ namespace vcuda
                 if(error != cudaSuccess)
                 {
                     printf("CUDA error at %s:%i: %s\n", __FILE__, __LINE__, cudaGetErrorString(error));
-                    exit(-1);
+                    ::err::vexit();
                 }
 
                 initialised = true;
@@ -509,8 +518,8 @@ namespace vcuda
                 check_cuda_errors (__FILE__, __LINE__);
 
                 // Load separate spin vectors into single array
-                //cudaMemcpy(cu::exchange::d_spin3n, 				            cu::atoms::d_x_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(cu::exchange::d_spin3n + ::atoms::num_atoms, 	cu::atoms::d_y_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::exchange::d_spin3n,                       cu::atoms::d_x_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::exchange::d_spin3n + ::atoms::num_atoms,  cu::atoms::d_y_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
                 //cudaMemcpy(cu::exchange::d_spin3n + 2 * ::atoms::num_atoms, cu::atoms::d_z_spin, ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
 
 
@@ -548,9 +557,9 @@ namespace vcuda
 
                 }
 
-                //cudaMemcpy(cu::atoms::d_x_spin, cu::exchange::d_spin3n, 				            ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(cu::atoms::d_y_spin, cu::exchange::d_spin3n + ::atoms::num_atoms, 		::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
-                //cudaMemcpy(cu::atoms::d_z_spin, cu::exchange::d_spin3n + 2 * ::atoms::num_atoms, 	::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::atoms::d_x_spin, cu::exchange::d_spin3n,                       ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::atoms::d_y_spin, cu::exchange::d_spin3n + ::atoms::num_atoms,     ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
+                //cudaMemcpy(cu::atoms::d_z_spin, cu::exchange::d_spin3n + 2 * ::atoms::num_atoms,    ::atoms::num_atoms * sizeof(cu_real_t), cudaMemcpyDeviceToDevice);
 
 
                 // wrap raw pointer with a device_ptr

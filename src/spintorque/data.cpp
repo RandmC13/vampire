@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
 //
-// (c) R F L Evans and P Chureemart 2014. All rights reserved.
+//   (c) R F L Evans and P Chureemart 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
@@ -22,7 +22,7 @@ namespace st{
       //-----------------------------------------------------------------------------
       bool enabled=false;  // disable spin torque calculation
       bool TMRenable=false; // disable TMR calculation, GMR is set as dafault
-      
+
       double micro_cell_size= 5*3.00; /// lateral size of spin torque microcells
       double micro_cell_thickness = 3.00; /// thickness of spin torque microcells (atomistic)
 
@@ -48,9 +48,9 @@ namespace st{
 
       double je; // = 1.0e11; // current (C/s/m^2)
       double initial_beta;
-      
+
       double rel_angle;  // relative angle between 2 FMs for TMR calculation
-      
+
       int ST_output_rate;
       std::vector<double> initial_m(3);
 
@@ -82,8 +82,8 @@ namespace st{
       std::vector<double> magx_mat; // magnetisation of material
       std::vector<double> magy_mat;
       std::vector<double> magz_mat;
-      
-      
+
+
       // array of material properties
       std::vector<st::internal::mp_t> mp;
 

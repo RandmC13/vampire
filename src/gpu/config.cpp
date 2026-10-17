@@ -1,18 +1,17 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2016. All rights reserved.
+//   (c) R F L Evans 2016. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 
 // Vampire headers
 #include "gpu.hpp"
 #include "cuda.hpp"
-#include "vopencl.hpp"
 
 namespace gpu{
 
@@ -28,8 +27,6 @@ namespace gpu{
 
          #ifdef CUDA
             vcuda::config::synchronise();
-         #elif OPENCL
-            vopencl::config::synchronise();
          #endif
 
          return;

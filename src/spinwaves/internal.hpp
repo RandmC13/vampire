@@ -10,8 +10,8 @@
 //------------------------------------------------------------------------------
 //
 
-#ifndef SW_INTERNAL_H_
-#define SW_INTERNAL_H_
+#ifndef SPINWAVES_INTERNAL_H_
+#define SPINWAVES_INTERNAL_H_
 //
 //---------------------------------------------------------------------
 // This header file defines shared internal data structures and
@@ -26,7 +26,6 @@
 #include "spinwaves.hpp"
 
 // sw module headers
-#include "internal.hpp"
 #ifdef FFT
 #include <fftw3.h>
 #endif
@@ -123,8 +122,8 @@ namespace spinwaves{
       extern void determine_spin_component();
       extern void check_numbering_of_spectrums();
       extern void calculate_fourier_prefactor(const std::vector<double>& rx, const std::vector<double>& ry, const std::vector<double>& rz);
-      extern void determine_kpoints_from_user_specific_k(const double dimx, const double dimy, const double dimz,	const double uc_x, const double uc_y, const double uc_z);
-      extern void determine_kpoints_from_user_high_sym_path(const double dimx, const double dimy, const double dimz,	const double uc_x, const double uc_y, const double uc_z);
+      extern void determine_kpoints_from_user_specific_k(const double dimx, const double dimy, const double dimz, const double uc_x, const double uc_y, const double uc_z);
+      extern void determine_kpoints_from_user_high_sym_path(const double dimx, const double dimy, const double dimz, const double uc_x, const double uc_y, const double uc_z);
 
 
       // post analysis functions
@@ -145,4 +144,4 @@ namespace spinwaves{
 
 } // end of sw namespace
 
-#endif //SW_INTERNAL_H_
+#endif //SPINWAVES_INTERNAL_H_

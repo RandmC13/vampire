@@ -24,9 +24,6 @@
 // Vampire headers
 #include "spintransport.hpp"
 
-// spintransport module headers
-#include "internal.hpp"
-
 namespace spin_transport{
 
    namespace internal{
@@ -205,10 +202,5 @@ namespace spin_transport{
    } // end of internal namespace
 
 } // end of spin_transport namespace
-
-//--------------------------------------------------------------------------------
-// Alias spin_transport to st namespace internal to module for code brevity
-//--------------------------------------------------------------------------------
-namespace st = spin_transport;
 
 #endif //SPINTRANSPORT_INTERNAL_H_

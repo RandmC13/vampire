@@ -1,20 +1,20 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
+#include <sstream>
 
 // Vampire headers
 #include "errors.hpp"
 #include "create.hpp"
 #include "spininitialize.hpp"
 #include "vio.hpp"
-#include "voronoi.hpp"
 #include "random.hpp"
 // Internal sim header
 #include "internal.hpp"
@@ -24,16 +24,118 @@ namespace create{
    //-----------------------------------------------------------------------------
    // Function to process input file parameters for create module
    //-----------------------------------------------------------------------------
-   bool match_input_parameter(string const key, string const word, string const value, string const unit, int const line){
+   bool match_input_parameter(std::string const key, std::string const word, std::string const value, std::string const unit, int const line){
+
+      std::string test="";
+
+      //----------------------------------
+      // System dimension variables
+      //----------------------------------
+      std::string prefix="dimensions";
+      if(key==prefix){
+         //--------------------------------------------------------------------
+         test="system-size";
+         if(word==test){
+            double d=atof(value.c_str());
+            vin::check_for_valid_value(d, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::system_dimensions[0]=d;
+            cs::system_dimensions[1]=d;
+            cs::system_dimensions[2]=d;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="system-size-x";
+         if(word==test){
+            double dx=atof(value.c_str());
+            vin::check_for_valid_value(dx, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::system_dimensions[0]=dx;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="system-size-y";
+         if(word==test){
+            double dy=atof(value.c_str());
+            vin::check_for_valid_value(dy, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::system_dimensions[1]=dy;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="system-size-z";
+         if(word==test){
+            double dz=atof(value.c_str());
+            vin::check_for_valid_value(dz, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::system_dimensions[2]=dz;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-size";
+         if(word==test){
+            double psize=atof(value.c_str());
+            vin::check_for_valid_value(psize, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::particle_scale=psize;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-spacing";
+         if(word==test){
+            double pspacing=atof(value.c_str());
+            vin::check_for_valid_value(pspacing, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
+            cs::particle_spacing=pspacing;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-shape-factor-x";
+         if(word==test){
+            double sfx=atof(value.c_str());
+            vin::check_for_valid_value(sfx, word, line, prefix, unit, "none", 0.001, 2.0,"input","0.001 - 2.0");
+            cs::particle_shape_factor_x=sfx;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-shape-factor-y";
+         if(word==test){
+            double sfy=atof(value.c_str());
+            vin::check_for_valid_value(sfy, word, line, prefix, unit, "none", 0.001, 2.0,"input","0.001 - 2.0");
+            cs::particle_shape_factor_y=sfy;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-shape-factor-z";
+         if(word==test){
+            double sfz=atof(value.c_str());
+            vin::check_for_valid_value(sfz, word, line, prefix, unit, "none", 0.001, 2.0,"input","0.001 - 2.0");
+            cs::particle_shape_factor_z=sfz;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-array-offset-x";
+         if(word==test){
+            double paox=atof(value.c_str());
+            vin::check_for_valid_value(paox, word, line, prefix, unit, "length", 0.0, 1.0e7,"input","0.0 - 1.0 millimetre");
+            cs::particle_array_offset_x=paox;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         test="particle-array-offset-y";
+         if(word==test){
+            double paoy=atof(value.c_str());
+            vin::check_for_valid_value(paoy, word, line, prefix, unit, "length", 0.0, 1.0e7,"input","0.0 - 1.0 millimetre");
+            cs::particle_array_offset_y=paoy;
+            return true;
+         }
+         //--------------------------------------------------------------------
+         // input parameter not found here
+         return false;
+      }
 
       // Check for valid key, if no match return false
-      std::string prefix="create";
+      prefix="create";
       if(key!=prefix) return false;
 
       //----------------------------------
       // Now test for all valid options
       //----------------------------------
-      std::string test="faceted-particle";
+      test="faceted-particle";
       if(word==test){
          // check for blank value
          test="";
@@ -47,25 +149,19 @@ namespace create{
          vin::check_for_valid_three_vector(u, word, line, prefix, "input");
          // check for sensible values
          if(u.at(0) < 1.0 || u.at(0) > 1000.0){
-      	   terminaltextcolor(RED);
-            std::cerr << "Error: 100 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            terminaltextcolor(WHITE);
-            zlog << zTs() << "Error: 100 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            err::vexit();
+            std::ostringstream message;
+            message << "Error: 100 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000.";
+            err::fatal(message.str());
          }
          if(u.at(1) < 1.0 || u.at(1) > 1000.0){
-      	   terminaltextcolor(RED);
-            std::cerr << "Error: 110 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            terminaltextcolor(WHITE);
-            zlog << zTs() << "Error: 110 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            err::vexit();
+            std::ostringstream message;
+            message << "Error: 110 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000.";
+            err::fatal(message.str());
          }
          if(u.at(2) < 1.0 || u.at(2) > 1000.0){
-      	   terminaltextcolor(RED);
-            std::cerr << "Error: 111 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            terminaltextcolor(WHITE);
-            zlog << zTs() << "Error: 111 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000." << std::endl;
-            err::vexit();
+            std::ostringstream message;
+            message << "Error: 111 particle facet radius for input variable " << prefix << word << " on line " << line << " of input file must be between 1 and 1000.";
+            err::fatal(message.str());
          }
          create::internal::faceted_particle_100_radius = u.at(0);
          create::internal::faceted_particle_110_radius = u.at(1);
@@ -145,101 +241,6 @@ namespace create{
          cs::system_creation_flags[2]=3;
          return true;
       }
-      test="voronoi-grain-substructure";
-      if(word==test){
-         create::internal::generate_voronoi_substructure = true;
-         return true;
-      }
-      ///-------------------------------------------------------------------
-      /// system_creation_flags[1] - Set system particle shape
-      ///-------------------------------------------------------------------
-
-      //--------------------------------------------------------------------
-      test="voronoi-size-variance";
-      if(word==test || word == "grain-size-variance"){
-         double vsd=atof(value.c_str());
-         vin::check_for_valid_value(vsd, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create_voronoi::voronoi_sd=vsd;
-         return true;
-      }
-      //--------------------------------------------------------------------
-      test="voronoi-row-offset";
-      if(word==test){
-         create_voronoi::parity=1;
-         return true;
-      }
-      //--------------------------------------------------------------------
-      test="voronoi-random-seed";
-      if(word==test){
-         int vs=atoi(value.c_str());
-         vin::check_for_valid_int(vs, word, line, prefix, 0, 2000000000,"input","0 - 2,000,000,000");
-         mtrandom::voronoi_seed=vs;
-         return true;
-      }
-      test="voronoi-rounded-grains";
-      if(word==test || word == "rounded-grains"){
-         create_voronoi::rounded=true;
-         return true;
-      }
-      test="voronoi-include-boundary-grains";
-      if(word==test || word == "include-boundary-grains"){
-         create_voronoi::include_boundary_grains_real=true;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-rounded-grains-area";
-      if(word==test || word == "rounded-grains-area"){
-         double vsd=atof(value.c_str());
-         vin::check_for_valid_value(vsd, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create_voronoi::area_cutoff=vsd;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-elliptical-rounding";
-      if(word==test || word == "elliptical-rounding"){
-         double er=atof(value.c_str());
-         vin::check_for_valid_value(er, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create::internal::voronoi_elliptical_rounding=er;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-elliptical-rounding-height";
-      if(word==test || word == "elliptical-rounding-height"){
-         double erh=atof(value.c_str());
-         vin::check_for_valid_value(erh, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create::internal::voronoi_elliptical_rounding_height=erh;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-bimodal-grains";
-      if(word==test){
-         create_voronoi::bimodal_grains=true;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-small-grain-diameter";
-      if(word==test){
-         double sgd=atof(value.c_str());
-         vin::check_for_valid_value(sgd, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
-         create_voronoi::small_grain_diameter=sgd;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-small-grain-fraction";
-      if(word==test){
-         double sgf=atof(value.c_str());
-         vin::check_for_valid_value(sgf, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create_voronoi::small_grain_fraction=sgf;
-         return true;
-      }
-      //-------------------------------------------------------------------
-      test="voronoi-small-grain-size-variance";
-      if(word==test){
-         double sgv=atof(value.c_str());
-         vin::check_for_valid_value(sgv, word, line, prefix, unit, "none", 0.0, 1.0,"input","0.0 - 1.0");
-         create_voronoi::small_grain_size_variance=sgv;
-         return true;
-      }
       //-------------------------------------------------------------------
       test="particle-centre-offset"; //parity
       if(word==test){
@@ -268,11 +269,9 @@ namespace create{
          }
          // check for unknown junk in value
          if( value.find_first_not_of("xyz,") != std::string::npos){
-            terminaltextcolor(RED);
-            std::cerr << "Error - value for \'create:" << word << "\' must be a combination of x,y,z only" << std::endl;
-            zlog << zTs() << "Error - value for \'create:" << word << "\' must be a combination of x,y,z only" << std::endl;
-            terminaltextcolor(WHITE);
-            err::vexit();
+            std::ostringstream message;
+            message << "Error - value for \'create:" << word << "\' must be a combination of x,y,z only";
+            err::fatal(message.str());
             return false;
          }
          return true;
@@ -374,36 +373,6 @@ namespace create{
          }
       }
       //--------------------------------------------------------------------
-      // create:grain-magnetisation-direction = material | alternating
-      //
-      // Controls how the initial spin direction (as set by
-      // material[#]:initial-spin-direction, see the spininitialize module)
-      // is applied across grains:
-      //   - "material" (default): every atom is initialised exactly as
-      //     specified by its material's texture, with no further
-      //     modification.
-      //   - "alternating": the spin direction is reversed (negated) for
-      //     every atom belonging to an odd-numbered grain (grains are
-      //     numbered from 0), giving neighbouring grains opposite
-      //     magnetisation directions. This is useful e.g. for setting up
-      //     antiferromagnetically-coupled grain structures or testing
-      //     domain-wall pinning at grain boundaries.
-      //--------------------------------------------------------------------
-      test="grain-magnetisation-direction";
-      if(word==test){
-         std::string loctest="alternating";
-         if(value==loctest){
-            spininitialize::set_grain_magnetisation_mode(1); // grain_mode_alternating
-            return true;
-         }
-         else{
-            // default: "material" (or any unrecognised value falls back to
-            // the default of no grain-level post-processing)
-            spininitialize::set_grain_magnetisation_mode(0); // grain_mode_material
-            return true;
-         }
-      }
-      //--------------------------------------------------------------------
       test="interfacial-roughness-seed-radius";
       if(word==test){
          double irsr=atof(value.c_str());
@@ -485,39 +454,6 @@ namespace create{
          }
       }
       //--------------------------------------------------------------------
-      test="voronoi-grain-substructure-crystallization-radius";
-      if(word==test){
-         double rsize=atof(value.c_str());
-         vin::check_for_valid_value(rsize, word, line, prefix, unit, "none", 0.01, 2.0,"input","0.01 - 2");
-         create::internal::voronoi_grain_substructure_crystallization_radius=rsize;
-         return true;
-      }
-      //--------------------------------------------------------------------
-      test="voronoi-grain-substructure-overlap-factor";
-      if(word==test){
-         double ol=atof(value.c_str());
-         vin::check_for_valid_value(ol, word, line, prefix, unit, "none", 0.1, 3.0,"input","0.1 - 3");
-         create::internal::voronoi_grain_substructure_overlap_factor = ol;
-         return true;
-      }
-      //--------------------------------------------------------------------
-      test="voronoi-grain-substructure-size";
-      if(word==test){
-         double psize=atof(value.c_str());
-         vin::check_for_valid_value(psize, word, line, prefix, unit, "length", 0.1, 1.0e7,"input","0.1 Angstroms - 1 millimetre");
-         create::internal::voronoi_grain_substructure_size=psize;
-         return true;
-      }
-      else
-      //--------------------------------------------------------------------
-      test="voronoi-grain-substructure-spacing";
-      if(word==test){
-         double pspacing=atof(value.c_str());
-         vin::check_for_valid_value(pspacing, word, line, prefix, unit, "length", 0.0, 1.0e7,"input","0.0 Angstroms - 1 millimetre");
-         create::internal::voronoi_grain_substructure_spacing=pspacing;
-         return true;
-      }
-      //--------------------------------------------------------------------
       test="cone";
       if(word==test){
          cs::system_creation_flags[1]=8;
@@ -579,6 +515,9 @@ namespace create{
          return true;
       }
       //--------------------------------------------------------------------
+      // Seeds granular ALLOYING (per-atom material choice within a grain,
+      // see alloy.cpp) - not the grain tessellation itself, which is seeded
+      // separately by create:grain-structure-random-seed.
       test="grain-random-seed";
       if(word==test){
          int grs=atoi(value.c_str());
@@ -836,8 +775,9 @@ namespace create{
          // check for a sensible number of points
          //------------------------------------------------------------------
          if( (num_points < 3) || (num_points > 1000) ){
-            std::cerr << "Error in geometry input file " << value.c_str() << " - first number must be non zero integer in the range 3-100"<< std::endl;
-            err::vexit();
+            std::ostringstream message;
+            message << "Error in geometry input file " << value.c_str() << " - first number must be non zero integer in the range 3-100";
+            err::fatal(message.str());
          }
 
          //------------------------------------------------------------------
@@ -857,13 +797,15 @@ namespace create{
                gfile >> var;
                // check for no end of file
                if(gfile.eof()){
-                  std::cerr << "Error in geometry input file " << value.c_str() << " end of file reached before reading all coordinates" << std::endl;
-                  err::vexit();
+                  std::ostringstream message;
+                  message << "Error in geometry input file " << value.c_str() << " end of file reached before reading all coordinates";
+                  err::fatal(message.str());
                }
                // check for sensible coordinate
                if((var<0.0) || (var > 1.0)){
-                  std::cerr << "Error in geometry input file " << value.c_str() << " value is outside of valid range (0.0-1.0)" << std::endl;
-                  err::vexit();
+                  std::ostringstream message;
+                  message << "Error in geometry input file " << value.c_str() << " value is outside of valid range (0.0-1.0)";
+                  err::fatal(message.str());
                }
                // now save sanitised input
                pts[xy] = var;
@@ -916,6 +858,71 @@ namespace create{
           create::internal::select_material_by_z_height = true; // default
           create::internal::mp[super_index].max=max;
           return true;
+      }
+      //--------------------------------------------------------------------
+      test="core-shell-size";
+      if(word==test){
+         double css=atof(value.c_str());
+         vin::check_for_valid_positive_value(css, word, line, prefix, unit, "none", 0.0, 1.0,"material"," 0.0 - 1.0");
+         mp::read_material[super_index].core_shell_size=css;
+         cs::core_shell_particles = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="interface-roughness";
+      if(word==test){
+         double ir=atof(value.c_str());
+         vin::check_for_valid_value(ir, word, line, prefix, unit, "none", 0.0, 1.0,"material"," 0.0 - 1.0");
+         mp::read_material[super_index].interface_roughness=ir;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="intermixing";
+      if(word==test){
+         double i=atof(value.c_str());
+         //vin::check_for_valid_value(i, word, line, prefix, unit, "none", 0.0, 1.0,"material"," 0.0 - 1.0");
+         if((i<0.0) || (i > 1.0)){
+            terminaltextcolor(RED);
+            std::cerr << "Error in input file - material[" << super_index+1 << "]:intermixing[" << sub_index+1 <<"] is outside of valid range (0.0-1.0)" << std::endl;
+            terminaltextcolor(WHITE);
+            err::vexit();}
+         else{
+            mp::read_material[super_index].intermixing[sub_index]=i;
+            return true;
+         }
+      }
+      //--------------------------------------------------------------------
+      test="density";
+      if(word==test){
+         double d=atof(value.c_str());
+         vin::check_for_valid_positive_value(d, word, line, prefix, unit, "none", 0.0, 1.0,"material"," 0.0 - 1.0");
+         mp::read_material[super_index].density=d;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="continuous";
+      if(word==test){
+         mp::read_material[super_index].continuous=true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="fill-space";
+      /*
+      logical fill-space [false]
+          This flag causes the material to be a fill material, instead of
+          have atoms generated as part of the usual structure, for example
+          particle shpaes, particle arrays and voronoi films. The default
+          value is false for all materials. Valid values are true,
+          false or (blank) [same as true].
+      */
+      if(word==test){
+         // Test for sane input
+         //bool sanitised_bool=vin::check_for_valid_bool(value, word, line, prefix,"material");
+
+         // set flag
+         mp::read_material[super_index].fill=true; //sanitised_bool;
+
+         return true;
       }
       //--------------------------------------------------------------------
       // keyword not found

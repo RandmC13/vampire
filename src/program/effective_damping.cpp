@@ -1,11 +1,11 @@
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 //
-// This source file is part of the VAMPIRE open source package under the
-// GNU GPL (version 2) licence (see licence file for details).
+//   This file is part of the VAMPIRE open source package under the
+//   Free BSD licence (see licence file for details).
 //
-// (c) R F L Evans 2014. All rights reserved.
+//   (c) R F L Evans 2014. All rights reserved.
 //
-//-----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 // C++ standard library headers
 #include <iostream>
@@ -21,6 +21,9 @@
 #include "vio.hpp"
 #include "vmath.hpp"
 #include "vmpi.hpp"
+
+// program module headers
+#include "internal.hpp"
 
 /// Function to rotate all spin around the x-axis
 void rotate_spins_around_x_axis(double ddx){
@@ -62,7 +65,8 @@ namespace program{
 //   Program to calculate effective gilbert damping from the atomistic model.
 //
 //   System is first equilibrated at sim:temperature along the z-axis. All
-//   spins are then rotated 30 degrees from the z-axis and the magnetisation
+//   spins are then rotated around the x-axis by sim:effective-damping-rotation-angle
+//   (default 30 degrees) away from the z-axis and the magnetisation
 //   then relaxes towards the z-direction under the application of a field
 //   or magnetocrystalline anisotropy. The magnetization trace can then be
 //   fitted to a macroscopic equation to extract the effective damping, alpha.
@@ -93,8 +97,8 @@ void effective_damping(){
       vout::data();
    }
 
-   // Rotate all spins by 30 degrees from z-axis
-   rotate_spins_around_x_axis(30.0);
+   // Rotate all spins away from z-axis by user defined angle (default 30 degrees)
+   rotate_spins_around_x_axis(program::internal::effective_damping_rotation_angle);
 
    // reset system temperature
    sim::temperature=temp;
