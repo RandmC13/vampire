@@ -35,8 +35,8 @@
 /// @version 1.0
 /// @date    09/03/2011
 /// @internal
-///	Created:		09/03/2011
-///	Revision:	  ---
+///   Created:    09/03/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 
@@ -77,90 +77,90 @@
 void multiscale_simulation_steps(int n_steps);
 
 namespace sim{
-	std::ofstream mag_file;
+   std::ofstream mag_file;
 
-	int runs=1; /// for certain repetitions in programs
+   int runs=1; /// for certain repetitions in programs
 
     //Global definition of some parameters in order to store them in chekcpoint files
-	int64_t parity=-1;
+   int64_t parity=-1;
    uint64_t output_atoms_file_counter=0;
    uint64_t output_cells_file_counter=0;
    uint64_t output_rate_counter=0;
 
-	bool ext_demag=false;
+   bool ext_demag=false;
 
-	double Tmax=300.0;
-	double Tmin=0.0;
-	double Teq=300.0;
-	double temperature=300.0;
-	double delta_temperature=10.0;
-	double H_applied=0.0;
-	double H_vec[3]={0.0,0.0,1.0};
-	double Hmin=-1.0; // T
-	double Hmax=+1.0; // T
-	double Hinc= 0.1; // T
-	double Heq=0.0;
-	double applied_field_angle_phi=0.0;
-	double applied_field_angle_theta=0.0;
-	bool applied_field_set_by_angle=false;
+   double Tmax=300.0;
+   double Tmin=0.0;
+   double Teq=300.0;
+   double temperature=300.0;
+   double delta_temperature=10.0;
+   double H_applied=0.0;
+   double H_vec[3]={0.0,0.0,1.0};
+   double Hmin=-1.0; // T
+   double Hmax=+1.0; // T
+   double Hinc= 0.1; // T
+   double Heq=0.0;
+   double applied_field_angle_phi=0.0;
+   double applied_field_angle_theta=0.0;
+   bool applied_field_set_by_angle=false;
 
-	double fmr_field_strength = 0.0; // Oscillating field strength (Tesla)
-	double fmr_field_frequency = 1.0; // Oscillating field frequency (GHz)
-	std::vector<double> fmr_field_unit_vector; // Oscillating field direction
-	double fmr_field = 0.0; // Instantaneous value of the oscillating field strength H sin(wt)
-	bool enable_fmr = false; // Flag to enable fmr field calculation
+   double fmr_field_strength = 0.0; // Oscillating field strength (Tesla)
+   double fmr_field_frequency = 1.0; // Oscillating field frequency (GHz)
+   std::vector<double> fmr_field_unit_vector; // Oscillating field direction
+   double fmr_field = 0.0; // Instantaneous value of the oscillating field strength H sin(wt)
+   bool enable_fmr = false; // Flag to enable fmr field calculation
 
-	double H=Hmax; // T
-	int64_t iH=1; // uT
-   //	uint64_t iH=-1*vmath::iround(double(Hmax)*1.0E6); // uT
+   double H=Hmax; // T
+   int64_t iH=1; // uT
+   // uint64_t iH=-1*vmath::iround(double(Hmax)*1.0E6); // uT
 
-	double demag_factor[3]={0.0,0.0,0.0};
-	// double head_position[2]={0.0,cs::system_dimensions[1]*0.5}; // A
-	// double head_speed=30.0; /// nm/ns
-	// bool   head_laser_on=false;
-	bool   constraint_rotation=false; /// enables rotation of spins to new constraint direction
-	bool   constraint_phi_changed=false; /// flag to note change in phi
-	double constraint_phi=0.0; /// Constrained minimisation vector (azimuthal) [degrees]
-	double constraint_phi_min=0.0; /// loop angle min [degrees]
-	double constraint_phi_max=0.0; /// loop angle max [degrees]
-	double constraint_phi_delta=5.0; /// loop angle delta [degrees]
+   double demag_factor[3]={0.0,0.0,0.0};
+   // double head_position[2]={0.0,cs::system_dimensions[1]*0.5}; // A
+   // double head_speed=30.0; /// nm/ns
+   // bool   head_laser_on=false;
+   bool   constraint_rotation=false; /// enables rotation of spins to new constraint direction
+   bool   constraint_phi_changed=false; /// flag to note change in phi
+   double constraint_phi=0.0; /// Constrained minimisation vector (azimuthal) [degrees]
+   double constraint_phi_min=0.0; /// loop angle min [degrees]
+   double constraint_phi_max=0.0; /// loop angle max [degrees]
+   double constraint_phi_delta=5.0; /// loop angle delta [degrees]
 
-	bool   constraint_theta_changed=false;
-	double constraint_theta=0.0; /// Constrained minimisation vector (rotational) [degrees]
-	double constraint_theta_min=0.0; /// loop angle min [degrees]
-	double constraint_theta_max=0.0; // loop angle max [degrees]
-	double constraint_theta_delta=5.0; /// loop angle delta [degrees]
+   bool   constraint_theta_changed=false;
+   double constraint_theta=0.0; /// Constrained minimisation vector (rotational) [degrees]
+   double constraint_theta_min=0.0; /// loop angle min [degrees]
+   double constraint_theta_max=0.0; // loop angle max [degrees]
+   double constraint_theta_delta=5.0; /// loop angle delta [degrees]
 
-	// LaGrange multiplier variables
-	double lagrange_lambda_x=0.0;
+   // LaGrange multiplier variables
+   double lagrange_lambda_x=0.0;
    double lagrange_lambda_y=0.0;
    double lagrange_lambda_z=0.0;
    double lagrange_m=1.0;
    double lagrange_N=1000.0;
    bool   lagrange_multiplier=false;
 
-	double cooling_time=100.0e-12; ///seconds
-	int cooling_function_flag=0; /// 0 = exp, 1 = gaussian
-	pump_functions_t pump_function=two_temperature;
-	double pump_power=20.0; // mJ/cm^2;
-	double pump_time=50.0e-15;
-	double double_pump_power=20.0; // mJ/cm^2;
-	double double_pump_Tmax=500.0;
-	double double_pump_time=50.0e-15;
-	double double_pump_delay=10.0e-12;
-	double HeatSinkCouplingConstant=0.0; ///1.1e12 ~ sensible value
-	double TTCe = 222.0; ///electron specific heat (gamma)
-	double TTCl = 2.3E06; ///phonon specific heat
-	double TTG = 6.6E17 ;///electron coupling constant
-	double TTTe = 0.0; /// electron temperature
-	double TTTp = 0.0; /// phonon temperature
+   double cooling_time=100.0e-12; ///seconds
+   int cooling_function_flag=0; /// 0 = exp, 1 = gaussian
+   pump_functions_t pump_function=two_temperature;
+   double pump_power=20.0; // mJ/cm^2;
+   double pump_time=50.0e-15;
+   double double_pump_power=20.0; // mJ/cm^2;
+   double double_pump_Tmax=500.0;
+   double double_pump_time=50.0e-15;
+   double double_pump_delay=10.0e-12;
+   double HeatSinkCouplingConstant=0.0; ///1.1e12 ~ sensible value
+   double TTCe = 222.0; ///electron specific heat (gamma)
+   double TTCl = 2.3E06; ///phonon specific heat
+   double TTG = 6.6E17 ;///electron coupling constant
+   double TTTe = 0.0; /// electron temperature
+   double TTTp = 0.0; /// phonon temperature
 
-	int system_simulation_flags;
-	int hamiltonian_simulation_flags[10];
+   int system_simulation_flags;
+   int hamiltonian_simulation_flags[10];
 
-	bool local_temperature=false; /// flag to enable material specific temperature
-	bool local_applied_field=false; /// flag to enable material specific applied field
-	bool local_fmr_field=false; /// flag to enable material specific fmr field
+   bool local_temperature=false; /// flag to enable material specific temperature
+   bool local_applied_field=false; /// flag to enable material specific applied field
+   bool local_fmr_field=false; /// flag to enable material specific fmr field
 
    // Checkpoint flags and variables
    bool checkpoint_loaded_flag=false;  // Flag to determine if it is first step after loading checkpoint (true).
@@ -195,16 +195,16 @@ namespace sim{
 /// @return EXIT_SUCCESS
 ///
 /// @internal
-///	Created:		02/10/2008
-///	Revision:	1.1 09/03/2011
+///   Created:    02/10/2008
+///   Revision:   1.1 09/03/2011
 ///=====================================================================================
 ///
 int run(){
-	// Check for calling of function
-	if(err::check==true) std::cout << "sim::run has been called" << std::endl;
+   // Check for calling of function
+   if(err::check==true) std::cout << "sim::run has been called" << std::endl;
 
-	// Initialise simulation data structures
-	sim::initialize(mp::num_materials);
+   // Initialise simulation data structures
+   sim::initialize(mp::num_materials);
 
    // Initialize vampire modules
    sim::internal::initialize_modules();
@@ -216,12 +216,12 @@ int run(){
    #ifdef MPICF
    if(sld::suzuki_trotter_parallel_initialized == false && sld::enabled) {
       sld::suzuki_trotter_parallel_init(atoms::x_coord_array, atoms::y_coord_array, atoms::z_coord_array,
-                                   	    vmpi::min_dimensions, vmpi::max_dimensions);
+                                        vmpi::min_dimensions, vmpi::max_dimensions);
    }
    #endif
 
    // now seed generator
-	mtrandom::grnd.seed(vmpi::parallel_rng_seed(mtrandom::integration_seed));
+   mtrandom::grnd.seed(vmpi::parallel_rng_seed(mtrandom::integration_seed));
 
    {
       // Set up statistical data sets
@@ -238,7 +238,7 @@ int run(){
       stats::initialize(num_atoms_for_statistics, mp::num_materials, grains::num_grains, atoms::m_spin_array, atoms::type_array, atoms::grain_array, atoms::category_array, non_magnetic_materials_array);
    }
 
-	// Check for load spin configurations from checkpoint
+   // Check for load spin configurations from checkpoint
    if(sim::load_checkpoint_flag) load_checkpoint();
 
    // Initialize GPU acceleration if enabled
@@ -253,27 +253,27 @@ int run(){
    if(sim::save_checkpoint_continuous_flag) zlog << zTs() << "Continuously writing checkpoints to disk throughout simulation." << std::endl;
 
 
-	if (micromagnetic::discretisation_type > 0 || micromagnetic::internal::bias_magnets == true)
-	micromagnetic::initialize(cells::num_local_cells,
-									  cells::num_cells,
-									  atoms::num_atoms,
-									  mp::num_materials,
-									  cells::atom_cell_id_array,
-									  atoms::neighbour_list_array,
-									  atoms::neighbour_list_start_index,
-									  atoms::neighbour_list_end_index,
-									  atoms::type_array,
-									  mp::material,
-									  atoms::x_coord_array,
-									  atoms::y_coord_array,
-									  atoms::z_coord_array,
-									  cells::volume_array,
-									  sim::temperature,
-									  cells::num_atoms_in_unit_cell,
-									  cs::system_dimensions[0],
-									  cs::system_dimensions[1],
-									  cs::system_dimensions[2],
-									  cells::local_cell_array);
+   if (micromagnetic::discretisation_type > 0 || micromagnetic::internal::bias_magnets == true)
+   micromagnetic::initialize(cells::num_local_cells,
+                             cells::num_cells,
+                             atoms::num_atoms,
+                             mp::num_materials,
+                             cells::atom_cell_id_array,
+                             atoms::neighbour_list_array,
+                             atoms::neighbour_list_start_index,
+                             atoms::neighbour_list_end_index,
+                             atoms::type_array,
+                             mp::material,
+                             atoms::x_coord_array,
+                             atoms::y_coord_array,
+                             atoms::z_coord_array,
+                             cells::volume_array,
+                             sim::temperature,
+                             cells::num_atoms_in_unit_cell,
+                             cs::system_dimensions[0],
+                             cs::system_dimensions[1],
+                             cs::system_dimensions[2],
+                             cells::local_cell_array);
 
    // initialise dipole field calculation
    dipole::initialize(cells::num_atoms_in_unit_cell,
@@ -302,15 +302,15 @@ int run(){
                      atoms::num_atoms
    );
 
-	if(environment::enabled) environment::initialize(cs::system_dimensions[0],cs::system_dimensions[1],cs::system_dimensions[2]);
+   if(environment::enabled) environment::initialize(cs::system_dimensions[0],cs::system_dimensions[1],cs::system_dimensions[2]);
 
    // For MPI version, calculate initialisation time
-	if(vmpi::my_rank==0){
-		#ifdef MPICF
-			std::cout << "Time for initialisation: " << MPI_Wtime()-vmpi::start_time << std::endl;
-			zlog << zTs() << "Time for initialisation: " << MPI_Wtime()-vmpi::start_time << std::endl;
-			vmpi::start_time=MPI_Wtime(); // reset timer
-		#endif
+   if(vmpi::my_rank==0){
+      #ifdef MPICF
+         std::cout << "Time for initialisation: " << MPI_Wtime()-vmpi::start_time << std::endl;
+         zlog << zTs() << "Time for initialisation: " << MPI_Wtime()-vmpi::start_time << std::endl;
+         vmpi::start_time=MPI_Wtime(); // reset timer
+      #endif
    }
 
    // Set timer for runtime
@@ -322,99 +322,99 @@ int run(){
 
    // For MPI version, calculate initialisation time
    if(vmpi::my_rank==0){
-		std::cout << "Starting Simulation with Program ";
-		zlog << zTs() << "Starting Simulation with Program ";
-	}
+      std::cout << "Starting Simulation with Program ";
+      zlog << zTs() << "Starting Simulation with Program ";
+   }
 
-	// Now set initial compute time
-	#ifdef MPICF
-	vmpi::ComputeTime=MPI_Wtime();
-	vmpi::WaitTime=MPI_Wtime();
-	vmpi::TotalComputeTime=0.0;
-	vmpi::TotalWaitTime=0.0;
-	#endif
+   // Now set initial compute time
+   #ifdef MPICF
+   vmpi::ComputeTime=MPI_Wtime();
+   vmpi::WaitTime=MPI_Wtime();
+   vmpi::TotalComputeTime=0.0;
+   vmpi::TotalWaitTime=0.0;
+   #endif
 
-	// Select program to run
-	switch(program::program){
-		case 0:
-			if(vmpi::my_rank==0){
-				std::cout << "Benchmark..." << std::endl;
-				zlog << "Benchmark..." << std::endl;
-			}
-			program::bmark();
-			break;
+   // Select program to run
+   switch(program::program){
+      case 0:
+         if(vmpi::my_rank==0){
+            std::cout << "Benchmark..." << std::endl;
+            zlog << "Benchmark..." << std::endl;
+         }
+         program::bmark();
+         break;
 
-		case 1:
-			if(vmpi::my_rank==0){
-				std::cout << "Time-Series..." << std::endl;
-				zlog << "Time-Series..." << std::endl;
-			}
-			program::time_series();
-			break;
+      case 1:
+         if(vmpi::my_rank==0){
+            std::cout << "Time-Series..." << std::endl;
+            zlog << "Time-Series..." << std::endl;
+         }
+         program::time_series();
+         break;
 
-		case 2:
-			if(vmpi::my_rank==0){
-				std::cout << "Hysteresis-Loop..." << std::endl;
-				zlog << "Hysteresis-Loop..." << std::endl;
-			}
-			program::hysteresis();
-			break;
+      case 2:
+         if(vmpi::my_rank==0){
+            std::cout << "Hysteresis-Loop..." << std::endl;
+            zlog << "Hysteresis-Loop..." << std::endl;
+         }
+         program::hysteresis();
+         break;
 
-		case 3:
-			if(vmpi::my_rank==0){
-				std::cout << "Static-Hysteresis-Loop..." << std::endl;
-				zlog << "Static-Hysteresis-Loop..." << std::endl;
-			}
-			program::static_hysteresis();
-			break;
+      case 3:
+         if(vmpi::my_rank==0){
+            std::cout << "Static-Hysteresis-Loop..." << std::endl;
+            zlog << "Static-Hysteresis-Loop..." << std::endl;
+         }
+         program::static_hysteresis();
+         break;
 
-		case 4:
-			if(vmpi::my_rank==0){
-				std::cout << "Curie-Temperature..." << std::endl;
-				zlog << "Curie-Temperature..." << std::endl;
-			}
-			program::curie_temperature();
-			break;
+      case 4:
+         if(vmpi::my_rank==0){
+            std::cout << "Curie-Temperature..." << std::endl;
+            zlog << "Curie-Temperature..." << std::endl;
+         }
+         program::curie_temperature();
+         break;
 
-		case 5:
-			if(vmpi::my_rank==0){
-				std::cout << "Field-Cool..." << std::endl;
-				zlog << "Field-Cool..." << std::endl;
-			}
-			program::field_cool();
-			break;
+      case 5:
+         if(vmpi::my_rank==0){
+            std::cout << "Field-Cool..." << std::endl;
+            zlog << "Field-Cool..." << std::endl;
+         }
+         program::field_cool();
+         break;
 
-		case 6:
-			if(vmpi::my_rank==0){
-				std::cout << "Temperature-Pulse..." << std::endl;
-				zlog << "Temperature-Pulse..." << std::endl;
-			}
-			program::temperature_pulse();
-			break;
+      case 6:
+         if(vmpi::my_rank==0){
+            std::cout << "Temperature-Pulse..." << std::endl;
+            zlog << "Temperature-Pulse..." << std::endl;
+         }
+         program::temperature_pulse();
+         break;
 
-		case 7:
-			if(vmpi::my_rank==0){
-				std::cout << "HAMR-Simulation..." << std::endl;
-				zlog << "HAMR-Simulation..." << std::endl;
-			}
-			program::hamr();
-			break;
+      case 7:
+         if(vmpi::my_rank==0){
+            std::cout << "HAMR-Simulation..." << std::endl;
+            zlog << "HAMR-Simulation..." << std::endl;
+         }
+         program::hamr();
+         break;
 
-		case 8:
-			if(vmpi::my_rank==0){
-				std::cout << "CMC-Anisotropy..." << std::endl;
-				zlog << "CMC-Anisotropy..." << std::endl;
-			}
-			program::cmc_anisotropy();
-			break;
+      case 8:
+         if(vmpi::my_rank==0){
+            std::cout << "CMC-Anisotropy..." << std::endl;
+            zlog << "CMC-Anisotropy..." << std::endl;
+         }
+         program::cmc_anisotropy();
+         break;
 
-		case 9:
-			if(vmpi::my_rank==0){
-				std::cout << "Hybrid-CMC..." << std::endl;
-				zlog << "Hybrid-CMC..." << std::endl;
-			}
-			program::hybrid_cmc();
-			break;
+      case 9:
+         if(vmpi::my_rank==0){
+            std::cout << "Hybrid-CMC..." << std::endl;
+            zlog << "Hybrid-CMC..." << std::endl;
+         }
+         program::hybrid_cmc();
+         break;
 
       case 10:
          if(vmpi::my_rank==0){
@@ -456,130 +456,130 @@ int run(){
          program::effective_damping();
          break;
 
-		case 15:
-	  		if(vmpi::my_rank==0){
-	    		std::cout << "fmr..." << std::endl;
-	    		zlog << "fmr..." << std::endl;
-	  		}
-	  		program::fmr();
-	  		break;
+      case 15:
+         if(vmpi::my_rank==0){
+            std::cout << "fmr..." << std::endl;
+            zlog << "fmr..." << std::endl;
+         }
+         program::fmr();
+         break;
 
-		case 16:
-	  		if(vmpi::my_rank==0){
-	    		std::cout << "localised-field-cool..." << std::endl;
-	    		zlog << "localised-field-cool..." << std::endl;
-	  		}
-	  		program::local_field_cool();
-	  		break;
+      case 16:
+         if(vmpi::my_rank==0){
+            std::cout << "localised-field-cool..." << std::endl;
+            zlog << "localised-field-cool..." << std::endl;
+         }
+         program::local_field_cool();
+         break;
 
-		case 17:
-	  		if(vmpi::my_rank==0){
-	    		std::cout << "electrical-pulse..." << std::endl;
-	    		zlog << "electrical-pulse..." << std::endl;
-	  		}
-	  		program::electrical_pulse();
-	  		break;
-		case 18:
-	  		if(vmpi::my_rank==0){
-	    		std::cout << "field-pulse..." << std::endl;
-	    		zlog << "field-pulse..." << std::endl;
-	  		}
-	  		program::field_pulse();
-	  		break;
-		case 19:
-	  		if(vmpi::my_rank==0){
-	    		std::cout << "laser-electrical-pulse..." << std::endl;
-	    		zlog << "laser-electrical-pulse..." << std::endl;
-	  		}
-	  		program::laser_electrical_pulse();
-	  		break;
+      case 17:
+         if(vmpi::my_rank==0){
+            std::cout << "electrical-pulse..." << std::endl;
+            zlog << "electrical-pulse..." << std::endl;
+         }
+         program::electrical_pulse();
+         break;
+      case 18:
+         if(vmpi::my_rank==0){
+            std::cout << "field-pulse..." << std::endl;
+            zlog << "field-pulse..." << std::endl;
+         }
+         program::field_pulse();
+         break;
+      case 19:
+         if(vmpi::my_rank==0){
+            std::cout << "laser-electrical-pulse..." << std::endl;
+            zlog << "laser-electrical-pulse..." << std::endl;
+         }
+         program::laser_electrical_pulse();
+         break;
 
-		case 50:
-			if(vmpi::my_rank==0){
-				std::cout << "Diagnostic-Boltzmann..." << std::endl;
-				zlog << "Diagnostic-Boltzmann..." << std::endl;
-			}
-			program::boltzmann_dist();
-			break;
-		case 51:
-			if(vmpi::my_rank==0){
-				std::cout << "Setting..." << std::endl;
-				zlog << "Setting..." << std::endl;
-			}
-			program::setting_process();
-			break;
-		//------------------------------------------------------------------------
-		case 52:
-		 	if(vmpi::my_rank==0){
-				std::cout << "Domain walls..." << std::endl;
-				zlog << "Domain walls..." << std::endl;
-			}
-			program::domain_wall();
-			break;
-		//------------------------------------------------------------------------
-		case 53:
-		 	if(vmpi::my_rank==0){
-				std::cout << "exchange stiffness..." << std::endl;
-				zlog << "exchange stiffness..." << std::endl;
-			}
-			program::exchange_stiffness();
-			break;
-		//------------------------------------------------------------------------
-		case 54:
-			if(vmpi::my_rank==0){
-				std::cout << "mm-A-calculation..." << std::endl;
-				zlog << "mm-A-calculation..." << std::endl;
-			}
-			program::mm_A_calculation();
-			break;
-		//------------------------------------------------------------------------
-		case 70:
-			if(vmpi::my_rank==0){
-				std::cout << "field-sweep..." << std::endl;
-				zlog << "field-sweep..." << std::endl;
-			}
-			program::field_sweep();
-		break;
-		//------------------------------------------------------------------------
-		case 72:
-			if(vmpi::my_rank==0){
-				std::cout << "Tracks..." << std::endl;
-				zlog << "Tracks..." << std::endl;
-			}
-			program::tracks();
-			break;
-		//------------------------------------------------------------------------
-		case 73:
-			if(vmpi::my_rank==0){
-				std::cout << "diagnostic-boltzmann-micromganetic-llg..." << std::endl;
-				zlog << "diagnostic-boltzmann-micromganetic-llg..." << std::endl;
-			}
-			program::boltzmann_dist_micromagnetic_llg();
-			break;
-		// JRH call spin_waves program -------------------------------------------
-		case 74:
-			if(vmpi::my_rank==0){
-				std::cout << "Spin-waves..." << std::endl;
-				zlog << "Spin-waves..." << std::endl;
-			}
-			program::spin_waves();
-			break;
-		//------------------------------------------------------------------------
-		case 75:
-			if(vmpi::my_rank==0){
-				std::cout << "HAMR cool..." << std::endl;
-				zlog << "HAMR cool..." << std::endl;
-			}
-			program::hamr_cool();
-			break;
+      case 50:
+         if(vmpi::my_rank==0){
+            std::cout << "Diagnostic-Boltzmann..." << std::endl;
+            zlog << "Diagnostic-Boltzmann..." << std::endl;
+         }
+         program::boltzmann_dist();
+         break;
+      case 51:
+         if(vmpi::my_rank==0){
+            std::cout << "Setting..." << std::endl;
+            zlog << "Setting..." << std::endl;
+         }
+         program::setting_process();
+         break;
+      //------------------------------------------------------------------------
+      case 52:
+         if(vmpi::my_rank==0){
+            std::cout << "Domain walls..." << std::endl;
+            zlog << "Domain walls..." << std::endl;
+         }
+         program::domain_wall();
+         break;
+      //------------------------------------------------------------------------
+      case 53:
+         if(vmpi::my_rank==0){
+            std::cout << "exchange stiffness..." << std::endl;
+            zlog << "exchange stiffness..." << std::endl;
+         }
+         program::exchange_stiffness();
+         break;
+      //------------------------------------------------------------------------
+      case 54:
+         if(vmpi::my_rank==0){
+            std::cout << "mm-A-calculation..." << std::endl;
+            zlog << "mm-A-calculation..." << std::endl;
+         }
+         program::mm_A_calculation();
+         break;
+      //------------------------------------------------------------------------
+      case 70:
+         if(vmpi::my_rank==0){
+            std::cout << "field-sweep..." << std::endl;
+            zlog << "field-sweep..." << std::endl;
+         }
+         program::field_sweep();
+      break;
+      //------------------------------------------------------------------------
+      case 72:
+         if(vmpi::my_rank==0){
+            std::cout << "Tracks..." << std::endl;
+            zlog << "Tracks..." << std::endl;
+         }
+         program::tracks();
+         break;
+      //------------------------------------------------------------------------
+      case 73:
+         if(vmpi::my_rank==0){
+            std::cout << "diagnostic-boltzmann-micromganetic-llg..." << std::endl;
+            zlog << "diagnostic-boltzmann-micromganetic-llg..." << std::endl;
+         }
+         program::boltzmann_dist_micromagnetic_llg();
+         break;
+      // JRH call spin_waves program -------------------------------------------
+      case 74:
+         if(vmpi::my_rank==0){
+            std::cout << "Spin-waves..." << std::endl;
+            zlog << "Spin-waves..." << std::endl;
+         }
+         program::spin_waves();
+         break;
+      //------------------------------------------------------------------------
+      case 75:
+         if(vmpi::my_rank==0){
+            std::cout << "HAMR cool..." << std::endl;
+            zlog << "HAMR cool..." << std::endl;
+         }
+         program::hamr_cool();
+         break;
 
-		//------------------------------------------------------------------------
-		default:{
-			std::cerr << "Unknown Internal Program ID "<< program::program << " requested, exiting" << std::endl;
-			zlog << "Unknown Internal Program ID "<< program::program << " requested, exiting" << std::endl;
-			exit (EXIT_FAILURE);
-			}
-	}
+      //------------------------------------------------------------------------
+      default:{
+         std::cerr << "Unknown Internal Program ID "<< program::program << " requested, exiting" << std::endl;
+         zlog << "Unknown Internal Program ID "<< program::program << " requested, exiting" << std::endl;
+         exit (EXIT_FAILURE);
+         }
+   }
 
    std::cout <<     "Simulation run time [s]: " << stopwatch.elapsed_seconds() << std::endl;
    zlog << zTs() << "Simulation run time [s]: " << stopwatch.elapsed_seconds() << std::endl;
@@ -610,7 +610,7 @@ int run(){
       zlog << zTs() << "\t" << (montecarlo::cmc::sphere_reject/montecarlo::cmc::mc_total)*100.0 << "% Rejected (Sphere)" << std::endl;
    }
 
-	//program::LLB_Boltzmann();
+   //program::LLB_Boltzmann();
 
    // De-initialize GPU, copying the final spin configuration to the host first
    // (not kept up to date on the host when statistics are calculated on the GPU)
@@ -622,7 +622,7 @@ int run(){
    // optionally save checkpoint file
    if(sim::save_checkpoint_flag && !sim::save_checkpoint_continuous_flag) save_checkpoint();
 
-	return EXIT_SUCCESS;
+   return EXIT_SUCCESS;
 }
 
 /// @brief Wrapper function to call integrators
@@ -644,28 +644,28 @@ int run(){
 /// @return EXIT_SUCCESS
 ///
 /// @internal
-///	Created:		05/02/2011
-///	Revision:	  ---
+///   Created:    05/02/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 int integrate(uint64_t n_steps){
 
-	// Check for calling of function
-	if(err::check==true) std::cout << "sim::integrate has been called" << std::endl;
+   // Check for calling of function
+   if(err::check==true) std::cout << "sim::integrate has been called" << std::endl;
 
-	// Call serial or parallell depending at compile time
-	#ifdef MPICF
-		sim::integrate_mpi(n_steps);
-	#else
-		sim::integrate_serial(n_steps);
-	#endif
+   // Call serial or parallell depending at compile time
+   #ifdef MPICF
+      sim::integrate_mpi(n_steps);
+   #else
+      sim::integrate_serial(n_steps);
+   #endif
 
-	// With GPU acceleration, programs that read the spins on the host directly need
-	// them copied from the device after integration
-	if(gpu::acceleration) gpu::update_host_spins();
+   // With GPU acceleration, programs that read the spins on the host directly need
+   // them copied from the device after integration
+   if(gpu::acceleration) gpu::update_host_spins();
 
-	// return
-	return EXIT_SUCCESS;
+   // return
+   return EXIT_SUCCESS;
 }
 
 /// @brief Wrapper function to call serial integrators
@@ -685,8 +685,8 @@ int integrate(uint64_t n_steps){
 /// @date    23/04/2021
 ///
 /// @internal
-///	Created:		05/02/2011
-///	Revision:	    23/04/2021
+///   Created:    05/02/2011
+///   Revision:       23/04/2021
 ///=====================================================================================
 ///
 void integrate_serial(uint64_t n_steps){
@@ -694,7 +694,7 @@ void integrate_serial(uint64_t n_steps){
    // Check for calling of function
    if(err::check==true) std::cout << "sim::integrate_serial has been called" << std::endl;
 
-	// if simulation is micromagnetic
+   // if simulation is micromagnetic
    if (micromagnetic::discretisation_type >0 ) multiscale_simulation_steps(n_steps);
 
 
@@ -710,26 +710,26 @@ void integrate_serial(uint64_t n_steps){
             if(gpu::acceleration) gpu::llg_heun();
             // Otherwise use CPU version
             else sim::LLG_Heun();
-				if (environment::enabled && (sim::time)%environment::num_atomic_steps_env ==0){
-					environment::LLB(sim::temperature, sim::H_applied,sim::H_vec[0],sim::H_vec[1],sim::H_vec[2],mp::dt);
-				}
+            if (environment::enabled && (sim::time)%environment::num_atomic_steps_env ==0){
+               environment::LLB(sim::temperature, sim::H_applied,sim::H_vec[0],sim::H_vec[1],sim::H_vec[2],mp::dt);
+            }
             // Increment time
             sim::internal::increment_time();
          }
          break;
 
-		case 1: // Montecarlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
+      case 1: // Montecarlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
 
                 // Optionally select GPU accelerated version
                 if(gpu::acceleration) gpu::mc_step();
 
                 else montecarlo::mc_step(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array, atoms::num_atoms, atoms::type_array);
 
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
       case 2: // LLG Midpoint
          for(uint64_t ti=0;ti<n_steps;ti++){
@@ -739,66 +739,66 @@ void integrate_serial(uint64_t n_steps){
          }
          break;
 
-		case 3: // Constrained Monte Carlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				montecarlo::cmc_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 3: // Constrained Monte Carlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            montecarlo::cmc_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 4: // Hybrid Constrained Monte Carlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				montecarlo::cmc_mc_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 4: // Hybrid Constrained Monte Carlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            montecarlo::cmc_mc_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case sim::llg_quantum: // LLG quantum noise
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				sim::internal::llg_quantum_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case sim::llg_quantum: // LLG quantum noise
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            sim::internal::llg_quantum_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case sim::lsf: // LSF
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				sim::internal::lsf_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case sim::lsf: // LSF
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            sim::internal::lsf_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 7: // LSF Monte Carlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				montecarlo::lsf_mc_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 7: // LSF Monte Carlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            montecarlo::lsf_mc_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case sim::lsf_rk4: // LSF-RK4
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				sim::internal::lsf_rk4_step();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case sim::lsf_rk4: // LSF-RK4
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            sim::internal::lsf_rk4_step();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case sim::suzuki_trotter: // spin-lattice Dynamics
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				sld::suzuki_trotter();
-			   sim::internal::increment_time();
-			}
-			break;
+      case sim::suzuki_trotter: // spin-lattice Dynamics
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            sld::suzuki_trotter();
+            sim::internal::increment_time();
+         }
+         break;
 
-		default:{
-			std::cerr << "Unknown integrator type "<< sim::integrator << " requested, exiting" << std::endl;
+      default:{
+         std::cerr << "Unknown integrator type "<< sim::integrator << " requested, exiting" << std::endl;
          err::vexit();
-		}
-	}
+      }
+   }
 }
 
    return;
@@ -823,54 +823,54 @@ void integrate_serial(uint64_t n_steps){
 /// @return EXIT_SUCCESS
 ///
 /// @internal
-///	Created:		07/03/2011
-///	Revision:	  ---
+///   Created:    07/03/2011
+///   Revision:     ---
 ///=====================================================================================
 ///
 int integrate_mpi(uint64_t n_steps){
 
-	// Check for calling of function
-	if(err::check==true) std::cout << "sim::integrate_mpi has been called" << std::endl;
+   // Check for calling of function
+   if(err::check==true) std::cout << "sim::integrate_mpi has been called" << std::endl;
 
 
-	if (micromagnetic::discretisation_type >0 ) multiscale_simulation_steps(n_steps);
+   if (micromagnetic::discretisation_type >0 ) multiscale_simulation_steps(n_steps);
 
-		//else simulation is atomistic
-	else{
+      //else simulation is atomistic
+   else{
 
-	// Case statement to call integrator
-	switch(sim::integrator){
-		case 0: // LLG Heun
-			for(uint64_t ti=0;ti<n_steps;ti++){
-			#ifdef MPICF
-				// Select CUDA version if supported
-				#if defined(CUDA) && !defined(CUDA_MULTIGPU)
-					//sim::LLG_Heun_cuda_mpi();
-				#else
-					#ifdef CUDA_MULTIGPU
-					if(gpu::acceleration) mgpu::llg_heun();
-					else
-					#endif
-					sim::LLG_Heun_mpi();
-					//calcualte the field from the environment
-					if (environment::enabled &&  (sim::time)%environment::num_atomic_steps_env ==0)
-						environment::LLB(sim::temperature,
-												sim::H_applied,
-												sim::H_vec[0],
-												sim::H_vec[1],
-												sim::H_vec[2],
-												mp::dt);
-				#endif
-			#endif
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+   // Case statement to call integrator
+   switch(sim::integrator){
+      case 0: // LLG Heun
+         for(uint64_t ti=0;ti<n_steps;ti++){
+         #ifdef MPICF
+            // Select CUDA version if supported
+            #if defined(CUDA) && !defined(CUDA_MULTIGPU)
+               //sim::LLG_Heun_cuda_mpi();
+            #else
+               #ifdef CUDA_MULTIGPU
+               if(gpu::acceleration) mgpu::llg_heun();
+               else
+               #endif
+               sim::LLG_Heun_mpi();
+               //calcualte the field from the environment
+               if (environment::enabled &&  (sim::time)%environment::num_atomic_steps_env ==0)
+                  environment::LLB(sim::temperature,
+                                    sim::H_applied,
+                                    sim::H_vec[0],
+                                    sim::H_vec[1],
+                                    sim::H_vec[2],
+                                    mp::dt);
+            #endif
+         #endif
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 1: // Montecarlo
+      case 1: // Montecarlo
 
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				#ifdef MPICF
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            #ifdef MPICF
                if(montecarlo::mc_parallel_initialized == false) {
                   montecarlo::mc_parallel_init(atoms::x_coord_array, atoms::y_coord_array, atoms::z_coord_array,
                                                vmpi::min_dimensions, vmpi::max_dimensions);
@@ -879,105 +879,105 @@ int integrate_mpi(uint64_t n_steps){
                                             atoms::type_array);
             #endif
 
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 2: // LLG Midpoint
-			for(uint64_t ti=0;ti<n_steps;ti++){
-			#ifdef MPICF
-			// Select CUDA version if supported
-				#ifdef CUDA
-					//sim::LLG_Midpoint_cuda_mpi();
-				#else
-					sim::LLG_Midpoint_mpi();
-				#endif
-			#endif
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 2: // LLG Midpoint
+         for(uint64_t ti=0;ti<n_steps;ti++){
+         #ifdef MPICF
+         // Select CUDA version if supported
+            #ifdef CUDA
+               //sim::LLG_Midpoint_cuda_mpi();
+            #else
+               sim::LLG_Midpoint_mpi();
+            #endif
+         #endif
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 3: // Constrained Monte Carlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				terminaltextcolor(RED);
-				std::cerr << "Error - Constrained Monte Carlo Integrator unavailable for parallel execution" << std::endl;
-				terminaltextcolor(WHITE);
-				err::vexit();
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 3: // Constrained Monte Carlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            terminaltextcolor(RED);
+            std::cerr << "Error - Constrained Monte Carlo Integrator unavailable for parallel execution" << std::endl;
+            terminaltextcolor(WHITE);
+            err::vexit();
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 6: // LSF
-			for(uint64_t ti=0;ti<n_steps;ti++){
-			#ifdef MPICF
-			// Select CUDA version if supported
-				#ifdef CUDA
-					//sim::LSF_cuda();
-				#else
-					sim::LSF_mpi();
-				#endif
-			#endif
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 6: // LSF
+         for(uint64_t ti=0;ti<n_steps;ti++){
+         #ifdef MPICF
+         // Select CUDA version if supported
+            #ifdef CUDA
+               //sim::LSF_cuda();
+            #else
+               sim::LSF_mpi();
+            #endif
+         #endif
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 7: // LSF-Montecarlo
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				#ifdef MPICF
-					if(montecarlo::lsf_mc_parallel_initialized == false) {
-						montecarlo::lsf_mc_parallel_init(atoms::x_coord_array, atoms::y_coord_array, atoms::z_coord_array,
-																	vmpi::min_dimensions, vmpi::max_dimensions);
-					}
-					montecarlo::lsf_mc_step_parallel(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array,
-																atoms::type_array);
-					#endif
+      case 7: // LSF-Montecarlo
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            #ifdef MPICF
+               if(montecarlo::lsf_mc_parallel_initialized == false) {
+                  montecarlo::lsf_mc_parallel_init(atoms::x_coord_array, atoms::y_coord_array, atoms::z_coord_array,
+                                                   vmpi::min_dimensions, vmpi::max_dimensions);
+               }
+               montecarlo::lsf_mc_step_parallel(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array,
+                                                atoms::type_array);
+               #endif
 
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 8: // LSF-RK4
-			for(uint64_t ti=0;ti<n_steps;ti++){
-			#ifdef MPICF
-			// Select CUDA version if supported
-				#ifdef CUDA
-					//sim::LSF_RK4_cuda();
-				#else
-					sim::LSF_RK4_mpi();
-				#endif
-			#endif
-				// increment time
-				sim::internal::increment_time();
-			}
-			break;
+      case 8: // LSF-RK4
+         for(uint64_t ti=0;ti<n_steps;ti++){
+         #ifdef MPICF
+         // Select CUDA version if supported
+            #ifdef CUDA
+               //sim::LSF_RK4_cuda();
+            #else
+               sim::LSF_RK4_mpi();
+            #endif
+         #endif
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		case 9: // Suzuki Trotter decomposition
- 			for(uint64_t ti=0;ti<n_steps;ti++){
- 				#ifdef MPICF
+      case 9: // Suzuki Trotter decomposition
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            #ifdef MPICF
 
                 sld::suzuki_trotter_step_parallel(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array,
                                              atoms::type_array);
              #endif
- 				// increment time
- 				sim::internal::increment_time();
- 			}
- 			break;
+            // increment time
+            sim::internal::increment_time();
+         }
+         break;
 
-		default:{
-			terminaltextcolor(RED);
-			std::cerr << "Unknown integrator type "<< sim::integrator << " requested, exiting" << std::endl;
-			terminaltextcolor(WHITE);
-			exit (EXIT_FAILURE);
-			}
-		}
-	}
+      default:{
+         terminaltextcolor(RED);
+         std::cerr << "Unknown integrator type "<< sim::integrator << " requested, exiting" << std::endl;
+         terminaltextcolor(WHITE);
+         exit (EXIT_FAILURE);
+         }
+      }
+   }
 
-	return EXIT_SUCCESS;
+   return EXIT_SUCCESS;
 }
 
 } // Namespace sim
@@ -985,18 +985,18 @@ int integrate_mpi(uint64_t n_steps){
 
 void multiscale_simulation_steps(int n_steps){
 
-	if (environment::enabled && (sim::time)%environment::num_atomic_steps_env ==0)
-		environment::LLB(sim::temperature,
-						   	sim::H_applied,
-						   	sim::H_vec[0],
-						   	sim::H_vec[1],
-						   	sim::H_vec[2],
-						   	mp::dt);
+   if (environment::enabled && (sim::time)%environment::num_atomic_steps_env ==0)
+      environment::LLB(sim::temperature,
+                        sim::H_applied,
+                        sim::H_vec[0],
+                        sim::H_vec[1],
+                        sim::H_vec[2],
+                        mp::dt);
 
    for(int ti=0;ti<n_steps;ti++){
       //calcaulte the field from the environment
       // if (environment::enabled && (sim::time)%environment::num_atomic_steps_env ==0)
-		//	environment::LLB(sim::temperature,
+      // environment::LLB(sim::temperature,
       //    sim::H_applied,
       //    sim::H_vec[0],
       //    sim::H_vec[1],
