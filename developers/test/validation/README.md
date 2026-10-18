@@ -60,7 +60,11 @@ from its key and the time step; with all their seeds on one rank they are compar
 references. Finally `timeseries-T300` and `hamr-small` are rerun on every number of ranks saving a single checkpoint part way
 (`sim:save-checkpoint=continuous` with a rate of 60 % of the time steps) and continued from it
 (`sim:load-checkpoint=continue`); the final spins of the continuation must be bit for bit those of the uninterrupted
-run.
+run. The granular HAMR writes (`hamr-granular`, `hamr-granular-t0`) save a checkpoint at the end, from which a one step
+300 K time series is restarted (`sim:load-checkpoint=restart`, binary `file-per-node` configuration output, as in a
+read-back simulation) on every number of ranks; its final spins must be bit for bit identical on every number of ranks,
+and `hamr-granular-t0` (including its grain statistics) must agree with the first number of ranks within the
+deterministic tolerance.
 
 `run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
 of all statistical comparisons pooled together: when test and reference sample the same distribution they are
@@ -79,6 +83,10 @@ All case inputs use `output:column-headers` and `output:precision=16`
 | `statistical` (T>0) | `seeds` | abs(mean_test - mean_ref) <= `k` * sqrt(se_test^2 + se_ref^2) over seed time-averages (after `skip_rows`); with `"per_row": true` every output row is compared separately (e.g. one row per temperature) |
 | `benchmark` | 1 | not compared, reports simulation run time; only run when named with `--cases` (e.g. `hamr-perf` for profiling) |
 
+`"grain": true` adds the quantity `grain`: every column of `grain.txt` after time and temperature (grain and
+material-grain statistics), compared element by element like the other quantities. References keep `grain.txt` for
+these cases. `vtest.py configs` reads both the single file and the `file-per-node` configuration formats.
+
 Precision (`dp`/`sp`) is taken from the test run's `meta.json` (set with `run --precision`).
 Statistical checks fail spuriously ~0.1 % of the time per quantity: re-run with `--seed-offset 100` before treating a failure as real.
 
@@ -90,3 +98,8 @@ Statistical checks fail spuriously ~0.1 % of the time per quantity: re-run with 
 - `timeseries-T300`, `curie-llg`, `curie-mc`: thermal statistics (LLG and Monte Carlo are each compared only with
   the same integrator).
 - `hamr-small` (statistical), `hamr-t0` (deterministic), `hamr-perf` (benchmark, ~168k atoms); `thermal-perf` (benchmark, the same system as a 300 K time series).
+- `hamr-granular-t0` (deterministic, with grain statistics) and `hamr-granular` (statistical): 61,440 atom granular
+  FePt film (rocksalt supercell, voronoi grains with 1 nm spacing, periodic in x and y, 8x8x20 nm, 27,160 FePt atoms)
+  with a non-magnetic fill between the grains and a dense non-magnetic sensor layer above them (`non-magnetic=keep`),
+  written by a HAMR head at 0 K and with a 300-800 K laser. Initial spins are tilted and the fill has full
+  density, so that neither depends on the decomposition.
