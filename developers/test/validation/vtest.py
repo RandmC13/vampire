@@ -65,7 +65,11 @@ def read_output(path):
 
 def quantities(case, path):
    cols = read_output(path)
-   return {q: np.asarray(eval(expr, {"__builtins__": {}}, cols), dtype=float) for q, expr in case["quantities"].items()}
+   q = {q: np.asarray(eval(expr, {"__builtins__": {}}, cols), dtype=float) for q, expr in case["quantities"].items()}
+   if case.get("grain"):
+      # grain.txt (no column headers): time, temperature, then the grain columns, one row per output
+      q["grain"] = np.loadtxt(os.path.join(os.path.dirname(path), "grain.txt"), ndmin=2)[:, 2:]
+   return q
 
 def result_dir(label):
    # look in scratch results first, then committed references
@@ -115,7 +119,7 @@ def cmd_run(args):
       for c, r in jobs:
          d = os.path.join(base, c, r)
          for f in os.listdir(d):
-            if f != "output":
+            if f not in ("output", "grain.txt"):
                p = os.path.join(d, f)
                shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
 
@@ -146,10 +150,10 @@ def thermal_mz(p):
 #------------------------------------------------------------------------------
 def seed_means(case, d):
    # time average (or per-row value) of each quantity per seed, then mean and standard error over seeds
-   per = {q: [] for q in case["quantities"]}
+   per = {}
    for r in seed_runs(case, d):
       for q, v in quantities(case, os.path.join(d, r, "output")).items():
-         per[q].append(v if case.get("per_row") else v[case["skip_rows"]:].mean())
+         per.setdefault(q, []).append(v if case.get("per_row") else v[case["skip_rows"]:].mean())
    return {q: (np.mean(v, axis=0), np.std(v, ddof=1, axis=0) / np.sqrt(len(v))) for q, v in per.items()}
 
 def noise_ok(se_test, se_ref):
@@ -186,7 +190,7 @@ def compare_case(name, case, test_dir, ref_dir, precision):
       r = quantities(case, os.path.join(ref_dir, "run", "output"))
       n = tol.get("rows")   # optionally compare only the first n rows (before round-off amplification dominates)
       if n: t, r = ({k: v[:n] for k, v in x.items()} for x in (t, r))
-      for k in case["quantities"]:
+      for k in r:
          if t[k].shape != r[k].shape:
             rows.append((k, False, "row count %d vs %d" % (len(t[k]), len(r[k])))); continue
          # atol is relative to the largest reference magnitude, so it applies equally to unit vectors and energies (J);
@@ -202,8 +206,8 @@ def compare_case(name, case, test_dir, ref_dir, precision):
       rows.append(("time", bool(times), "simulation run time %s s" % (times[0] if times else "not found")))
    elif case["kind"] == "statistical":
       t, r = seed_means(case, test_dir), seed_means(case, ref_dir)
-      for k in case["quantities"]:
-         (mt, st), (mr, sr) = (np.atleast_1d(x) for x in t[k]), (np.atleast_1d(x) for x in r[k])
+      for k in r:
+         (mt, st), (mr, sr) = (np.atleast_1d(x).ravel() for x in t[k]), (np.atleast_1d(x).ravel() for x in r[k])
          if mt.shape != mr.shape:
             rows.append((k, False, "row count %d vs %d" % (len(mt), len(mr)))); continue
          Z_SCORES.append((name, k, (mt - mr) / np.maximum(np.hypot(st, sr), 1e-300), st / np.maximum(sr, 1e-300)))
@@ -257,18 +261,25 @@ def print_summary():
 #------------------------------------------------------------------------------
 def read_config(d):
    # binary config files (config:output-format=binary): atoms-coords.data holds
-   # n, n types, n categories, 3n coordinates; spins-*.data holds n, 3n spins
-   with open(os.path.join(d, "atoms-coords.data"), "rb") as f:
-      n = int(np.frombuffer(f.read(8), dtype=np.uint64)[0])
-      f.seek(8 + 8 * n)
-      coords = np.frombuffer(f.read(24 * n), dtype=np.float64).reshape(n, 3)
-   spin_files = sorted(f for f in os.listdir(d) if f.startswith("spins-") and f.endswith(".data"))
-   with open(os.path.join(d, spin_files[-1]), "rb") as f:
-      m = int(np.frombuffer(f.read(8), dtype=np.uint64)[0])
-      spins = np.frombuffer(f.read(24 * m), dtype=np.float64).reshape(m, 3)
-   if m != n: sys.exit("Coordinate and spin files of %s have different atom counts" % d)
+   # n, n types, n categories, 3n coordinates; spins-<counter>.data holds n, 3n spins;
+   # with config:output-mode=file-per-node each output group writes its own files,
+   # atoms-coords-<group>.data and spins-<counter>-<group>.data, read here in group order
+   def read(path, offset):
+      with open(path, "rb") as f:
+         n = int(np.frombuffer(f.read(8), dtype=np.uint64)[0])
+         f.seek(8 + offset * n)
+         return n, np.frombuffer(f.read(24 * n), dtype=np.float64).reshape(n, 3)
+   files = sorted(os.listdir(d))
+   coord_files = [f for f in files if f.startswith("atoms-coords") and f.endswith(".data")]
+   counter = sorted({f[6:14] for f in files if f.startswith("spins-") and f.endswith(".data")})[-1]
+   spin_files = [f for f in files if f.startswith("spins-" + counter) and f.endswith(".data")]
+   if len(coord_files) != len(spin_files): sys.exit("Coordinate and spin files of %s have different groups" % d)
+   coords = [read(os.path.join(d, f), 8) for f in coord_files]
+   spins = [read(os.path.join(d, f), 0) for f in spin_files]
+   if [n for n, _ in coords] != [n for n, _ in spins]: sys.exit("Coordinate and spin files of %s have different atom counts" % d)
+   coords, spins = np.concatenate([c for _, c in coords]), np.concatenate([s for _, s in spins])
    order = np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0]))   # files list atoms in rank order
-   return coords[order], spins[order], spin_files[-1]
+   return coords[order], spins[order], "spins-" + counter
 
 def cmd_configs(args):
    test_dir, ref_dir = result_dir(args.test), result_dir(args.ref)
@@ -277,7 +288,7 @@ def cmd_configs(args):
       for r in sorted(os.listdir(os.path.join(test_dir, c))) if os.path.isdir(os.path.join(test_dir, c)) else []:
          t, f = os.path.join(test_dir, c, r), os.path.join(ref_dir, c, r)
          if not os.path.isdir(t): continue
-         missing = [d for d in (t, f) if not os.path.isfile(os.path.join(d, "atoms-coords.data"))]
+         missing = [d for d in (t, f) if not any(x.startswith("atoms-coords") and x.endswith(".data") for x in os.listdir(d))] if os.path.isdir(f) else [f]
          if missing:
             print("%-30s %-8s FAIL no binary configuration in %s" % (c, r, ", ".join(missing))); failures += 1; continue
          tc, ts, tname = read_config(t)

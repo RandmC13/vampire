@@ -30,6 +30,12 @@
 #   7. reruns the time series and a HAMR case of stage 5 saving a checkpoint
 #      part way, and continues them from it, on each number of ranks, and checks
 #      that their final spins are bit for bit those of the uninterrupted runs
+#   8. restarts a one step time series from the checkpoint saved at the end of
+#      the granular HAMR writes of stage 5 (sim:load-checkpoint=restart, binary
+#      file-per-node configuration output) on each number of ranks, and checks
+#      that its final spins are bit for bit identical on every number of ranks;
+#      the deterministic granular write is also compared with the first number
+#      of ranks, including its grain statistics
 #
 # Usage (from anywhere):  developers/test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
@@ -63,7 +69,9 @@ t0=$(ls developers/test/validation/cases | grep '^t0-' | grep -v "^$spiral\$" | 
 # configuration is written at every output instead (they have only a few outputs)
 ft_end=analytic-thermal,hamr-small,hamr-t0,prog-field-cool,prog-fmr,prog-hysteresis,prog-laser-pulse,timeseries-T300
 ft_cont=curie-llg,prog-partial-hysteresis
-ft=$ft_end,$ft_cont
+# granular HAMR writes, which also save a checkpoint at the end for the read-back of stage 8
+readback=hamr-granular,hamr-granular-t0
+ft=$ft_end,$ft_cont,$readback
 # bit for bit identical results on any number of ranks need exchange sums in atom key order
 configs=(--extra "config:atoms=end" --extra "config:output-format=binary" --extra "gpu:decomposition-independent-order")
 # cases continued from a checkpoint (stage 7)
@@ -100,6 +108,29 @@ continue_runs(){
 	done
 }
 
+# readback_runs <exe> <ranks> <label of the writes> <new label>: restarts a one step 300 K time
+# series from the checkpoint saved at the end of each run of the read-back cases
+readback_runs(){
+	for c in ${readback//,/ }; do
+		for src in $results/$3/$c/*/; do
+			d=$results/$4/$c/$(basename $src)
+			rm -rf $d; mkdir -p $d
+			cp developers/test/validation/cases/$c/* $src/vampire*.chk $d/; rm $d/case.json
+			{
+				sed 's/^sim:program *=.*/sim:program = time-series/' $src/input
+				echo "sim:temperature = 300.0"
+				echo "sim:total-time-steps = 1"
+				echo "sim:time-steps-increment = 1"
+				echo "sim:load-checkpoint = restart"
+				echo "config:output-mode = file-per-node"
+				echo "config:output-nodes = 20"
+			} >$d/input
+			(cd $d && $MPIRUN -np $2 $1 >stdout 2>&1) || echo "$c $(basename $src): read-back failed (see $d/stdout)"
+			grep -q "Checkpoint file loaded" $d/log* || echo "$c $(basename $src): checkpoint not loaded (see $d/log)"
+		done
+	done
+}
+
 echo "=== Building CPU MPI version ==="
 make clean
 if ! make -j$jobs parallel >$out/build-parallel.log 2>&1; then
@@ -124,9 +155,12 @@ for pr in dp sp; do
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n --ranks $n --precision $pr --cases $t0,$spiral "${configs[@]}"
 		echo "=== Multi-GPU version ($pr), $n ranks, finite temperature and program cases, one seed ==="
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_end --seeds 1 "${configs[@]}"
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "sim:save-checkpoint=end"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_cont --seeds 1 "${configs_cont[@]}"
 		echo "=== Multi-GPU version ($pr), $n ranks, continuation from a checkpoint ==="
 		continue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-continue
+		echo "=== Multi-GPU version ($pr), $n ranks, read-back restarted from the end of the granular writes ==="
+		readback_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-readback
 	done
 	first=$(echo $ranks | awk '{print $1}')
 	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
@@ -149,12 +183,14 @@ for pr in dp sp; do
 		fi
 		[ $n != $first ] && $vt configs --test $name-$pr-np$n --ref $name-$pr-np$first --cases $spiral >$out/configs-$pr-np$n.txt
 		[ $n != $first ] && $vt configs --test $name-$pr-np$n-ft --ref $name-$pr-np$first-ft --cases $ft >$out/configs-ft-$pr-np$n.txt
+		[ $n != $first ] && $vt configs --test $name-$pr-np$n-readback --ref $name-$pr-np$first-readback --cases $readback >$out/configs-readback-$pr-np$n.txt
+		[ $n != $first ] && $vt compare --test $name-$pr-np$n-ft --ref $name-$pr-np$first-ft --cases hamr-granular-t0 --verbose >$out/compare-granular-$pr-np$n.txt
 		$vt configs --test $name-$pr-np$n-continue --ref $name-$pr-np$n-ft --cases $continued >$out/continue-$pr-np$n.txt
 	done
 	$vt compare --test $name-$pr-stat --ref cpu --cases $ft --verbose --summary >$out/compare-stat-$pr.txt
 done
 
-tar czf $results/$name.tar.gz --exclude='*.data' -C $results $name $(cd $results && ls -d $name-*)
+tar czf $results/$name.tar.gz --exclude='*.data' --exclude='*.chk' -C $results $name $(cd $results && ls -d $name-*)
 
 echo
 echo "=== Summary (known GPU anisotropy failures: t0-anis-biaxial, -triaxial, -cubic-rotated, 5 each) ==="
