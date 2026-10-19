@@ -35,6 +35,7 @@ check_scratch(){
    fi
 }
 check_scratch $H3
+mkdir -p $H3/bench
 
 { module list; echo "nodes: ${SLURM_JOB_NODELIST:-}"; nvidia-smi -L 2> /dev/null; } 2>&1
 
