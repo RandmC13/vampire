@@ -17,6 +17,7 @@ namespace gpu{
    //-----------------------------------------------------------------------------
    extern bool acceleration; // flag to enable gpu_acceleration
    extern bool cpu_stats; // flag to calculate stats using cpu
+   extern bool skip_non_magnetic_atoms; // flag to leave atoms of non-magnetic=keep materials unintegrated
    extern bool initialized; // flag to check for successful initialization
 
    extern int device; // int specifying gpu device to use for simulation

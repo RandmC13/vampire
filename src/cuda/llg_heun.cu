@@ -12,6 +12,7 @@
 
 // Vampire headers
 #include "cuda.hpp"
+#include "gpu.hpp"
 
 // Local cuda headers
 #include "cuda_utils.hpp"
@@ -118,6 +119,7 @@ namespace vcuda{
                // save derived variables to host array
                h_heun_params.at(i).prefactor = -gamma / (1.0 + alpha * alpha);
                h_heun_params.at(i).lambda_times_prefactor = -gamma * alpha / (1.0 + alpha * alpha);
+               h_heun_params.at(i).skip = gpu::skip_non_magnetic_atoms && ::mp::material[i].non_magnetic == 2;
 
                #ifdef CUDA_SPIN_DEBUG
                   // output variables to screen for debugging
@@ -282,6 +284,7 @@ namespace vcuda{
 
                // Determine material id for atom
                size_t mid = material_id[atom];
+               if(heun_parameters[mid].skip) continue;
 
                // prestore prefactors into registers
                const cu_real_t prefactor = heun_parameters[mid].prefactor;
@@ -360,6 +363,7 @@ namespace vcuda{
             {
 
                size_t mid = material_id[atom];
+               if(heun_parameters[mid].skip) continue;
 
                cu_real_t prefactor = heun_parameters[mid].prefactor;
                cu_real_t lambdatpr = heun_parameters[mid].lambda_times_prefactor;

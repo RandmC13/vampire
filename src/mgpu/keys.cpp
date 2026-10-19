@@ -24,38 +24,31 @@
 
 namespace mgpu{
 
-std::vector<uint64_t> atom_key;
+// the keys are stored by the create module (create::set_atom_keys)
+std::vector<uint64_t>& atom_key = create::atom_keys;
 
 //------------------------------------------------------------------------------
-// Function to store a key for every atom that identifies it independently of
-// the decomposition: supercell coordinates (16 bits each, wrapped into the
-// system so that a periodic image has the key of the atom it copies) and the
-// atom number within the unit cell (16 bits)
+// Function to check that every atom has a key that identifies it independently
+// of the decomposition: supercell coordinates (16 bits each) and the atom
+// number within the unit cell (16 bits), distinct for the local atoms
 //------------------------------------------------------------------------------
 void set_atom_keys(const std::vector<cs::catom_t>& catom_array){
 
-   const int64_t n[3] = {int64_t(cs::total_num_unit_cells[0]), int64_t(cs::total_num_unit_cells[1]), int64_t(cs::total_num_unit_cells[2])};
-   const int64_t limit = int64_t(1) << 16;
+   const uint64_t limit = uint64_t(1) << 16;
 
-   if(n[0] >= limit || n[1] >= limit || n[2] >= limit){
-      err::fatal("Error: the multi-GPU version supports at most " + std::to_string(limit) + " unit cells along each axis");
+   for(int i = 0; i < 3; i++){
+      if(cs::total_num_unit_cells[i] >= limit){
+         err::fatal("Error: the multi-GPU version supports at most " + std::to_string(limit) + " unit cells along each axis");
+      }
    }
-
-   atom_key.resize(catom_array.size());
    for(size_t atom = 0; atom < catom_array.size(); atom++){
-      const int64_t sc[3] = {catom_array[atom].scx, catom_array[atom].scy, catom_array[atom].scz};
-      uint64_t key = catom_array[atom].uc_id;
-      if(catom_array[atom].uc_id >= uint64_t(limit)){
+      if(catom_array[atom].uc_id >= limit){
          err::fatal("Error: the multi-GPU version supports at most " + std::to_string(limit) + " atoms per unit cell");
       }
-      for(int i = 0; i < 3; i++) key |= uint64_t(((sc[i] % n[i]) + n[i]) % n[i]) << (16 * (i + 1));
-      atom_key[atom] = key;
    }
 
    // every local (core and boundary) atom must have its own key
-   std::vector<uint64_t> local(atom_key.begin(), atom_key.begin() + vmpi::num_core_atoms + vmpi::num_bdry_atoms);
-   std::sort(local.begin(), local.end());
-   if(std::adjacent_find(local.begin(), local.end()) != local.end()){
+   if(!create::atom_keys_valid){
       err::fatal("Error: atoms on rank " + std::to_string(vmpi::my_rank) + " cannot be identified by their unit cell, which the multi-GPU version requires");
    }
 
