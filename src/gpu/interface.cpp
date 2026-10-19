@@ -77,6 +77,26 @@ namespace gpu{
       }
       #endif
       //--------------------------------------------------------------------
+      // Atoms of non-magnetic=keep materials are not integrated and keep their
+      // initial spin directions; they enter no field or statistic of the other atoms
+      test="skip-non-magnetic-atoms";
+      if(word==test){
+         if(value=="" || value=="true"){
+            gpu::skip_non_magnetic_atoms = true;
+            return true;
+         }
+         if(value=="false"){
+            gpu::skip_non_magnetic_atoms = false;
+            return true;
+         }
+         terminaltextcolor(RED);
+         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"true\"" << std::endl;
+         std::cerr << "\t\"false\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      //--------------------------------------------------------------------
       test="calculate-statistics-on-cpu";
       if(word==test){
          test="";

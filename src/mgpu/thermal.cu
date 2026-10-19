@@ -78,6 +78,7 @@ namespace internal{
       for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms; i += blockDim.x * gridDim.x){
 
          const cu::material_parameters_t mat = material_params[material[i]];
+         if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
          const cu::cu_real_t alpha = mat.temperature_rescaling_alpha;
          const cu::cu_real_t sigma = mat.H_th_sigma;
          const cu::cu_real_t tc = mat.temperature_rescaling_Tc;
@@ -120,6 +121,7 @@ namespace internal{
       for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms; i += blockDim.x * gridDim.x){
 
          const cu::material_parameters_t mat = material_params[material[i]];
+         if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
 
          // temperature of the Gaussian laser profile centred on the head
          const cu::cu_real_t cx = atoms_coord_x[i];

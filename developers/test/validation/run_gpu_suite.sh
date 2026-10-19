@@ -7,12 +7,19 @@
 #------------------------------------------------------------------------------
 # Builds the CUDA version of vampire in double and single precision, runs the
 # validation suite with each build and compares against the CPU references.
-# Each build is run with statistics calculated on the GPU (default) and on the
-# CPU (gpu:calculate-statistics-on-cpu=true). Also checks that the CPU code
-# path of the CUDA binary (gpu:acceleration=off) reproduces the serial code,
-# and times the hamr-perf benchmark.
+# Each build is also run with statistics calculated on the CPU
+# (gpu:calculate-statistics-on-cpu=true, two seeds per statistical case): the
+# dynamics are the same, so every run must agree with the same run of the
+# default build to rounding of the statistics sums. Also checks that the CPU
+# code path of the CUDA binary (gpu:acceleration=off, one seed per case)
+# reproduces the serial references byte for byte, and times the hamr-perf
+# benchmark.
 #
 # Usage (from anywhere):  developers/test/validation/run_gpu_suite.sh [label-prefix]
+#
+# Environment variables:
+#   GPU_JOBS   validation runs sharing the GPU at the same time (default: 4);
+#              results do not depend on it, benchmarks always run alone
 #
 # Results are written to developers/test/validation/results/<prefix>-* and packed, with
 # build logs, comparison reports and system information, into
@@ -30,6 +37,10 @@ name=gpu-suite-$host-$(date +%Y%m%d-%H%M)
 results=developers/test/validation/results
 out=$results/$name
 vt="python3 developers/test/validation/vtest.py"
+gpu_jobs=${GPU_JOBS:-4}
+# CPU code path: every case except benchmarks and the granular cases, whose (long) CPU runs
+# test no code that differs between the builds
+cpu_cases=$(cd developers/test/validation/cases && for c in */; do c=${c%/}; grep -q '"benchmark"' $c/case.json || echo $c; done | grep -v '^hamr-granular' | paste -sd,)
 mkdir -p $out
 
 # record system information
@@ -47,14 +58,13 @@ for pr in dp sp; do
    cp vampire-cuda vampire-cuda-$pr
 
    echo "=== Running validation suite ($pr) ==="
-   $vt run --exe ./vampire-cuda-$pr --label $prefix-$pr --precision $pr
+   $vt run --exe ./vampire-cuda-$pr --label $prefix-$pr --precision $pr --jobs $gpu_jobs
    $vt compare --test $prefix-$pr --ref cpu --verbose > $out/compare-$pr.txt
 
    echo "=== Running validation suite ($pr, statistics on CPU) ==="
-   $vt run --exe ./vampire-cuda-$pr --label $prefix-$pr-cpustats --precision $pr --extra "gpu:calculate-statistics-on-cpu=true"
-   $vt compare --test $prefix-$pr-cpustats --ref cpu --verbose > $out/compare-$pr-cpustats.txt
+   $vt run --exe ./vampire-cuda-$pr --label $prefix-$pr-cpustats --precision $pr --seeds 2 --jobs $gpu_jobs --extra "gpu:calculate-statistics-on-cpu=true"
    # same dynamics as the default run, only the statistics summation order differs
-   $vt compare --test $prefix-$pr --ref $prefix-$pr-cpustats --verbose > $out/compare-$pr-vs-cpustats.txt
+   $vt compare --test $prefix-$pr-cpustats --ref $prefix-$pr --paired 1e-10 --verbose > $out/compare-$pr-cpustats.txt
 
    echo "=== Running hamr-perf benchmark ($pr) ==="
    $vt run --exe ./vampire-cuda-$pr --label $prefix-$pr-bench --precision $pr --cases hamr-perf
@@ -68,8 +78,8 @@ done
 # the CPU path of the CUDA binary should be bit-identical to vampire-serial
 if [ -x vampire-cuda-dp ]; then
    echo "=== Running validation suite (CUDA binary, gpu:acceleration=off) ==="
-   $vt run --exe ./vampire-cuda-dp --label $prefix-cpupath --extra "gpu:acceleration=off" --jobs $(nproc)
-   $vt compare --test $prefix-cpupath --ref cpu --verbose > $out/compare-cpupath.txt
+   $vt run --exe ./vampire-cuda-dp --label $prefix-cpupath --cases $cpu_cases --seeds 1 --extra "gpu:acceleration=off" --jobs $(nproc)
+   $vt identical --test $prefix-cpupath --ref cpu > $out/compare-cpupath.txt
    labels="$labels $prefix-cpupath"
    cp vampire-cuda-dp vampire-cuda   # leave the default (double precision) build in place
 fi
