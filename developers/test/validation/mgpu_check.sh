@@ -45,6 +45,18 @@
 #      writes it from the same relaxed state (compared with the reference within
 #      the deterministic tolerance), and the CPU MPI version loads the multi-GPU
 #      checkpoint, whose spins must be bit for bit those of the multi-GPU write
+#  11. continues the runs of stage 7 on each number of ranks from the checkpoints
+#      saved part way on the previous number of ranks of the list (cyclically,
+#      so that each number of ranks loads checkpoints of another): the atoms are
+#      found by their keys, and the final spins must be bit for bit those of the
+#      uninterrupted runs
+#  12. runs the chain of stage 10 on a medium with a 1 % dense fill between the
+#      grains (as in production runs) and create:decomposition-independent-random,
+#      which makes the fill independent of the decomposition, with each stage on
+#      a different number of ranks: the multi-GPU write on n ranks starts from
+#      the relaxation on the previous number of ranks of the list (compared with
+#      the CPU write on those ranks within the deterministic tolerance), and the
+#      CPU MPI version loads its checkpoint on the next number of ranks
 #
 # Usage (from anywhere):  developers/test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
@@ -78,6 +90,17 @@ out=$results/$name
 mkdir -p $out
 vt="python3 developers/test/validation/vtest.py"
 source developers/test/validation/hamr_chain.sh
+ranks_list=($ranks)
+# the number of ranks after (next_ranks) or before (prev_ranks) <n> in the list, cyclically
+next_ranks(){ local i; for i in ${!ranks_list[@]}; do [ ${ranks_list[$i]} = $1 ] && echo ${ranks_list[$(( (i + 1) % ${#ranks_list[@]} ))]}; done; }
+prev_ranks(){ local i; for i in ${!ranks_list[@]}; do [ ${ranks_list[$i]} = $1 ] && echo ${ranks_list[$(( (i + ${#ranks_list[@]} - 1) % ${#ranks_list[@]} ))]}; done; }
+# medium of stage 12: the chain case with a 1 % dense fill, whose atoms are drawn at random
+sparse_case=$out/sparse-case/hamr-granular-t0
+mkdir -p $sparse_case
+cp $chain_case/* $sparse_case/
+sed -i 's/^material\[4\]:density = 1.0$/material[4]:density = 0.01/' $sparse_case/FePt_sensor.mat
+grep -q '^material\[4\]:density = 0.01$' $sparse_case/FePt_sensor.mat || { echo "Fill density of $chain_case not found"; exit 1; }
+keyed="create:decomposition-independent-random"
 
 spiral=t0-spin-spiral
 t0=$(ls developers/test/validation/cases | grep '^t0-' | grep -v "^$spiral\$" | paste -sd,)
@@ -125,6 +148,26 @@ continue_runs(){
 	done
 }
 
+# xcontinue_runs <exe> <ranks> <label of continued runs on other ranks> <new label>: continues each
+# run of those labels from the checkpoint it saved part way
+xcontinue_runs(){
+	for c in ${continued//,/ }; do
+		for src in $results/$3/$c/*/; do
+			d=$results/$4/$c/$(basename $src)
+			rm -rf $d; mkdir -p $d
+			cp developers/test/validation/cases/$c/* $src/vampire*.chk $d/; rm $d/case.json
+			cp $src/input $d/input
+			(cd $d && $MPIRUN -np $2 $1 >stdout 2>&1) || echo "$c $(basename $src): continuation failed (see $d/stdout)"
+		done
+	done
+}
+
+# key_loaded <label> <from ranks> <to ranks>: reports runs of <label> that did not load their checkpoint
+# by atom key, which they must when the numbers of ranks differ
+key_loaded(){
+	[ $2 = $3 ] || grep -L "loaded by atom key" $results/$1/*/*/log | sed 's/^/FAIL checkpoint not loaded by atom key: /'
+}
+
 # readback_runs <exe> <ranks> <label of the writes> <new label>: restarts a one step 300 K time
 # series from the checkpoint saved at the end of each run of the read-back cases
 readback_runs(){
@@ -165,6 +208,10 @@ for n in $ranks; do
 		chain_run relax - $name-parallel-np$n-relax dp "" $MPIRUN -np $n $PWD/vampire-parallel
 		chain_run write $name-parallel-np$n-relax $name-parallel-np$n-chain dp "" $MPIRUN -np $n $PWD/vampire-parallel
 	) &
+	(
+		chain_case=$sparse_case chain_run relax - $name-parallel-np$n-xrelax dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
+		chain_case=$sparse_case chain_run write $name-parallel-np$n-xrelax $name-parallel-np$n-xchain dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
+	) &
 done
 wait
 
@@ -191,6 +238,14 @@ for pr in dp sp; do
 		echo "=== Multi-GPU version ($pr), $n ranks, HAMR chain: write from the CPU relaxation, CPU load of its checkpoint ==="
 		chain_run write $name-parallel-np$n-relax $name-$pr-np$n-chain $pr "" $MPIRUN -np $n $PWD/vampire-cuda-multigpu
 		chain_run load $name-$pr-np$n-chain $name-$pr-np$n-chainload $pr "" $MPIRUN -np $n $PWD/vampire-parallel
+	done
+	for n in $ranks; do
+		p=$(prev_ranks $n)
+		echo "=== Multi-GPU version ($pr), $n ranks, continuation from the checkpoints saved on $p ranks ==="
+		xcontinue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$p-continue $name-$pr-np$n-xcontinue
+		echo "=== Multi-GPU version ($pr), $n ranks, 1 % fill HAMR chain: write from the CPU relaxation on $p ranks, CPU load on $(next_ranks $n) ranks ==="
+		chain_case=$sparse_case chain_run write $name-parallel-np$p-xrelax $name-$pr-np$n-xchain $pr "$keyed" $MPIRUN -np $n $PWD/vampire-cuda-multigpu
+		chain_case=$sparse_case chain_run load $name-$pr-np$n-xchain $name-$pr-np$n-xchainload $pr "$keyed" $MPIRUN -np $(next_ranks $n) $PWD/vampire-parallel
 	done
 	first=$(echo $ranks | awk '{print $1}')
 	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
@@ -225,6 +280,17 @@ for pr in dp sp; do
 			$vt compare --test $name-$pr-np$n-chain --ref $name-parallel-np$n-chain --cases hamr-granular-t0 --verbose
 			$vt configs --test $name-$pr-np$n-chainload --ref $name-$pr-np$n-chain --cases hamr-granular-t0
 		} >$out/chain-$pr-np$n.txt
+		p=$(prev_ranks $n)
+		{
+			$vt configs --test $name-$pr-np$n-xcontinue --ref $name-$pr-np$n-ft --cases $continued
+			key_loaded $name-$pr-np$n-xcontinue $p $n
+		} >$out/xcontinue-$pr-np$n.txt
+		{
+			$vt compare --test $name-$pr-np$n-xchain --ref $name-parallel-np$p-xchain --cases hamr-granular-t0 --verbose
+			$vt configs --test $name-$pr-np$n-xchainload --ref $name-$pr-np$n-xchain --cases hamr-granular-t0
+			key_loaded $name-$pr-np$n-xchain $p $n
+			key_loaded $name-$pr-np$n-xchainload $n $(next_ranks $n)
+		} >$out/xchain-$pr-np$n.txt
 	done
 	$vt compare --test $name-$pr-stat --ref cpu --cases $ft --verbose --summary >$out/compare-stat-$pr.txt
 done
@@ -248,11 +314,11 @@ for f in $out/skip-*.txt; do
 	echo "$(basename $f .txt) vs without skipping: $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
 	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
 done
-for f in $out/continue-*.txt; do
+for f in $out/continue-*.txt $out/xcontinue-*.txt; do
 	echo "$(basename $f .txt) vs uninterrupted run: $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
 	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
 done
-for f in $out/chain-*.txt; do
+for f in $out/chain-*.txt $out/xchain-*.txt; do
 	echo "$(basename $f .txt) (write vs CPU write; CPU load vs write): $(grep OVERALL $f | paste -sd';')"
 	grep "FAIL\|DIFFERENT" $f | grep -v OVERALL | sed 's/^/   /'
 done

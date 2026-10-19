@@ -153,7 +153,8 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    // unnecessary per-atom branch to the much hotter initialisation loop.
    spininitialize::apply_grain_magnetisation_mode();
 
-   // decomposition independent identity of each atom for the multi-GPU version
+   // decomposition independent identity of each atom (checkpoints, multi-GPU version)
+   create::set_atom_keys(catom_array);
    #ifdef CUDA_MULTIGPU
       mgpu::set_atom_keys(catom_array);
    #endif
