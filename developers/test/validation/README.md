@@ -36,7 +36,12 @@ suite with each build (and the `hamr-perf` benchmark), and packs results, build 
 (two seeds), which must agree with the same runs of the default build to 1e-10 (the dynamics are the same; only the
 summation order of the statistics differs, giving differences below 1e-12), and the CUDA binary with
 `gpu:acceleration=off` must reproduce the serial references byte for byte (one seed per case, without the long
-granular cases). It runs `make clean` before each build and at the end.
+granular cases). It then runs the HAMR chain of `hamr_chain.sh` (granular medium of `hamr-granular-t0` with grain rounding
+0.5): the CPU path relaxes it by Monte Carlo and writes it from the relaxed state (`sim:load-checkpoint=restart`) as a
+reference; each build writes it from the same relaxed state, which must agree with the reference within the
+deterministic tolerance, and the CPU path loads the checkpoint of each GPU write in a zero step read-back simulation
+(hierarchical dipole field, binary `file-per-node` configuration output), whose spins must be bit for bit those of the
+write. It runs `make clean` before each build and at the end.
 
 `developers/test/validation/profile_gpu.sh [case] [dp|sp]` profiles one case (default `hamr-perf`) with Nsight Systems.
 
@@ -94,6 +99,8 @@ read-back simulation) on every number of ranks; its final spins must be bit for 
 and `hamr-granular-t0` (including its grain statistics) must agree with the first number of ranks within the
 deterministic tolerance. Finally the granular writes are repeated with `gpu:skip-non-magnetic-atoms` on every number of
 ranks: output and grain files and the final spins of every magnetic atom must be identical to those without it.
+The HAMR chain of `hamr_chain.sh` (see `run_gpu_suite.sh` above) is run on every number of ranks, with the CPU MPI
+version for the relaxation, the reference write and the loads of the multi-GPU checkpoints.
 
 `run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
 of all statistical comparisons pooled together: when test and reference sample the same distribution they are

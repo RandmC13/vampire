@@ -13,7 +13,11 @@
 # default build to rounding of the statistics sums. Also checks that the CPU
 # code path of the CUDA binary (gpu:acceleration=off, one seed per case)
 # reproduces the serial references byte for byte, and times the hamr-perf
-# benchmark.
+# benchmark. Finally runs the HAMR chain of hamr_chain.sh: the CPU path relaxes
+# the medium by Monte Carlo and writes it as a reference, each build writes it
+# from the same relaxed state (compared with the reference within the
+# deterministic tolerance), and the CPU path loads the checkpoint of each GPU
+# write, whose spins must be bit for bit those of that write.
 #
 # Usage (from anywhere):  developers/test/validation/run_gpu_suite.sh [label-prefix]
 #
@@ -37,6 +41,7 @@ name=gpu-suite-$host-$(date +%Y%m%d-%H%M)
 results=developers/test/validation/results
 out=$results/$name
 vt="python3 developers/test/validation/vtest.py"
+source developers/test/validation/hamr_chain.sh
 gpu_jobs=${GPU_JOBS:-4}
 # CPU code path: every case except benchmarks and the granular cases, whose (long) CPU runs
 # test no code that differs between the builds
@@ -81,6 +86,23 @@ if [ -x vampire-cuda-dp ]; then
    $vt run --exe ./vampire-cuda-dp --label $prefix-cpupath --cases $cpu_cases --seeds 1 --extra "gpu:acceleration=off" --jobs $(nproc)
    $vt identical --test $prefix-cpupath --ref cpu > $out/compare-cpupath.txt
    labels="$labels $prefix-cpupath"
+
+   echo "=== HAMR chain: CPU relaxation and reference write, GPU writes, CPU loads of their checkpoints ==="
+   cpu="gpu:acceleration=off"
+   chain_run relax - $prefix-chain-relax dp "$cpu" $PWD/vampire-cuda-dp
+   chain_run write $prefix-chain-relax $prefix-chain-cpu dp "$cpu" $PWD/vampire-cuda-dp
+   labels="$labels $prefix-chain-relax $prefix-chain-cpu"
+   for pr in dp sp; do
+      [ -x vampire-cuda-$pr ] || continue
+      chain_run write $prefix-chain-relax $prefix-$pr-chain $pr "" $PWD/vampire-cuda-$pr
+      chain_run load $prefix-$pr-chain $prefix-$pr-chainload $pr "$cpu" $PWD/vampire-cuda-dp
+      {
+         $vt compare --test $prefix-$pr-chain --ref $prefix-chain-cpu --cases hamr-granular-t0 --verbose
+         $vt configs --test $prefix-$pr-chainload --ref $prefix-$pr-chain --cases hamr-granular-t0
+      } > $out/chain-$pr.txt
+      labels="$labels $prefix-$pr-chain $prefix-$pr-chainload"
+   done
+
    cp vampire-cuda-dp vampire-cuda   # leave the default (double precision) build in place
 fi
 make clean
@@ -91,11 +113,14 @@ grep -rli nan --include='*.data' --include='*.cfg' $(for l in $labels; do echo $
 echo "configuration files containing NaN: $(wc -l < $out/config-nan-check.txt)" >> $out/config-nan-check.txt
 
 # pack results (atomic configuration files are excluded to keep the archive small)
-tar czf $results/$name.tar.gz --exclude='*.data' --exclude='*.meta' -C $results $name $labels
+tar czf $results/$name.tar.gz --exclude='*.data' --exclude='*.meta' --exclude='*.chk' -C $results $name $labels
 
 echo
 echo "=== Summary ==="
 for f in $out/compare-*.txt $out/benchmark-*.txt $out/config-nan-check.txt; do
    [ -f $f ] && echo "$(basename $f): $(tail -n 1 $f)"
+done
+for f in $out/chain-*.txt; do
+   echo "$(basename $f) (GPU write vs CPU write; CPU load vs GPU write): $(grep OVERALL $f | paste -sd';')"
 done
 echo "Archive: $results/$name.tar.gz"
