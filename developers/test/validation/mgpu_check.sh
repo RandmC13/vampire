@@ -39,6 +39,12 @@
 #   9. reruns the granular HAMR writes with gpu:skip-non-magnetic-atoms on each
 #      number of ranks: output and grain files must be identical to those of
 #      stage 5, and so must the final spins of every magnetic atom
+#  10. runs the chain of hamr_chain.sh (granular medium with grain rounding) on
+#      each number of ranks: the CPU MPI version relaxes it by Monte Carlo and
+#      writes it from the relaxed state as a reference; the multi-GPU version
+#      writes it from the same relaxed state (compared with the reference within
+#      the deterministic tolerance), and the CPU MPI version loads the multi-GPU
+#      checkpoint, whose spins must be bit for bit those of the multi-GPU write
 #
 # Usage (from anywhere):  developers/test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
@@ -71,6 +77,7 @@ results=developers/test/validation/results
 out=$results/$name
 mkdir -p $out
 vt="python3 developers/test/validation/vtest.py"
+source developers/test/validation/hamr_chain.sh
 
 spiral=t0-spin-spiral
 t0=$(ls developers/test/validation/cases | grep '^t0-' | grep -v "^$spiral\$" | paste -sd,)
@@ -152,6 +159,14 @@ for n in $ranks; do
 	echo "=== CPU MPI version, $n ranks ==="
 	$vt run --exe ./vampire-parallel --label $name-parallel-np$n --ranks $n --cases $t0 --jobs $(cpu_runs $n)
 done
+echo "=== CPU MPI version, HAMR chain: Monte Carlo relaxation and reference write ==="
+for n in $ranks; do
+	(
+		chain_run relax - $name-parallel-np$n-relax dp "" $MPIRUN -np $n $PWD/vampire-parallel
+		chain_run write $name-parallel-np$n-relax $name-parallel-np$n-chain dp "" $MPIRUN -np $n $PWD/vampire-parallel
+	) &
+done
+wait
 
 for pr in dp sp; do
 	echo "=== Building multi-GPU version ($pr) ==="
@@ -173,6 +188,9 @@ for pr in dp sp; do
 		readback_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-readback
 		echo "=== Multi-GPU version ($pr), $n ranks, granular writes with gpu:skip-non-magnetic-atoms ==="
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-skip --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "gpu:skip-non-magnetic-atoms"
+		echo "=== Multi-GPU version ($pr), $n ranks, HAMR chain: write from the CPU relaxation, CPU load of its checkpoint ==="
+		chain_run write $name-parallel-np$n-relax $name-$pr-np$n-chain $pr "" $MPIRUN -np $n $PWD/vampire-cuda-multigpu
+		chain_run load $name-$pr-np$n-chain $name-$pr-np$n-chainload $pr "" $MPIRUN -np $n $PWD/vampire-parallel
 	done
 	first=$(echo $ranks | awk '{print $1}')
 	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
@@ -203,6 +221,10 @@ for pr in dp sp; do
 			$vt configs --test $name-$pr-np$n-skip --ref $name-$pr-np$n-ft --cases $readback --magnetic-only
 			grep -L "Not integrating" $results/$name-$pr-np$n-skip/*/*/log | sed 's/^/FAIL skipping not active: /'
 		} >$out/skip-$pr-np$n.txt
+		{
+			$vt compare --test $name-$pr-np$n-chain --ref $name-parallel-np$n-chain --cases hamr-granular-t0 --verbose
+			$vt configs --test $name-$pr-np$n-chainload --ref $name-$pr-np$n-chain --cases hamr-granular-t0
+		} >$out/chain-$pr-np$n.txt
 	done
 	$vt compare --test $name-$pr-stat --ref cpu --cases $ft --verbose --summary >$out/compare-stat-$pr.txt
 done
@@ -229,5 +251,9 @@ done
 for f in $out/continue-*.txt; do
 	echo "$(basename $f .txt) vs uninterrupted run: $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
 	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
+done
+for f in $out/chain-*.txt; do
+	echo "$(basename $f .txt) (write vs CPU write; CPU load vs write): $(grep OVERALL $f | paste -sd';')"
+	grep "FAIL\|DIFFERENT" $f | grep -v OVERALL | sed 's/^/   /'
 done
 echo "Archive: $results/$name.tar.gz"
