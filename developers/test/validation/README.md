@@ -101,6 +101,22 @@ deterministic tolerance. Finally the granular writes are repeated with `gpu:skip
 ranks: output and grain files and the final spins of every magnetic atom must be identical to those without it.
 The HAMR chain of `hamr_chain.sh` (see `run_gpu_suite.sh` above) is run on every number of ranks, with the CPU MPI
 version for the relaxation, the reference write and the loads of the multi-GPU checkpoints.
+The checkpoints saved part way by `timeseries-T300` and `hamr-small` are also continued on another number of ranks
+(each number of ranks loads those of the previous one in the list, cyclically): the atoms are found by their keys and
+the final spins must still be bit for bit those of the uninterrupted run. Last, the chain is run on a medium with a
+1 % dense fill between the grains (`material:density = 0.01` of the fill material, as in production runs) with
+`create:decomposition-independent-random`, each stage on a different number of ranks: relaxation on n, multi-GPU
+write on the next number of ranks (compared with the CPU write on n), CPU load of its checkpoint on the one after.
+
+A checkpoint (one file per process) can be loaded on a different number of processes: the loader identifies atoms by
+their key and stops with an error unless every atom is found exactly once with the same material. The structure must
+therefore not depend on the decomposition. Random alloys, dilution (including the fill of `fill-space` materials) and
+intermixing draw their random numbers per process unless `create:decomposition-independent-random` (off by default)
+draws them from the seed and the atom's key instead. With `sim:load-checkpoint=continue` on a different number of
+processes, the CPU versions restart their random number generator from the seed and the time step (statistically
+equivalent but not identical to an uninterrupted run); the multi-GPU version draws the thermal noise from the atom key
+and the time step, so with `gpu:decomposition-independent-order` its continuation is bit for bit that of the
+uninterrupted run.
 
 `run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
 of all statistical comparisons pooled together: when test and reference sample the same distribution they are

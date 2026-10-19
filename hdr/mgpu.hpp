@@ -32,14 +32,14 @@ namespace mgpu{
    // neighbours of each atom by atom key. Called after the CUDA module is initialised.
    void initialize_device();
 
-   // Stores the key of every atom (core, boundary and halo). Called when the
+   // Checks that every atom has a key (create::atom_keys). Called when the
    // atoms are created.
    void set_atom_keys(const std::vector<cs::catom_t>& catom_array);
 
    // Key of each atom: built from its unit cell (supercell coordinates, wrapped
    // for periodic images) and its number within the unit cell, so it does not
    // depend on how the system is decomposed
-   extern std::vector<uint64_t> atom_key;
+   extern std::vector<uint64_t>& atom_key;
 
    // Sum the exchange contributions of each atom in atom key order
    // (gpu:decomposition-independent-order, default off). Needed for results that
