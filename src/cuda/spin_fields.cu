@@ -244,6 +244,10 @@ __global__ void update_isotropic_exchange_and_anisotropy_fields_kernel(
   for (int i = first_atom + blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
        i += blockDim.x * gridDim.x) {
 
+    // atoms that are not integrated need no field
+    if (material_params[material[i]].skip)
+      continue;
+
     // exchange field
     cu_real_t hx = 0.0;
     cu_real_t hy = 0.0;

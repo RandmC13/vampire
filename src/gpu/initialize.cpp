@@ -8,18 +8,21 @@
 //------------------------------------------------------------------------------
 
 // C++ standard library headers
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
 
 // Vampire headers
 #include "anisotropy.hpp"
+#include "atoms.hpp"
 #include "gpu.hpp"
 #include "integrate.hpp"
 #include "cuda.hpp"
 #include "dipole.hpp"
 #include "errors.hpp"
 #include "exchange.hpp"
+#include "material.hpp"
 #include "mgpu.hpp"
 #include "program.hpp"
 #include "sim.hpp"
@@ -87,6 +90,32 @@ namespace gpu{
       if(::stats::calculate_system_sld_energy || ::stats::calculate_grain_sld_energy || ::stats::calculate_material_sld_energy)
          unsupported.push_back("spin-lattice energy statistics");
 
+      // atoms that are not integrated (gpu:skip-non-magnetic-atoms) must not enter
+      // the fields or the statistics of the other atoms
+      if(gpu::skip_non_magnetic_atoms){
+         if(::stats::calculate_system_energy || ::stats::calculate_grain_energy || ::stats::calculate_material_energy)
+            unsupported.push_back("energy statistics with gpu:skip-non-magnetic-atoms (they include the atoms that are not integrated)");
+         if(::exchange::get_exchange_type() != 0){
+            unsupported.push_back("gpu:skip-non-magnetic-atoms with vectorial or tensorial exchange");
+         }
+         else{
+            // same tolerance as the device neighbour list, which leaves out smaller interactions
+            const double tol = 1e-10;
+            bool coupled = false;
+            for(int atom = 0; atom < atoms::num_atoms && !coupled; atom++){
+               const bool keep_i = mp::material[atoms::type_array[atom]].non_magnetic == 2;
+               for(int nn = atoms::neighbour_list_start_index[atom]; nn <= atoms::neighbour_list_end_index[atom]; nn++){
+                  const bool keep_j = mp::material[atoms::type_array[atoms::neighbour_list_array[nn]]].non_magnetic == 2;
+                  if((keep_i || keep_j) && std::fabs(atoms::i_exchange_list[atoms::neighbour_interaction_type_array[nn]].Jij) > tol){
+                     coupled = true;
+                     break;
+                  }
+               }
+            }
+            if(coupled) unsupported.push_back("gpu:skip-non-magnetic-atoms with exchange interactions of non-magnetic (keep) atoms");
+         }
+      }
+
       if(unsupported.empty()) return;
 
       std::string message = "Error: GPU acceleration does not support the following features of this simulation:\n";
@@ -103,6 +132,12 @@ namespace gpu{
 
       // stop if the simulation needs features the GPU version does not calculate
       check_supported_features();
+
+      if(gpu::skip_non_magnetic_atoms){
+         int skipped = 0;
+         for(int atom = 0; atom < atoms::num_atoms; atom++) skipped += mp::material[atoms::type_array[atom]].non_magnetic == 2;
+         zlog << zTs() << "Not integrating " << skipped << " of " << atoms::num_atoms << " atoms of non-magnetic (keep) materials on rank " << vmpi::my_rank << " (gpu:skip-non-magnetic-atoms)" << std::endl;
+      }
 
       // multi-GPU version: select the GPU of this rank first
       #ifdef CUDA_MULTIGPU

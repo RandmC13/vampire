@@ -92,6 +92,14 @@ namespace vcuda{
             int mid = material[i];
             // Load parameters from memory
             cu::material_parameters_t mat = material_params[mid];
+            // atoms that are not integrated need no field, but draw their random numbers
+            // so that the other atoms of this thread get the same ones as without skipping
+            if(mat.skip){
+               curand_normal(&local_state);
+               curand_normal(&local_state);
+               curand_normal(&local_state);
+               continue;
+            }
 
             // Define temporary variables for field
             cu_real_t field_x = 0.0;
