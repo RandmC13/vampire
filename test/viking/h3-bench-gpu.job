@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-bench-gpu
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# HAMR chain benchmark on GPUs: the write of the chain, restarted from the
+# relaxed state, timed for a fixed time on 1 GPU up to all GPUs of the job
+# (1, 2, ... one node's GPUs, and all GPUs on more than one node), in double
+# and single precision, with and without gpu:skip-non-magnetic-atoms.
+# Submitted by h3-submit.sh. Appends to $WORK/h3/bench/bench.csv:
+#    partition,device,nodes,ranks,ranks_per_node,precision,skip,atoms,setup_s,steps,
+#    window_s,steps_per_s,full_write_h,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit
+# (exit is the status of the stopped run, normally non-zero)
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+export MPIRUN=$REPO/test/viking/mgpu-launch.sh
+partition=$SLURM_JOB_PARTITION
+per_node=$SLURM_NTASKS_PER_NODE
+for pr in dp sp; do
+   build cuda-multigpu vampire-cuda-multigpu $H3/bin/vampire-mgpu-$pr-$partition CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}"
+done
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+
+layouts=()
+for ((n = 1; n <= per_node; n++)); do layouts+=("$n:$n"); done
+[ $SLURM_JOB_NUM_NODES -gt 1 ] && layouts+=("$SLURM_NTASKS:$per_node")
+
+csv=$H3/bench/bench.csv
+[ -f $csv ] || echo "partition,device,nodes,ranks,ranks_per_node,precision,skip,atoms,setup_s,steps,window_s,steps_per_s,full_write_h,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit" > $csv
+for layout in "${layouts[@]}"; do
+   n=${layout%:*}; ppn=${layout#*:}
+   nodes=$(( (n + ppn - 1) / ppn ))
+   for pr in dp sp; do
+      for skip in 0 1; do
+         dir=$H3/bench/runs/$partition-np$n-$pr-skip$skip
+         stage_dir write $dir
+         [ $skip = 1 ] && echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+         [ $nodes -gt 1 ] && echo "sim:mpi-ppn = $ppn" >> $dir/input
+         result=$(MPI_OPTS="--map-by ppr:$ppn:node" bench_run $dir $MPIRUN -np $n $SAMPLE $H3/bin/vampire-mgpu-$pr-$partition)
+         atoms=$(awk -F': ' '/Total number of atoms/ { print $2 }' $dir/stdout | head -n 1)
+         rate=$(echo $result | cut -d, -f4)
+         echo "$result" | awk -F, -v pre="$partition,$gpu,$nodes,$n,$ppn,$pr,$skip,${atoms:-0}" -v h=$(full_write_h $rate) \
+            '{ print pre "," $1 "," $2 "," $3 "," $4 "," h "," $5 "," $6 "," $7 "," $8 }' | tee -a $csv
+      done
+   done
+done

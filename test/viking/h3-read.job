@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-read
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=1
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# HAMR chain, stage 3: the one step read-back (hierarchical dipole field of the
+# sensor layer) with the CPU MPI version on all ranks of the job, restarted
+# from the end of the write. Submitted by h3-submit.sh. Results in $WORK/h3/read.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+
+dir=$H3/read
+stage_dir read $dir
+n=$(cat $H3/write/ranks.txt)
+for ((r = 0; r < n; r++)); do cp $H3/write/vampire$r.chk $dir/; done
+cd $dir
+start=$(date +%s)
+mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $H3/bin/vampire-parallel > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "read: $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
+rm -f vampire*.chk   # copies of the write's checkpoint
