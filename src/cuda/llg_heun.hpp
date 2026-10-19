@@ -34,6 +34,10 @@ namespace vcuda
           * @var lambda * prefactor
           */
          cu_real_t lambda_times_prefactor;
+         /**
+          * @var atoms of this material are not integrated (gpu:skip-non-magnetic-atoms)
+          */
+         int skip;
       };
 
       namespace llg

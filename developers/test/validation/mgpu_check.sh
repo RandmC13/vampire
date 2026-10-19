@@ -36,13 +36,18 @@
 #      that its final spins are bit for bit identical on every number of ranks;
 #      the deterministic granular write is also compared with the first number
 #      of ranks, including its grain statistics
+#   9. reruns the granular HAMR writes with gpu:skip-non-magnetic-atoms on each
+#      number of ranks: output and grain files must be identical to those of
+#      stage 5, and so must the final spins of every magnetic atom
 #
 # Usage (from anywhere):  developers/test/validation/mgpu_check.sh [ranks ...]   (default: 1 2 4)
 #
 # Environment variables:
 #   JOBS       parallel build jobs (default: number of cores)
 #   CUDA_ARCH  GPU architecture flags (default: -arch=native)
-#   MPIRUN     MPI launcher (default: mpirun --oversubscribe)
+#   MPIRUN     MPI launcher (default: mpirun --oversubscribe --bind-to none)
+#   GPU_JOBS   GPU processes running at the same time (default: 4): runs on n ranks
+#              are started GPU_JOBS/n at a time; results do not depend on it
 #
 # Results are packed into developers/test/validation/results/mgpu-check-<host>-<date>.tar.gz
 #
@@ -55,7 +60,12 @@ cd "$(dirname "$0")/../../.."
 ranks=${*:-1 2 4}
 jobs=${JOBS:-$(nproc)}
 arch=${CUDA_ARCH:--arch=native}
-export MPIRUN=${MPIRUN:-mpirun --oversubscribe}
+# no binding: several runs at a time would otherwise bind their ranks to the same cores
+export MPIRUN=${MPIRUN:-mpirun --oversubscribe --bind-to none}
+gpu_jobs=${GPU_JOBS:-4}
+# concurrent runs on <ranks> ranks sharing the GPU (gpu_runs) or the CPU cores (cpu_runs)
+gpu_runs(){ echo $(( gpu_jobs / $1 > 0 ? gpu_jobs / $1 : 1 )); }
+cpu_runs(){ echo $(( $(nproc) / $1 > 0 ? $(nproc) / $1 : 1 )); }
 name=mgpu-check-$(hostname -s)-$(date +%Y%m%d-%H%M)
 results=developers/test/validation/results
 out=$results/$name
@@ -140,7 +150,7 @@ fi
 for n in $ranks; do
 	[ $n = 1 ] && continue
 	echo "=== CPU MPI version, $n ranks ==="
-	$vt run --exe ./vampire-parallel --label $name-parallel-np$n --ranks $n --cases $t0
+	$vt run --exe ./vampire-parallel --label $name-parallel-np$n --ranks $n --cases $t0 --jobs $(cpu_runs $n)
 done
 
 for pr in dp sp; do
@@ -152,19 +162,21 @@ for pr in dp sp; do
 	fi
 	for n in $ranks; do
 		echo "=== Multi-GPU version ($pr), $n ranks ==="
-		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n --ranks $n --precision $pr --cases $t0,$spiral "${configs[@]}"
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $t0,$spiral "${configs[@]}"
 		echo "=== Multi-GPU version ($pr), $n ranks, finite temperature and program cases, one seed ==="
-		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_end --seeds 1 "${configs[@]}"
-		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "sim:save-checkpoint=end"
-		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --precision $pr --cases $ft_cont --seeds 1 "${configs_cont[@]}"
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $ft_end --seeds 1 "${configs[@]}"
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "sim:save-checkpoint=end"
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $ft_cont --seeds 1 "${configs_cont[@]}"
 		echo "=== Multi-GPU version ($pr), $n ranks, continuation from a checkpoint ==="
 		continue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-continue
 		echo "=== Multi-GPU version ($pr), $n ranks, read-back restarted from the end of the granular writes ==="
 		readback_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-readback
+		echo "=== Multi-GPU version ($pr), $n ranks, granular writes with gpu:skip-non-magnetic-atoms ==="
+		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-skip --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "gpu:skip-non-magnetic-atoms"
 	done
 	first=$(echo $ranks | awk '{print $1}')
 	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
-	$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-stat --ranks $first --precision $pr --cases $ft
+	$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-stat --ranks $first --jobs $(gpu_runs $first) --precision $pr --cases $ft
 done
 make clean
 rm -f vampire-parallel vampire-cuda-multigpu
@@ -186,6 +198,11 @@ for pr in dp sp; do
 		[ $n != $first ] && $vt configs --test $name-$pr-np$n-readback --ref $name-$pr-np$first-readback --cases $readback >$out/configs-readback-$pr-np$n.txt
 		[ $n != $first ] && $vt compare --test $name-$pr-np$n-ft --ref $name-$pr-np$first-ft --cases hamr-granular-t0 --verbose >$out/compare-granular-$pr-np$n.txt
 		$vt configs --test $name-$pr-np$n-continue --ref $name-$pr-np$n-ft --cases $continued >$out/continue-$pr-np$n.txt
+		{
+			$vt identical --test $name-$pr-np$n-skip --ref $name-$pr-np$n-ft --cases $readback
+			$vt configs --test $name-$pr-np$n-skip --ref $name-$pr-np$n-ft --cases $readback --magnetic-only
+			grep -L "Not integrating" $results/$name-$pr-np$n-skip/*/*/log | sed 's/^/FAIL skipping not active: /'
+		} >$out/skip-$pr-np$n.txt
 	done
 	$vt compare --test $name-$pr-stat --ref cpu --cases $ft --verbose --summary >$out/compare-stat-$pr.txt
 done
@@ -203,6 +220,10 @@ for f in $out/compare-stat-*.txt; do
 done
 for f in $out/configs-*.txt; do
 	echo "$(basename $f .txt) vs $first rank(s): $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
+	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
+done
+for f in $out/skip-*.txt; do
+	echo "$(basename $f .txt) vs without skipping: $(grep -c IDENTICAL $f) identical, $(grep 'DIFFERENT\|FAIL' $f | grep -vc OVERALL) different or missing"
 	grep "DIFFERENT\|FAIL" $f | grep -v OVERALL | sed 's/^/   /'
 done
 for f in $out/continue-*.txt; do

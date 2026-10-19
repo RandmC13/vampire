@@ -26,6 +26,7 @@ namespace gpu{
    #endif
 
    bool cpu_stats = false; // flag to calculate stats using cpu (falls back to cpu automatically when spins are needed on the host)
+   bool skip_non_magnetic_atoms = false; // flag to leave atoms of non-magnetic=keep materials unintegrated
    bool initialized = false; // flag to check for successful initialization
 
    int device = -1; // device id

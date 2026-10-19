@@ -11,14 +11,32 @@ python3 developers/test/validation/vtest.py compare --test gpu-dp --ref cpu
 - `run` copies each `cases/<case>/` to `results/<label>/<case>/<run>/`, appends `--extra` lines (and
   `sim:integrator-random-seed` for seeded cases) to the input, and runs the binary there.
 - `compare` exits non-zero on any failure; passing cases are summarised in one line (`--verbose` shows every quantity). Labels are looked up in `results/` first, then `reference/`.
+  `--paired RTOL` instead compares every run with the same run (same seed) of the reference row by row, for result sets
+  with the same dynamics whose output differs only by rounding.
 - `developers/tests.sh -v` runs `vampire-serial` and compares against `reference/cpu`.
 
 ## GPU validation
 
+Which check to run:
+
+| change | check |
+| ------ | ----- |
+| meant to leave every result unchanged (refactoring, optimisation with the same arithmetic, new options that are off by default) | `identity_compare.sh` against the last commit that passed the full checks; if every run is identical, the results of those checks carry over |
+| touches the multi-GPU version (`src/mgpu`, halo, decomposition) | `mgpu_check.sh` as well |
+| changes results (new physics, different arithmetic or random numbers) | `run_gpu_suite.sh`, `mgpu_check.sh`, and `ab_compare.sh` for statistically equivalent changes |
+| new feature or validation case | all of the above once, before committing |
+
+The GPU scripts start several validation runs at a time on the GPU (`GPU_JOBS`, default 4 processes, so 2 runs on 2
+ranks or 1 run on 4 ranks); results do not depend on this, and benchmarks always run alone. Use `GPU_JOBS=1` if the GPU
+runs out of memory.
+
 `developers/test/validation/run_gpu_suite.sh [label-prefix]` builds the CUDA version in double and single precision, runs the
-suite with each build (and the `hamr-perf` benchmark), checks that the CUDA binary with `gpu:acceleration=off`
-reproduces the serial references exactly, and packs results, build logs and system information into
-`developers/test/validation/results/gpu-suite-<host>-<date>.tar.gz`. It runs `make clean` before each build and at the end.
+suite with each build (and the `hamr-perf` benchmark), and packs results, build logs and system information into
+`developers/test/validation/results/gpu-suite-<host>-<date>.tar.gz`. Each build is also run with statistics on the CPU
+(two seeds), which must agree with the same runs of the default build to 1e-10 (the dynamics are the same; only the
+summation order of the statistics differs, giving differences below 1e-12), and the CUDA binary with
+`gpu:acceleration=off` must reproduce the serial references byte for byte (one seed per case, without the long
+granular cases). It runs `make clean` before each build and at the end.
 
 `developers/test/validation/profile_gpu.sh [case] [dp|sp]` profiles one case (default `hamr-perf`) with Nsight Systems.
 
@@ -31,12 +49,22 @@ using more seeds (default 32), compares them with each other and with the CPU re
 `developers/test/validation/identity_compare.sh [ref-commit]` (default `develop`) is for changes that must not change any
 result: it builds the CUDA version of a reference commit and of the working tree in both precisions, runs every
 case with both (once as committed and once with extra statistics, configuration and checkpoint output) and compares
-every output file byte for byte, ignoring only comment lines and timings.
+every output file byte for byte, ignoring only comment lines and timings. It also runs the cases with
+non-magnetic atoms with and without `gpu:skip-non-magnetic-atoms` (see below) and checks that the output and grain
+files and the final spins of every magnetic atom are identical, and prints the run times of both.
+
+`gpu:skip-non-magnetic-atoms` (GPU versions, off by default) leaves the atoms of `non-magnetic=keep` materials
+unintegrated: they keep their initial spin directions, which only appear in configuration and checkpoint files. Such
+atoms enter no field or statistic of the magnetic atoms (statistics and dipole fields leave them out), so all other
+results are bit for bit identical; the single GPU version still draws their random numbers so that the other atoms
+receive the same ones. The option is refused with energy statistics (which include these atoms), with vectorial or
+tensorial exchange, and when any exchange interaction involves an atom of a `non-magnetic=keep` material.
 
 ## Multi-GPU validation
 
 `run --ranks N` starts each run with `mpirun -np N` (the `MPIRUN` environment variable replaces `mpirun`, e.g.
-`MPIRUN="mpirun --oversubscribe"`). `vtest.py configs --test A --ref B` compares the final spin configurations of two
+`MPIRUN="mpirun --oversubscribe --bind-to none"`; without `--bind-to none` concurrent runs bind their ranks to the
+same cores). `vtest.py configs --test A --ref B` compares the final spin configurations of two
 result sets atom by atom (atoms are paired by their coordinates, since MPI runs list atoms in rank order) and reports
 whether they are bit for bit identical; runs need `--extra config:atoms=end --extra config:output-format=binary`.
 
@@ -64,7 +92,8 @@ run. The granular HAMR writes (`hamr-granular`, `hamr-granular-t0`) save a check
 300 K time series is restarted (`sim:load-checkpoint=restart`, binary `file-per-node` configuration output, as in a
 read-back simulation) on every number of ranks; its final spins must be bit for bit identical on every number of ranks,
 and `hamr-granular-t0` (including its grain statistics) must agree with the first number of ranks within the
-deterministic tolerance.
+deterministic tolerance. Finally the granular writes are repeated with `gpu:skip-non-magnetic-atoms` on every number of
+ranks: output and grain files and the final spins of every magnetic atom must be identical to those without it.
 
 `run --seeds N` overrides the number of seeds of statistical cases. `compare --summary` prints the signed z-scores
 of all statistical comparisons pooled together: when test and reference sample the same distribution they are
@@ -85,7 +114,9 @@ All case inputs use `output:column-headers` and `output:precision=16`
 
 `"grain": true` adds the quantity `grain`: every column of `grain.txt` after time and temperature (grain and
 material-grain statistics), compared element by element like the other quantities. References keep `grain.txt` for
-these cases. `vtest.py configs` reads both the single file and the `file-per-node` configuration formats.
+these cases. `vtest.py configs` reads both the single file and the `file-per-node` configuration formats; with
+`--magnetic-only` it ignores the atoms of the case's `non-magnetic=keep` materials. `vtest.py identical --test A --ref B`
+compares the `output` and `grain.txt` files of every run of two result sets byte for byte, ignoring comment lines.
 
 Precision (`dp`/`sp`) is taken from the test run's `meta.json` (set with `run --precision`).
 Statistical checks fail spuriously ~0.1 % of the time per quantity: re-run with `--seed-offset 100` before treating a failure as real.

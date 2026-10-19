@@ -11,11 +11,13 @@ compares the results against analytic solutions or reference outputs.
 
    vtest.py run --exe ./vampire-cuda --label gpu-dp [--precision sp] [--cases a,b]
                 [--extra "gpu:acceleration=off"] [--seed-offset N] [--seeds N] [--jobs N] [--reference]
-   vtest.py compare --test gpu-dp --ref cpu [--cases a,b] [--verbose] [--summary]
+   vtest.py compare --test gpu-dp --ref cpu [--cases a,b] [--verbose] [--summary] [--paired RTOL]
+   vtest.py identical --test A --ref B [--cases a,b]
+   vtest.py configs --test A --ref B [--cases a,b] [--magnetic-only]
 
 See README.md for case.json format and tolerance policy.
 """
-import argparse, concurrent.futures, datetime, json, os, shutil, socket, subprocess, sys
+import argparse, concurrent.futures, datetime, json, os, re, shutil, socket, subprocess, sys
 import numpy as np
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +108,10 @@ def cmd_run(args):
 
    jobs = [(c, r) for c in names for r in run_names(load_case(c), args.seeds)]
    failed = []
-   for c in names: os.makedirs(os.path.join(base, c), exist_ok=True)   # before threads, avoids makedirs races
+   # runs of an earlier set with more seeds would otherwise remain and be compared
+   for c in names:
+      shutil.rmtree(os.path.join(base, c), ignore_errors=True)
+      os.makedirs(os.path.join(base, c))   # before threads, avoids makedirs races
    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
       futures = [pool.submit(run_one, cmd, c, r, os.path.join(base, c, r), args.extra, args.seed_offset) for c, r in jobs]
       for fut in concurrent.futures.as_completed(futures):
@@ -163,8 +168,25 @@ def noise_ok(se_test, se_ref):
 
 Z_SCORES = []   # (case, quantity, signed z, noise ratio) of every statistical comparison, for --summary
 
-def compare_case(name, case, test_dir, ref_dir, precision):
+def compare_paired(case, test_dir, ref_dir, rtol):
+   """Every run of the test set against the same run of the reference set, row by row:
+   abs(test-ref) <= rtol*max(abs(ref)) + rtol*abs(ref). For runs with the same dynamics
+   whose output differs only by rounding (e.g. the order of a summation)."""
+   runs = sorted(r for r in os.listdir(test_dir) if os.path.isfile(os.path.join(test_dir, r, "output")))
+   if not runs: return [("-", False, "no output: run failed (see stdout in the run directory)")]
+   worst = {}
+   for run in runs:
+      if not os.path.isfile(os.path.join(ref_dir, run, "output")): return [("-", False, "no reference output for " + run)]
+      t, r = quantities(case, os.path.join(test_dir, run, "output")), quantities(case, os.path.join(ref_dir, run, "output"))
+      for k in r:
+         if t[k].shape != r[k].shape: return [(k, False, "%s: row count %d vs %d" % (run, len(t[k]), len(r[k])))]
+         rel = np.abs(t[k] - r[k]) / np.maximum(np.abs(r[k]).max() + np.abs(r[k]), 1e-300)
+         worst[k] = max(worst.get(k, 0.0), float(rel.max()))
+   return [(k, w <= rtol, "identical" if w == 0 else "max scaled diff %.3e over %d run(s) (tol %.0e)" % (w, len(runs), rtol)) for k, w in worst.items()]
+
+def compare_case(name, case, test_dir, ref_dir, precision, paired=None):
    """Returns list of (quantity, passed, description)."""
+   if paired is not None and case["kind"] != "benchmark": return compare_paired(case, test_dir, ref_dir, paired)
    rows = []
    tol = case.get("tolerance", {}).get(precision, {})
    missing = [r for r in run_names(case) if not os.path.isfile(os.path.join(test_dir, r, "output"))]
@@ -229,7 +251,7 @@ def cmd_compare(args):
       if not os.path.isdir(td):
          print("%-30s MISSING results" % name); failures += 1; continue
       try:
-         rows = compare_case(name, case, td, rd, precision)
+         rows = compare_case(name, case, td, rd, precision, args.paired)
       except (OSError, ValueError, KeyError) as e:
          rows = [("-", False, "error: %s" % e)]
       if not args.verbose and all(ok for _, ok, _ in rows):
@@ -281,10 +303,34 @@ def read_config(d):
    order = np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0]))   # files list atoms in rank order
    return coords[order], spins[order], "spins-" + counter
 
+def keep_materials(case):
+   # 0-based indices of the case's non-magnetic=keep materials (as in the configuration files)
+   keep = set()
+   for f in os.listdir(os.path.join(CASES, case)):
+      if not f.endswith(".mat"): continue
+      for l in open(os.path.join(CASES, case, f)):
+         m = re.match(r"\s*material\[(\d+)\]:non-magnetic\s*=\s*keep\b", l)
+         if m: keep.add(int(m.group(1)) - 1)
+   return keep
+
+def read_types(d):
+   # material of every atom, in the order of read_config
+   files = sorted(f for f in os.listdir(d) if f.startswith("atoms-coords") and f.endswith(".data"))
+   types, coords = [], []
+   for f in files:
+      with open(os.path.join(d, f), "rb") as fh:
+         n = int(np.frombuffer(fh.read(8), dtype=np.uint64)[0])
+         types.append(np.frombuffer(fh.read(4 * n), dtype=np.int32))
+         fh.seek(8 + 8 * n)
+         coords.append(np.frombuffer(fh.read(24 * n), dtype=np.float64).reshape(n, 3))
+   coords = np.concatenate(coords)
+   return np.concatenate(types)[np.lexsort((coords[:, 2], coords[:, 1], coords[:, 0]))]
+
 def cmd_configs(args):
    test_dir, ref_dir = result_dir(args.test), result_dir(args.ref)
    failures = 0
    for c in case_names(args.cases):
+      keep = keep_materials(c) if args.magnetic_only else set()
       for r in sorted(os.listdir(os.path.join(test_dir, c))) if os.path.isdir(os.path.join(test_dir, c)) else []:
          t, f = os.path.join(test_dir, c, r), os.path.join(ref_dir, c, r)
          if not os.path.isdir(t): continue
@@ -296,9 +342,37 @@ def cmd_configs(args):
          if tc.shape != rc.shape or not np.array_equal(tc, rc):
             print("%-30s %-8s FAIL atoms differ (%d vs %d atoms or coordinates)" % (c, r, len(tc), len(rc))); failures += 1; continue
          same = np.all(ts.view(np.uint64) == rs.view(np.uint64), axis=1)
+         if keep:
+            # only the magnetic atoms: atoms of non-magnetic=keep materials may differ
+            magnetic = ~np.isin(read_types(t), sorted(keep))
+            ts, rs, same = ts[magnetic], rs[magnetic], same[magnetic]
          status = "IDENTICAL" if same.all() else "DIFFERENT"
          if not same.all(): failures += 1
-         print("%-30s %-8s %-9s %s: %d atoms, %d bit-identical spins, max |diff| = %.3e" % (c, r, status, tname, len(tc), same.sum(), np.abs(ts - rs).max()))
+         print("%-30s %-8s %-9s %s: %d %satoms, %d bit-identical spins, max |diff| = %.3e" % (c, r, status, tname, len(ts), "magnetic " if keep else "", same.sum(), np.abs(ts - rs).max()))
+   print("OVERALL", "PASS" if failures == 0 else "FAIL: %d run(s) differ" % failures)
+   return 1 if failures else 0
+
+#------------------------------------------------------------------------------
+# identical: output and grain.txt of two result sets, byte for byte (comment lines ignored)
+#------------------------------------------------------------------------------
+def data_lines(path):
+   with open(path) as f: return [l for l in f if not l.startswith("#")]
+
+def cmd_identical(args):
+   test_dir, ref_dir = result_dir(args.test), result_dir(args.ref)
+   failures = 0
+   for c in case_names(args.cases):
+      if not os.path.isdir(os.path.join(test_dir, c)): continue
+      for r in sorted(os.listdir(os.path.join(test_dir, c))):
+         t, f = os.path.join(test_dir, c, r), os.path.join(ref_dir, c, r)
+         if not os.path.isdir(t): continue
+         files = [x for x in ("output", "grain.txt") if os.path.isfile(os.path.join(f, x))]
+         missing = [x for x in files if not os.path.isfile(os.path.join(t, x))]
+         differ = [x for x in files if x not in missing and data_lines(os.path.join(t, x)) != data_lines(os.path.join(f, x))]
+         ok = files and not missing and not differ
+         if not ok: failures += 1
+         detail = ", ".join(["%s missing" % x for x in missing] + ["%s differs" % x for x in differ]) if files else "no output in reference"
+         print("%-30s %-8s %-9s %s" % (c, r, "IDENTICAL" if ok else "DIFFERENT", ", ".join(files) if ok else detail))
    print("OVERALL", "PASS" if failures == 0 else "FAIL: %d run(s) differ" % failures)
    return 1 if failures else 0
 
@@ -322,12 +396,18 @@ def main():
    c.add_argument("--cases")
    c.add_argument("--verbose", action="store_true", help="show every quantity, not just failures")
    c.add_argument("--summary", action="store_true", help="pooled z-score statistics of all statistical comparisons")
+   c.add_argument("--paired", type=float, metavar="RTOL", help="compare every run with the same run of the reference row by row (same dynamics, rounding differences only)")
    k = sub.add_parser("configs", help="compare the final binary spin configurations of two result sets atom by atom (bit for bit)")
    k.add_argument("--test", required=True)
    k.add_argument("--ref", required=True)
    k.add_argument("--cases")
+   k.add_argument("--magnetic-only", action="store_true", help="ignore atoms of non-magnetic=keep materials (read from the case's .mat files)")
+   i = sub.add_parser("identical", help="compare output and grain.txt of two result sets byte for byte, ignoring comment lines")
+   i.add_argument("--test", required=True)
+   i.add_argument("--ref", required=True)
+   i.add_argument("--cases")
    args = p.parse_args()
-   sys.exit({"run": cmd_run, "compare": cmd_compare, "configs": cmd_configs}[args.cmd](args))
+   sys.exit({"run": cmd_run, "compare": cmd_compare, "configs": cmd_configs, "identical": cmd_identical}[args.cmd](args))
 
 if __name__ == "__main__":
    main()
