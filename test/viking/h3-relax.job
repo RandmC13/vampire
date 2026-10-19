@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-relax
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=1
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# HAMR chain, stage 1: builds the CPU MPI version and runs the Monte Carlo
+# relaxation on all ranks of the job (one per core), saving the checkpoint that
+# the benchmark and write stages load (on other numbers of processes).
+# Submitted by h3-submit.sh. Results in $WORK/h3/relax.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+
+build parallel vampire-parallel $H3/bin/vampire-parallel
+dir=$H3/relax
+stage_dir relax $dir
+echo $SLURM_NTASKS > $dir/ranks.txt
+cd $dir
+start=$(date +%s)
+mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $H3/bin/vampire-parallel > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "relax: $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
+# the later stages link these files: protect them
+chmod a-w vampire*.chk
+rm -f *.data *.meta   # spin snapshots of the relaxation are not needed

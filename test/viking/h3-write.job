@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-write
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# HAMR chain, stage 2: the complete HAMR write with the multi-GPU version in
+# single precision with gpu:skip-non-magnetic-atoms, one rank per GPU of the
+# job, restarted from the relaxed state. Saves the spin snapshots of the input
+# and the checkpoint that the read stage loads. Submitted by h3-submit.sh.
+# Results in $WORK/h3/write.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+export MPIRUN=$REPO/test/viking/mgpu-launch.sh
+
+build cuda-multigpu vampire-cuda-multigpu $H3/bin/vampire-mgpu-sp-write CUDA_ARCH=-arch=native CUDA_PR=-DCUDA_SP
+dir=$H3/write
+stage_dir write $dir
+echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+[ $SLURM_JOB_NUM_NODES -gt 1 ] && echo "sim:mpi-ppn = $SLURM_NTASKS_PER_NODE" >> $dir/input
+# copies, since the write saves its own checkpoint in the same directory
+n=$(cat $H3/relax/ranks.txt)
+for ((r = 0; r < n; r++)); do cp $H3/relax/vampire$r.chk $dir/; done
+chmod u+w $dir/vampire*.chk
+echo $SLURM_NTASKS > $dir/ranks.txt
+cd $dir
+start=$(date +%s)
+MPI_OPTS="--map-by ppr:$SLURM_NTASKS_PER_NODE:node" $MPIRUN -np $SLURM_NTASKS $SAMPLE $H3/bin/vampire-mgpu-sp-write > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "write: $(( $(date +%s) - start )) s on $SLURM_NTASKS GPUs ($(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1))" | tee time.txt
+# the relaxed state is no longer needed here
+for ((r = SLURM_NTASKS; r < n; r++)); do rm -f vampire$r.chk; done

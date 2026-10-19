@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-bench-cpu
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=1
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# HAMR chain benchmark on CPUs: the write of the chain with the CPU MPI version
+# (one rank per core), restarted from the relaxed state and timed for a fixed
+# time on 1, 4 and all nodes of the job. Submitted by h3-submit.sh after the
+# relaxation, which builds the binary. Appends to $WORK/h3/bench/bench.csv (see
+# h3-bench-gpu.job; device is the CPU model, precision dp, skip 0).
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+partition=$SLURM_JOB_PARTITION
+ppn=$SLURM_NTASKS_PER_NODE
+cpu=$(lscpu | awk -F': *' '/^Model name/ { print $2 }' | tr ',' ' ')
+
+csv=$H3/bench/bench.csv
+[ -f $csv ] || echo "partition,device,nodes,ranks,ranks_per_node,precision,skip,atoms,setup_s,steps,window_s,steps_per_s,full_write_h,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit" > $csv
+for nodes in $(printf '%s\n' 1 4 $SLURM_JOB_NUM_NODES | awk -v m=$SLURM_JOB_NUM_NODES '$1 <= m' | sort -nu); do
+   n=$((nodes * ppn))
+   dir=$H3/bench/runs/$partition-np$n
+   stage_dir write $dir
+   [ $nodes -gt 1 ] && echo "sim:mpi-ppn = $ppn" >> $dir/input
+   result=$(bench_run $dir mpirun --map-by ppr:$ppn:node --bind-to core -np $n $SAMPLE $H3/bin/vampire-parallel)
+   atoms=$(awk -F': ' '/Total number of atoms/ { print $2 }' $dir/stdout | head -n 1)
+   rate=$(echo $result | cut -d, -f4)
+   echo "$result" | awk -F, -v pre="$partition,$cpu,$nodes,$n,$ppn,dp,0,${atoms:-0}" -v h=$(full_write_h $rate) \
+      '{ print pre "," $1 "," $2 "," $3 "," $4 "," h "," $5 "," $6 "," $7 "," $8 }' | tee -a $csv
+done

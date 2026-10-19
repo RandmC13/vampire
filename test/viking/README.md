@@ -56,3 +56,29 @@ node (2 GPUs):
 Ranks are started by `mgpu-launch.sh`, which gives every rank one GPU and binds it to the
 CPU cores and memory of that GPU's NUMA node. Modules default to `CUDA/12.9.0`,
 `OpenMPI/4.1.5-GCC-12.3.0` and `SciPy-bundle/2023.07-gfbf-2023a`; override with `MODULES`.
+
+## HAMR chain at production size
+
+`h3/` holds the three stages of a HAMR simulation (200 x 60 x 20 nm granular FePt film with a
+sensor layer, about 9M atoms): a Monte Carlo relaxation, the HAMR write and a one step dipole
+read-back, each restarted from the checkpoint of the previous stage.
+
+    test/viking/h3-submit.sh --dry-run       # first: the whole chain on a small system
+    test/viking/h3-collect.sh                # check the archive, then delete $WORK/h3
+    test/viking/h3-submit.sh                 # the full chain and its benchmarks
+    test/viking/h3-collect.sh
+
+submits the relaxation on 10 CPU nodes (CPU MPI version), then the complete write in single
+precision on 6 A40 GPUs (multi-GPU version, `gpu:skip-non-magnetic-atoms`), the read-back on 10
+CPU nodes, and benchmarks of the write: restarted from the relaxed state and stopped after 5
+minutes of simulation, on 1, 2, 3 and 6 A40 and 1 and 2 H100 GPUs (double and single precision,
+with and without skipping the non-magnetic atoms) and with the CPU MPI version on 1, 4 and 10
+nodes. `$WORK/h3/bench/bench.csv` lists for each run the set-up time, the time steps per
+second, the hours the whole write (4.29M steps) would take, and the peak host and GPU memory
+per rank. Every stage after the relaxation loads a checkpoint written on another number of
+processes.
+
+All files go to `$WORK/h3`, which must not be on the file system of the home directory (the
+complete write saves about 90 GB of spin snapshots); the scripts stop otherwise.
+`h3-collect.sh` packs everything except the checkpoints and the spin snapshots other than the
+last one of the write.
