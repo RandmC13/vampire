@@ -162,7 +162,7 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    //---------------------------------------------------------------------------
    // Identify surface atoms and initialise anisotropy data
    //---------------------------------------------------------------------------
-   anisotropy::identify_surface_atoms(catom_array, bilinear.list);
+   anisotropy::identify_surface_atoms(catom_array, bilinear.list, bilinear.vectors);
 
    //===========================================================
    // Create 1-D neighbourlist
@@ -174,7 +174,7 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    //-------------------------------------------------
    // Initialise exchange calculation
    //-------------------------------------------------
-   exchange::initialize(bilinear.list, biquadratic.list);
+   exchange::initialize(bilinear.list, biquadratic.list, bilinear.vectors);
 
    // Save number of atoms in unit cell first
    cells::num_atoms_in_unit_cell = cs::unit_cell.atom.size();
@@ -182,8 +182,10 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    // Now nuke generation vectors to free memory NOW
    std::vector<cs::catom_t> zerov;
    std::vector<std::vector <neighbours::neighbour_t> > zerovv;
+   std::vector<std::vector <neighbours::vector_t> > zerovec;
    catom_array.swap(zerov);
    bilinear.list.swap(zerovv);
+   bilinear.vectors.swap(zerovec);
 
    return;
 

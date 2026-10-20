@@ -682,6 +682,7 @@ namespace create{
          std::vector <cs::catom_t> tmp_catom_array(new_num_atoms);
          std::vector <std::vector <neighbours::neighbour_t> > tmp_bilinear(new_num_atoms);
          std::vector <std::vector <neighbours::neighbour_t> > tmp_biquadratic(new_num_atoms);
+         std::vector <std::vector <neighbours::vector_t> > tmp_bilinear_vectors(bilinear.vectors.empty() ? 0 : new_num_atoms);
 
          // Populate tmp arrays (assuming all mpi_type=3 atoms are at the end of the array?)
          for (unsigned int atom=0;atom<new_num_atoms;atom++){ // new atom number
@@ -725,13 +726,12 @@ namespace create{
                temp_nt.nn=new_nn_number;
                temp_nt.i=interaction_id;
 
-               // Actual neighbours stay the same so simply copy separation vectors
-               temp_nt.vx=bilinear.list[old_atom_num][nn].vx;
-               temp_nt.vy=bilinear.list[old_atom_num][nn].vy;
-               temp_nt.vz=bilinear.list[old_atom_num][nn].vz;
-
                // ignore all halo-x interactions but not x-halo
-               if(!(mpi_type_vec[atom].mpi_type==2)) tmp_bilinear[atom].push_back(temp_nt);
+               if(!(mpi_type_vec[atom].mpi_type==2)){
+                  tmp_bilinear[atom].push_back(temp_nt);
+                  // Actual neighbours stay the same so simply copy separation vectors
+                  if(!bilinear.vectors.empty()) tmp_bilinear_vectors[atom].push_back(bilinear.vectors[old_atom_num][nn]);
+               }
 
             }
 
@@ -751,11 +751,6 @@ namespace create{
                   temp_nt.nn = new_nn_number;
                   temp_nt.i = interaction_id;
 
-                  // Actual neighbours stay the same so simply copy separation vectors
-                  temp_nt.vx = biquadratic.list[old_atom_num][nn].vx;
-                  temp_nt.vy = biquadratic.list[old_atom_num][nn].vy;
-                  temp_nt.vz = biquadratic.list[old_atom_num][nn].vz;
-
                   // ignore all halo-x interactions but not x-halo
                   if(!(mpi_type_vec[atom].mpi_type==2)) tmp_biquadratic[atom].push_back(temp_nt);
 
@@ -771,6 +766,7 @@ namespace create{
          //----// cneighbourlist.swap(tmp_cneighbourlist); // This actually works(!) - COPIES both pointers and elements of pointers
 
          bilinear.list.swap(tmp_bilinear); // This actually works(!) - COPIES both pointers and elements of pointers
+         bilinear.vectors.swap(tmp_bilinear_vectors);
          biquadratic.list.swap(tmp_biquadratic);
 
          // Print out final neighbourlist
