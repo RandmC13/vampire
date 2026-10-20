@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-profile
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --partition=gpuplus
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:2
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=03:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Profiles of the HAMR write on the H100 node, run after the chain's relaxation
+# (it uses the relaxed state in $WORK/h3/relax). Results in $WORK/h3/profile:
+#
+#   1. original version (commit ORIGINAL, default cf6946e8): the whole hamr-perf
+#      run under Nsight Systems with its own profile_gpu.sh, in double and
+#      single precision (the same method as profile.job for later versions)
+#   2. original version at production size: timed like h3-bench-gpu.job, one
+#      GPU, double and single precision; it cannot restart from the relaxed
+#      state and does not know the newer grain keywords, so it starts from the
+#      initial spins with the grain keywords mapped to its own names (the grain
+#      structure and the number of atoms differ: compare time per atom and step)
+#      -> original-bench.csv (columns of bench.csv)
+#   3. multi-GPU version on 1 and 2 GPUs (double precision with and without
+#      gpu:skip-non-magnetic-atoms, single precision with it): a 5 s Nsight
+#      Systems window (CUDA and MPI) of each rank, well after the set-up; the
+#      head moves at 1000 m/s so that each run ends by itself within minutes,
+#      and no spin snapshots are written
+#
+# Submit from test/viking (after replacing VIKING_ACCOUNT):
+#    sbatch --export=ALL,REPO=$(git rev-parse --show-toplevel),WORK=$WORK \
+#           --output=$WORK/h3/logs/%x-%j.log h3-profile.job
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+export MPIRUN=$REPO/test/viking/mgpu-launch.sh
+command -v nsys > /dev/null || PATH=$(ls -d ${EBROOTCUDA:-}/nsight-systems*/bin 2> /dev/null | tail -n 1):$PATH
+command -v nsys > /dev/null || { echo "nsys not found"; exit 1; }
+nsys --version
+[ -f $H3/relax/ranks.txt ] || { echo "no relaxed state in $H3/relax"; exit 1; }
+
+P=$H3/profile
+mkdir -p $P
+original=$(git -C $REPO rev-parse ${ORIGINAL:-cf6946e8})
+echo "original $original" > $P/commits.txt
+echo "current $(cat $H3/commit.txt)" >> $P/commits.txt
+rm -rf $P/src-original; mkdir -p $P/src-original
+git -C $REPO archive $original | tar -x -C $P/src-original
+
+#------------------------------------------------------------------------------
+# 1. original version, hamr-perf
+#------------------------------------------------------------------------------
+export MAKEFLAGS="CUDA_ARCH=-arch=native"
+for pr in dp sp; do
+   NSYS_DELAY=0 NSYS_DURATION=3600 $P/src-original/test/validation/profile_gpu.sh hamr-perf $pr
+done
+mv $P/src-original/test/validation/results/*.tar.gz $P/
+unset MAKEFLAGS
+
+#------------------------------------------------------------------------------
+# 2. original version, production size
+#------------------------------------------------------------------------------
+for pr in dp sp; do
+   BUILD_SRC=$P/src-original build cuda vampire-cuda $H3/bin/vampire-original-$pr CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}"
+done
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+csv=$P/original-bench.csv
+echo "partition,device,nodes,ranks,ranks_per_node,precision,skip,atoms,setup_s,steps,window_s,steps_per_s,full_write_h,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit" > $csv
+for pr in dp sp; do
+   dir=$P/runs/original-np1-$pr
+   stage_dir write $dir
+   sed -i -e 's/^create:grain-size = /dimensions:particle-size = /' \
+          -e 's/^create:grain-spacing = /dimensions:particle-spacing = /' \
+          -e 's/^create:grain-size-sd = /create:grain-size-variance = /' \
+          -e 's/^create:grain-structure-random-seed = /create:voronoi-random-seed = /' \
+          -e '/^create:grain-tessellation/d' -e '/^create:grain-periodic-boundaries/d' \
+          -e '/^create:grain-shape-output/d' -e '/^create:grain-statistics-output/d' \
+          -e '/^create:grain-size-distribution/d' -e '/^create:grain-height/d' \
+          -e '/^create:decomposition-independent-random/d' -e '/^cells:probe-non-magnetic-cells/d' \
+          -e '/^sim:load-checkpoint/d' $dir/input
+   result=$(bench_run $dir $MPIRUN -np 1 $SAMPLE $H3/bin/vampire-original-$pr)
+   atoms=$(awk '/Number of atoms generated/ { print $NF; exit }' $dir/log)
+   rate=$(echo $result | cut -d, -f4)
+   echo "$result" | awk -F, -v pre="gpuplus,$gpu (original),1,1,1,$pr,0,${atoms:-0}" -v h=$(full_write_h $rate) \
+      '{ print pre "," $1 "," $2 "," $3 "," $4 "," h "," $5 "," $6 "," $7 "," $8 }' | tee -a $csv
+done
+
+#------------------------------------------------------------------------------
+# 3. multi-GPU version, production size, 1 and 2 GPUs
+#------------------------------------------------------------------------------
+for pr in dp sp; do
+   bin=$H3/bin/vampire-mgpu-$pr-gpuplus
+   [ -x $bin ] || build cuda-multigpu vampire-cuda-multigpu $bin CUDA_ARCH=-arch=native CUDA_PR="-DCUDA_${pr^^}"
+done
+for n in 1 2; do
+   for config in dp-skip0 dp-skip1 sp-skip1; do
+      pr=${config%-*}; skip=${config#*skip}
+      dir=$P/runs/current-np$n-$config
+      stage_dir write $dir
+      sed -i -e '/^sim:save-checkpoint/d' -e '/^config:/d' -e 's/^hamr:head-speed.*/hamr:head-speed = 1000 !m\/s/' $dir/input
+      [ $skip = 1 ] && echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+      link_checkpoint $H3/relax $dir
+      start=$(date +%s)
+      ( cd $dir && MPI_OPTS="--map-by ppr:$n:node" $MPIRUN -np $n nsys profile --trace=cuda,mpi --mpi-impl=openmpi \
+           --sample=process-tree --delay=180 --duration=5 --kill=none --force-overwrite=true \
+           --output=$dir/report-r%q{OMPI_COMM_WORLD_RANK} $H3/bin/vampire-mgpu-$pr-gpuplus > stdout 2>&1 )
+      echo "$config on $n GPUs: exit $?, $(( $(date +%s) - start )) s, $(grep -vc '^#' $dir/output) output rows" | tee $dir/time.txt
+      for rep in $dir/report-r*.nsys-rep; do
+         nsys stats --report cuda_gpu_kern_sum,cuda_gpu_mem_time_sum,cuda_api_sum --format csv \
+            --output ${rep%.nsys-rep} $rep > ${rep%.nsys-rep}-stats.log 2>&1
+         nsys stats --report mpi_event_sum --format csv --output ${rep%.nsys-rep} $rep >> ${rep%.nsys-rep}-stats.log 2>&1
+      done
+      rm -f $dir/*.chk
+   done
+done
+rm -rf $P/src-original
+ls -l $P $P/runs/*

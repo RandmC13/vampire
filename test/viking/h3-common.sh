@@ -40,11 +40,12 @@ mkdir -p $H3/bench
 { module list; echo "nodes: ${SLURM_JOB_NODELIST:-}"; nvidia-smi -L 2> /dev/null; } 2>&1
 
 # build <make target> <binary> <destination> [make arguments]: builds a private copy of the exported sources
+# (or of the source tree in BUILD_SRC)
 build(){
    local target=$1 binary=$2 dest=$3
    shift 3
    local src=$H3/build-$SLURM_JOB_ID
-   rm -rf $src; cp -r $H3/src $src
+   rm -rf $src; cp -r ${BUILD_SRC:-$H3/src} $src
    mkdir -p $(dirname $dest)
    make -C $src -j$(nproc) $target "$@" > $dest.build.log 2>&1 || { tail -n 30 $dest.build.log; exit 1; }
    mv $src/$binary $dest

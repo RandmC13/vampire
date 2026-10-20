@@ -82,3 +82,9 @@ All files go to `$WORK/h3`, which must not be on the file system of the home dir
 complete write saves about 90 GB of spin snapshots); the scripts stop otherwise.
 `h3-collect.sh` packs everything except the checkpoints and the spin snapshots other than the
 last one of the write.
+
+`h3-profile.job` (submitted by hand once the relaxation has finished, see its header) profiles
+the write on the H100 node: the original version (cf6946e8) on `hamr-perf` and timed at
+production size, and the multi-GPU version on 1 and 2 GPUs under Nsight Systems (CUDA and MPI
+calls of each rank). Its results go to `$WORK/h3/profile` and into the `h3-collect.sh` archive
+(without the `.nsys-rep` files, which stay in scratch for the Nsight Systems GUI).
