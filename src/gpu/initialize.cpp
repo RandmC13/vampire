@@ -47,11 +47,20 @@ namespace gpu{
 
       std::vector<std::string> unsupported;
 
-      // integrators: only llg-heun runs on the GPU. With any other integrator the host
-      // spins would be overwritten by the (never updated) device spins at every
-      // statistics update. Monte Carlo has a GPU version, which does not yet reproduce
-      // the CPU results.
-      if(integrate::integrator == integrate::integrator_t::monte_carlo) unsupported.push_back("the monte-carlo integrator");
+      // integrators: llg-heun runs on the GPU, and monte-carlo on a single GPU. With any
+      // other integrator the host spins would be overwritten by the (never updated)
+      // device spins at every statistics update.
+      if(integrate::integrator == integrate::integrator_t::monte_carlo){
+         #ifdef CUDA_MULTIGPU
+            unsupported.push_back("the monte-carlo integrator in the multi-GPU version");
+         #endif
+         // the Monte Carlo energy includes exchange, uniaxial anisotropy and the global applied field
+         bool cubic = false;
+         for(int m = 0; m < mp::num_materials; m++) cubic = cubic || anisotropy::get_kc4(m) != 0.0 || anisotropy::get_kc6(m) != 0.0;
+         if(cubic)                               unsupported.push_back("cubic anisotropy with the monte-carlo integrator");
+         if(anisotropy::is_neel_enabled())       unsupported.push_back("Neel anisotropy with the monte-carlo integrator");
+         if(anisotropy::is_rotational_enabled()) unsupported.push_back("rotational anisotropy with the monte-carlo integrator");
+      }
       else if(integrate::integrator != integrate::integrator_t::llg_heun) unsupported.push_back("integrators other than llg-heun");
 
       // exchange

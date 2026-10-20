@@ -98,9 +98,10 @@ void update_spin_fields(const int num_atoms, const int first_atom) {
 __device__ cu_real_t
 uniaxial_anisotropy_energy(cu::material_parameters_t &material, cu_real_t sx,
                            cu_real_t sy, cu_real_t sz) {
-  // Factors for k4
-  const cu_real_t fiveothirtyfive = 0.14285714285;   // 5/35
-  const cu_real_t thirtyothirtyfive = 0.85714285714; // 30/35
+  // same expressions as the CPU (anisotropy/uniaxial_order_2, _4, _6)
+  const cu_real_t six_o_seven = 6.0 / 7.0;
+  const cu_real_t fifteen_o_eleven = 15.0 / 11.0;
+  const cu_real_t five_o_eleven = 5.0 / 11.0;
 
   const cu_real_t ex = material.anisotropy_unit_x;
   const cu_real_t ey = material.anisotropy_unit_y;
@@ -113,13 +114,10 @@ uniaxial_anisotropy_energy(cu::material_parameters_t &material, cu_real_t sx,
   const cu_real_t k4 = material.sh4;
   const cu_real_t k6 = material.sh6;
 
+  const cu_real_t sdote4 = sdote2 * sdote2;
   const cu_real_t Ek2 = -k2 * sdote2;
-  const cu_real_t Ek4 =
-      k4 * (sdote2 * sdote2 - thirtyothirtyfive * sdote2 - fiveothirtyfive);
-  const cu_real_t Ek6 =
-      -0.04166666666 * k6 *
-      (231.0 * sdote2 * sdote2 * sdote2 - 315.0 * sdote2 * sdote2 +
-       105.0 * sdote2); // factor = 2/3 * -1/16 = -1/6 = -0.04166666666
+  const cu_real_t Ek4 = -k4 * (sdote4 - six_o_seven * sdote2);
+  const cu_real_t Ek6 = -k6 * (sdote2 * sdote4 - fifteen_o_eleven * sdote4 + five_o_eleven * sdote2);
 
   cu_real_t E = material.mu_s_si * (Ek2 + Ek4 + Ek6);
 
