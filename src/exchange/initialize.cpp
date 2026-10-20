@@ -217,6 +217,9 @@ namespace exchange{
          atoms::neighbour_list_end_index[atom]=counter-1;
       }
 
+      // free the neighbour list now unless the interactions calculated below still need it
+      if(!exchange::neighbour_vectors_needed()) std::vector<std::vector <neighbours::neighbour_t> >().swap(bilinear);
+
       //------------------------------------------------------------------------
       // Biquadratic exchange list - should probably be classified at some point
       //------------------------------------------------------------------------
