@@ -101,7 +101,8 @@ namespace anisotropy
    //-----------------------------------------------------------------------------
    // function to identify surface atoms
    //-----------------------------------------------------------------------------
-   void identify_surface_atoms(std::vector<cs::catom_t> & catom_array, std::vector<std::vector <neighbours::neighbour_t> > & cneighbourlist);
+   void identify_surface_atoms(std::vector<cs::catom_t> & catom_array, std::vector<std::vector <neighbours::neighbour_t> > & cneighbourlist,
+                                                                       std::vector<std::vector <neighbours::vector_t> > & cvectors);
 
    //---------------------------------------------------------------------------
    // Function to process input file parameters for anisotropy module
