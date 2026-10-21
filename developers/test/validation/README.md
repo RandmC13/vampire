@@ -147,6 +147,7 @@ Statistical checks fail spuriously ~0.1 % of the time per quantity: re-run with 
 ## Cases
 
 - `analytic-*`: physics vs exact results (single-spin precession; Boltzmann average for non-interacting spins).
+  `analytic-thermal-mc-anis` adds fourth and sixth order uniaxial anisotropy and temperature rescaling (Monte Carlo).
 - `t0-*`: deterministic T=0 trajectories. `t0-anis-<term>` isolates one anisotropy term each; `biaxial`, `triaxial`
   and `cubic-rotated` are not implemented in the CUDA module, so they are expected to fail on GPU until fixed.
 - `timeseries-T300`, `curie-llg`, `curie-mc`: thermal statistics (LLG and Monte Carlo are each compared only with

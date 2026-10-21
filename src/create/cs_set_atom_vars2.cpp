@@ -162,7 +162,7 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    //---------------------------------------------------------------------------
    // Identify surface atoms and initialise anisotropy data
    //---------------------------------------------------------------------------
-   anisotropy::identify_surface_atoms(catom_array, bilinear.list);
+   anisotropy::identify_surface_atoms(catom_array, bilinear.list, bilinear.vectors);
 
    //===========================================================
    // Create 1-D neighbourlist
@@ -171,19 +171,22 @@ void set_atom_vars(std::vector<cs::catom_t> & catom_array,
    zlog << zTs() << "Memory required for creation of 1D neighbour list on rank " << vmpi::my_rank << ": ";
    zlog << (2.0*double(atoms::num_atoms)+2.0*double(atoms::total_num_neighbours))*8.0/1.0e6 << " MB RAM"<< std::endl;
 
-   //-------------------------------------------------
-   // Initialise exchange calculation
-   //-------------------------------------------------
-   exchange::initialize(bilinear.list, biquadratic.list);
-
    // Save number of atoms in unit cell first
    cells::num_atoms_in_unit_cell = cs::unit_cell.atom.size();
 
+   // Free the atom array before the exchange set-up, the peak of memory use
+   std::vector<cs::catom_t>().swap(catom_array);
+
+   //-------------------------------------------------
+   // Initialise exchange calculation
+   //-------------------------------------------------
+   exchange::initialize(bilinear.list, biquadratic.list, bilinear.vectors);
+
    // Now nuke generation vectors to free memory NOW
-   std::vector<cs::catom_t> zerov;
    std::vector<std::vector <neighbours::neighbour_t> > zerovv;
-   catom_array.swap(zerov);
+   std::vector<std::vector <neighbours::vector_t> > zerovec;
    bilinear.list.swap(zerovv);
+   bilinear.vectors.swap(zerovec);
 
    return;
 

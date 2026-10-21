@@ -88,3 +88,8 @@ the write on the H100 node: the original version (cf6946e8) on `hamr-perf` and t
 production size, and the multi-GPU version on 1 and 2 GPUs under Nsight Systems (CUDA and MPI
 calls of each rank). Its results go to `$WORK/h3/profile` and into the `h3-collect.sh` archive
 (without the `.nsys-rep` files, which stay in scratch for the Nsight Systems GUI).
+
+`h3-gpu-relax.job` (also submitted by hand, with `--partition=gpuplus` or `--partition=gpu`) runs
+the same relaxation with the GPU Monte Carlo integrator on one GPU, in single precision, built from
+the commit it is submitted from, and then a 5 minute write restarted from its checkpoint. Results
+in `$WORK/h3/gpu-relax/<partition>`, next to the CPU relaxation in `$WORK/h3/relax` for comparison.
