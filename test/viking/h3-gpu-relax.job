@@ -26,7 +26,9 @@
 # relax/ (output, grain files, time.txt, memory per rank) and write/ (bench.csv
 # row in ../bench.csv).
 #
-# Submit from test/viking (after replacing VIKING_ACCOUNT):
+# Submit from test/viking (after replacing VIKING_ACCOUNT; WORK must be set, or the log
+# file cannot be created and the job fails at once):
+#    export WORK=${WORK:-$HOME/scratch/vampire-benchmarks}
 #    sbatch --partition=gpuplus --export=ALL,REPO=$(git rev-parse --show-toplevel),WORK=$WORK \
 #           --output=$WORK/h3/logs/%x-%j.log h3-gpu-relax.job
 #------------------------------------------------------------------------------

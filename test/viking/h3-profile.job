@@ -32,7 +32,9 @@
 #      head moves at 1000 m/s so that each run ends by itself within minutes,
 #      and no spin snapshots are written
 #
-# Submit from test/viking (after replacing VIKING_ACCOUNT):
+# Submit from test/viking (after replacing VIKING_ACCOUNT; WORK must be set, or the log
+# file cannot be created and the job fails at once):
+#    export WORK=${WORK:-$HOME/scratch/vampire-benchmarks}
 #    sbatch --export=ALL,REPO=$(git rev-parse --show-toplevel),WORK=$WORK \
 #           --output=$WORK/h3/logs/%x-%j.log h3-profile.job
 #------------------------------------------------------------------------------
