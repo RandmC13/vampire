@@ -144,9 +144,11 @@ def precession(t, p):
    return {"mx": np.cos(arg) / np.cosh(larg), "my": np.sin(arg) / np.cosh(larg), "mz": np.tanh(larg)}
 
 def thermal_mz(p):
-   # <cos theta> for non-interacting spins, field and uniaxial anisotropy along z (Boltzmann average)
+   # <cos theta> for non-interacting spins, field and uniaxial anisotropy along z (Boltzmann average);
+   # fourth and sixth order terms as in vampire (anisotropy/uniaxial_order_4.cpp, _6.cpp)
    c = np.linspace(-1.0, 1.0, 400001)
-   e = (p["mu_s"] * MU_B * p["H"] * c + p["ku"] * c * c) / (KB * p["T"])
+   e = (p["mu_s"] * MU_B * p["H"] * c + p["ku"] * c * c + p.get("ku4", 0.0) * (c**4 - 6.0 / 7.0 * c**2)
+        + p.get("ku6", 0.0) * (c**6 - 15.0 / 11.0 * c**4 + 5.0 / 11.0 * c**2)) / (KB * p["T"])
    w = np.exp(e - e.max())
    return float((c * w).sum() / w.sum())
 

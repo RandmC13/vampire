@@ -72,15 +72,16 @@ link_checkpoint(){
    for ((r = 0; r < n; r++)); do ln -sf $1/vampire$r.chk $2/; done
 }
 
-# bench_run <directory> <command ...>: a write restarted from the relaxed state that runs
-# for $WINDOW seconds after its first output row and is then stopped; prints
+# bench_run <directory> <command ...>: a write restarted from the relaxed state (in
+# RELAX_DIR, default $H3/relax) that runs for $WINDOW seconds after its first output row and
+# is then stopped; prints
 # "setup_s,steps,window_s,steps_per_s,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit"
 bench_run(){
    local dir=$1
    shift
    # never save a checkpoint: the relaxed state is linked, not copied
    sed -i '/^sim:save-checkpoint/d' $dir/input
-   link_checkpoint $H3/relax $dir
+   link_checkpoint ${RELAX_DIR:-$H3/relax} $dir
    cd $dir
    local start=$(date +%s.%N) t rows t0= rows0= t1= rows1=0 status
    setsid "$@" > stdout 2>&1 &
