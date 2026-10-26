@@ -57,6 +57,10 @@ namespace {
    // unchanged, but the host does not wait for the device at every step.
    // Code reading the statistics during a simulation must call
    // gpu::stats::get() first.
+   //
+   // A statistic whose mask ids group the atoms of a finer
+   // statistic (system and grain from material-grain, for example) is not
+   // summed on the device: its sums are added from the sums of the finer one.
    //---------------------------------------------------------------------------
    const int chunk_size = 2048;
    const int reduction_block_size = 256;
@@ -68,10 +72,12 @@ namespace {
       std::vector<int> chunk_mask_id; // mask id of each chunk
       std::vector<double> h_partial;  // partial sums (mx, my, mz, m) of each chunk for each slot
       std::vector<double> sums;       // sums (mx, my, mz, m) of each mask id
-      int* d_atom;                    // atom indices ordered by mask id
-      double* d_moment;               // moments of ordered atoms
-      int* d_chunk_start;             // first ordered atom of each chunk (num_chunks + 1 entries)
-      double* d_partial;              // ring_slots slots of 4 * num_chunks partial sums
+      int source = -1;                // finer statistic the sums are added from (-1: summed on the device)
+      std::vector<int> source_mask_id;// mask id of each mask id of the source (-1: no atoms)
+      int* d_atom = nullptr;          // atom indices ordered by mask id
+      double* d_moment = nullptr;     // moments of ordered atoms
+      int* d_chunk_start = nullptr;   // first ordered atom of each chunk (num_chunks + 1 entries)
+      double* d_partial = nullptr;    // ring_slots slots of 4 * num_chunks partial sums
    };
 
    std::vector<device_magnetization_t> device_statistics;
@@ -129,18 +135,28 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
+   // Function to find the mask id of a statistic for each mask id of a finer
+   // statistic; false if there is a discrepancy in the mask ids for the atoms
+   // between the two statistics
+   //---------------------------------------------------------------------------
+   bool nested_mask(const std::vector<int>& fine, const int fine_size, const std::vector<int>& coarse, std::vector<int>& fine_to_coarse){
+      if(fine.size() != coarse.size()) return false;
+      fine_to_coarse.assign(fine_size, -1);
+      for(size_t atom = 0; atom < fine.size(); atom++){
+         int& id = fine_to_coarse[fine[atom]];
+         if(id == -1) id = coarse[atom];
+         else if(id != coarse[atom]) return false;
+      }
+      return true;
+   }
+
+   //---------------------------------------------------------------------------
    // Function to set up device data for one magnetisation statistic
    //---------------------------------------------------------------------------
-   void add_device_statistic(::stats::magnetization_statistic_t& statistic){
+   void add_device_statistic(device_magnetization_t& dm, const std::vector<int>& mask, const int num_mask_ids){
 
-      device_magnetization_t dm;
-      dm.statistic = &statistic;
-
-      std::vector<int> mask;
-      std::vector<double> saturation;
-      statistic.get_mask(mask, saturation);
-      const int num_mask_ids = saturation.size();
       const int num_atoms = mask.size();
+      dm.sums.resize(4 * num_mask_ids);
 
       // order atoms by mask id (counting sort, keeps atom order within each mask id)
       std::vector<int> mask_start(num_mask_ids + 1, 0);
@@ -166,7 +182,6 @@ namespace {
       chunk_start.push_back(num_atoms);
       dm.num_chunks = dm.chunk_mask_id.size();
       dm.h_partial.resize(ring_slots * 4 * dm.num_chunks);
-      dm.sums.resize(4 * num_mask_ids);
 
       cudaMalloc((void**)&dm.d_atom, num_atoms * sizeof(int));
       cudaMalloc((void**)&dm.d_moment, num_atoms * sizeof(double));
@@ -178,7 +193,59 @@ namespace {
 
       check_cuda_errors(__FILE__, __LINE__);
 
-      device_statistics.push_back(dm);
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to set up the magnetisation statistics calculated on the device
+   //---------------------------------------------------------------------------
+   void initialise_device_statistics(){
+
+      // the host processes the statistics in this order, the same on every process
+      std::vector<::stats::magnetization_statistic_t*> list;
+      if(::stats::calculate_system_magnetization)          list.push_back(&::stats::system_magnetization);
+      if(::stats::calculate_material_magnetization)        list.push_back(&::stats::material_magnetization);
+      if(::stats::calculate_height_magnetization)          list.push_back(&::stats::height_magnetization);
+      if(::stats::calculate_material_height_magnetization) list.push_back(&::stats::material_height_magnetization);
+      if(::stats::calculate_grain_magnetization)           list.push_back(&::stats::grain_magnetization);
+      if(::stats::calculate_material_grain_magnetization)  list.push_back(&::stats::material_grain_magnetization);
+      if(::stats::calculate_material_grain_height_magnetization) list.push_back(&::stats::material_grain_height_magnetization);
+
+      const int n = list.size();
+      std::vector<std::vector<int>> masks(n);
+      std::vector<int> sizes(n);
+      device_statistics.resize(n);
+      for(int i = 0; i < n; i++){
+         std::vector<double> saturation;
+         list[i]->get_mask(masks[i], saturation);
+         sizes[i] = saturation.size();
+         device_statistics[i].statistic = list[i];
+      }
+
+      // finest statistics first; each other one is added from the coarsest summed statistic it groups
+      std::vector<int> order(n);
+      for(int i = 0; i < n; i++) order[i] = i;
+      std::stable_sort(order.begin(), order.end(), [&](int a, int b){ return sizes[a] > sizes[b]; });
+      std::vector<int> summed;
+      std::vector<int> fine_to_coarse;
+      for(const int i : order){
+         device_magnetization_t& dm = device_statistics[i];
+         for(const int j : summed){
+            if((dm.source == -1 || sizes[j] < sizes[dm.source]) && nested_mask(masks[j], sizes[j], masks[i], fine_to_coarse)){
+               dm.source = j;
+               dm.source_mask_id = fine_to_coarse;
+            }
+         }
+         if(dm.source == -1){
+            add_device_statistic(dm, masks[i], sizes[i]);
+            summed.push_back(i);
+         }
+         else{
+            dm.num_chunks = 0;
+            dm.sums.resize(4 * sizes[i]);
+         }
+      }
+      // This line might need better wording
+      zlog << zTs() << "Magnetisation statistics: " << summed.size() << " of " << n << " summed on the GPU, the others added from their sums" << std::endl;
 
    }
 
@@ -265,17 +332,25 @@ namespace {
 
       for(int step = 0; step < pending_steps; step++){
          for(device_magnetization_t& dm : device_statistics){
-
+            if(dm.source != -1) continue;
             // add chunks in a fixed order
             const double* partial = dm.h_partial.data() + step * 4 * dm.num_chunks;
             std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
             for(int c = 0; c < dm.num_chunks; c++){
                for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += partial[4 * c + k];
             }
-
-            dm.statistic->calculate_magnetization_from_sums(dm.sums);
-
          }
+         for(device_magnetization_t& dm : device_statistics){
+            if(dm.source == -1) continue;
+            // add the sums of the finer statistic in a fixed order
+            const std::vector<double>& fine = device_statistics[dm.source].sums;
+            std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
+            for(size_t f = 0; f < dm.source_mask_id.size(); f++){
+               const int id = dm.source_mask_id[f];
+               if(id != -1) for(int k = 0; k < 4; k++) dm.sums[4 * id + k] += fine[4 * f + k];
+            }
+         }
+         for(device_magnetization_t& dm : device_statistics) dm.statistic->calculate_magnetization_from_sums(dm.sums);
          update_derived_statistics();
       }
 
@@ -289,13 +364,7 @@ namespace {
    void sum_device_magnetization(){
 
       if(!device_statistics_initialised){
-         if(::stats::calculate_system_magnetization)          add_device_statistic(::stats::system_magnetization);
-         if(::stats::calculate_material_magnetization)        add_device_statistic(::stats::material_magnetization);
-         if(::stats::calculate_height_magnetization)          add_device_statistic(::stats::height_magnetization);
-         if(::stats::calculate_material_height_magnetization) add_device_statistic(::stats::material_height_magnetization);
-         if(::stats::calculate_grain_magnetization)           add_device_statistic(::stats::grain_magnetization);
-         if(::stats::calculate_material_grain_magnetization)  add_device_statistic(::stats::material_grain_magnetization);
-         if(::stats::calculate_material_grain_height_magnetization) add_device_statistic(::stats::material_grain_height_magnetization);
+         initialise_device_statistics();
          device_statistics_initialised = true;
       }
 
