@@ -24,6 +24,11 @@
 #      magnetic atom
 #   5. times the hamr-perf benchmark and a small (5 nm) thermal-perf system
 #
+# With MGPU_RANKS=N the multi-GPU version (make cuda-multigpu) is compared
+# instead, every run on N MPI ranks (which may share one GPU), and the timed
+# benchmark is the granular HAMR medium (32 x 32 x 20 nm, periodic in x and y,
+# 2000 time steps at 300 K) on one rank.
+#
 # Usage (from anywhere):  developers/test/validation/identity_compare.sh [ref-commit]
 #                         (default: develop)
 #
@@ -32,6 +37,8 @@
 #   JOBS      parallel build jobs (default: number of cores)
 #   GPU_JOBS  validation runs sharing the GPU at the same time (default: 4); results do
 #             not depend on it, the timed benchmarks always run alone
+#   MGPU_RANKS compare the multi-GPU version on this number of ranks (see above)
+#   MPIRUN    MPI launcher for MGPU_RANKS (default: mpirun --oversubscribe --bind-to none)
 #
 # Results are packed into developers/test/validation/results/identity-<ref>-<host>-<date>.tar.gz
 #
@@ -51,6 +58,13 @@ results=developers/test/validation/results
 out=$results/$name
 mkdir -p $out
 vt="python3 developers/test/validation/vtest.py"
+
+# version to compare: the CUDA version, or the multi-GPU version on MGPU_RANKS ranks
+target=cuda; binary=vampire-cuda; ranks=()
+if [ -n "${MGPU_RANKS:-}" ]; then
+   target=cuda-multigpu; binary=vampire-cuda-multigpu; ranks=(--ranks $MGPU_RANKS)
+   export MPIRUN=${MPIRUN:-mpirun --oversubscribe --bind-to none}
+fi
 
 # extra input lines for the second run of each case
 stress=(
@@ -76,7 +90,7 @@ extra=(); for line in "${stress[@]}"; do extra+=(--extra "$line"); done
 keep_cases=hamr-granular,hamr-granular-t0
 configs=(--extra "config:atoms=end" --extra "config:output-format=binary")
 
-{ echo "reference: $ref ($sha), seeds $seeds"; nvidia-smi; nvcc --version; echo "working tree: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
+{ echo "reference: $ref ($sha), seeds $seeds, target $target ${MGPU_RANKS:+on $MGPU_RANKS ranks}"; nvidia-smi; nvcc --version; echo "working tree: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
 
 for pr in dp sp; do
    PR=$(echo $pr | tr a-z A-Z)
@@ -85,26 +99,26 @@ for pr in dp sp; do
    src=$results/identity-src-$sha
    rm -rf $src; mkdir -p $src
    git archive "$ref" | tar -x -C $src
-   if ! make -C $src -j$jobs cuda CUDA_PR=-DCUDA_$PR > $out/build-ref-$pr.log 2>&1; then echo "Build failed, see $out/build-ref-$pr.log"; exit 1; fi
-   cp $src/vampire-cuda ./vampire-cuda-id-ref-$pr
+   if ! make -C $src -j$jobs $target CUDA_PR=-DCUDA_$PR > $out/build-ref-$pr.log 2>&1; then echo "Build failed, see $out/build-ref-$pr.log"; exit 1; fi
+   cp $src/$binary ./vampire-cuda-id-ref-$pr
    rm -rf $src
 
    echo "=== Building working tree version ($pr) ==="
    make clean > /dev/null
-   if ! make -j$jobs cuda CUDA_PR=-DCUDA_$PR > $out/build-new-$pr.log 2>&1; then echo "Build failed, see $out/build-new-$pr.log"; exit 1; fi
-   mv vampire-cuda ./vampire-cuda-id-new-$pr
+   if ! make -j$jobs $target CUDA_PR=-DCUDA_$PR > $out/build-new-$pr.log 2>&1; then echo "Build failed, see $out/build-new-$pr.log"; exit 1; fi
+   mv $binary ./vampire-cuda-id-new-$pr
    make clean > /dev/null
 
    for v in ref new; do
       echo "=== Validation cases, $v version ($pr) ==="
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr --precision $pr --seeds $seeds --jobs $gpu_jobs
+      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}"
       echo "=== Validation cases with statistics output, $v version ($pr) ==="
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-stress --precision $pr --seeds $seeds --jobs $gpu_jobs "${extra[@]}"
+      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-stress --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}" "${extra[@]}"
    done
 
    echo "=== Cases with non-magnetic atoms, with and without gpu:skip-non-magnetic-atoms ($pr) ==="
-   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-noskip --precision $pr --cases $keep_cases --seeds 1 --jobs $gpu_jobs "${configs[@]}"
-   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-skip --precision $pr --cases $keep_cases --seeds 1 --jobs $gpu_jobs "${configs[@]}" --extra "gpu:skip-non-magnetic-atoms"
+   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-noskip --precision $pr --cases $keep_cases --seeds 1 --jobs $gpu_jobs "${ranks[@]}" "${configs[@]}"
+   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-skip --precision $pr --cases $keep_cases --seeds 1 --jobs $gpu_jobs "${ranks[@]}" "${configs[@]}" --extra "gpu:skip-non-magnetic-atoms"
 done
 
 # skipped atoms change nothing but their own spins
@@ -149,6 +163,8 @@ for pr in dp sp; do
          if [ -z "$diffs" ] && [ "$path" != "NO OUTPUT" ]; then status=IDENTICAL
          # features the GPU versions refuse (see run_gpu_suite.sh): both versions must refuse them
          elif [ -z "$diffs" ] && grep -q "$unsupported" $refdir/$rundir/log && grep -q "$unsupported" $results/id-new-$pr$set/$rundir/log; then path="refused"; status="REFUSED by both versions"
+         # cases that cannot run on this number of ranks (for example a single spin on several ranks)
+         elif [ -z "$diffs" ] && [ -n "${MGPU_RANKS:-}" ] && [ ! -s $results/id-new-$pr$set/$rundir/output ]; then status="FAILED in both versions"
          else status="DIFFERENT:$diffs"; fail=1; fi
          s=${set#-}; printf "%-4s %-7s %-26s %-6s %-10s %3d files  %s\n" $pr "${s:-plain}" $case ${rundir##*/} "$path" $files "$status"
       done
@@ -159,15 +175,23 @@ done > $report
 # timings: hamr-perf and a 5 nm thermal-perf system (host overhead bound)
 #------------------------------------------------------------------------------
 small=(--extra "dimensions:system-size-x = 5.0 !nm" --extra "dimensions:system-size-y = 5.0 !nm")
+benches=("bench hamr-perf" "bench-small thermal-perf")
+if [ -n "${MGPU_RANKS:-}" ]; then
+   small=(--ranks 1 --seeds 1 --extra "dimensions:system-size-x = 32 !nm" --extra "dimensions:system-size-y = 32 !nm"
+          --extra "sim:program = time-series" --extra "sim:temperature = 300.0" --extra "sim:total-time-steps = 2000")
+   benches=("bench-small hamr-granular")
+fi
 for pr in dp sp; do
    for v in ref new; do
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench --precision $pr --cases hamr-perf > /dev/null
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench-small --precision $pr --cases thermal-perf "${small[@]}" > /dev/null
+      [ -z "${MGPU_RANKS:-}" ] && $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench --precision $pr --cases hamr-perf > /dev/null
+      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench-small --precision $pr --cases ${benches[-1]#* } "${small[@]}" > /dev/null
    done
-   for b in bench/hamr-perf bench-small/thermal-perf; do
+   for b in "${benches[@]}"; do
+      set=${b% *}; c=${b#* }
       for v in ref new; do
-         d=$results/id-$v-$pr-${b%/*}/${b#*/}/run
-         echo "$pr ${b#*/}$([ ${b%/*} = bench-small ] && echo ' (5 nm)') $v: $(grep -h 'Simulation run time' $d/stdout | awk '{print $NF}') s, $(grep -c . $d/output) output lines, identical output: $(cmp -s <(grep -av '^#' $results/id-ref-$pr-${b%/*}/${b#*/}/run/output) <(grep -av '^#' $d/output) && echo yes || echo NO)"
+         run=run; [ $c = hamr-granular ] && run=seed1
+         d=$results/id-$v-$pr-$set/$c/$run
+         echo "$pr $c$([ $set = bench-small ] && echo " ($([ -n "${MGPU_RANKS:-}" ] && echo '32 nm, 1 rank' || echo '5 nm'))") $v: $(grep -h 'Simulation run time' $d/stdout | awk '{print $NF}') s, $(grep -c . $d/output) output lines, identical output: $(cmp -s <(grep -av '^#' $results/id-ref-$pr-$set/$c/$run/output) <(grep -av '^#' $d/output) && echo yes || echo NO)"
       done
    done
 done | tee $out/benchmarks.txt
@@ -182,8 +206,9 @@ for pr in dp sp; do
       echo "$pr $set: $(awk -v p=$pr -v s=$set '$1 == p && $2 == s' $report | grep -c IDENTICAL) identical, $(awk -v p=$pr -v s=$set '$1 == p && $2 == s' $report | grep -vc IDENTICAL) different; runs using GPU statistics: $(awk -v p=$pr -v s=$set '$1 == p && $2 == s && $5 == "gpu-stats"' $report | wc -l)"
    done
 done
-grep -v "IDENTICAL\|REFUSED" $report
+grep -v "IDENTICAL\|REFUSED\|FAILED in both" $report
 echo "refused by both versions: $(grep -c REFUSED $report) runs"
+[ -n "${MGPU_RANKS:-}" ] && echo "failed in both versions on $MGPU_RANKS ranks: $(grep -c 'FAILED in both' $report) runs ($(grep 'FAILED in both' $report | awk '{print $3}' | sort -u | tr '\n' ' '))"
 for pr in dp sp; do
    echo "$pr gpu:skip-non-magnetic-atoms vs without: $(grep -c IDENTICAL $out/skip-$pr.txt) identical, $(grep 'DIFFERENT\|FAIL\|not active' $out/skip-$pr.txt | grep -vc OVERALL) different"
    grep "DIFFERENT\|not active\|^time" $out/skip-$pr.txt | sed 's/^/   /'

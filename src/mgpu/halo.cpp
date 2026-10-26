@@ -37,7 +37,8 @@ namespace internal{
 
    //---------------------------------------------------------------------------
    // Function to exchange the packed halo spins with the other ranks, with the
-   // same messages as the MPI version (vmpi::mpi_init/complete_halo_swap)
+   // same messages as the MPI version (vmpi::mpi_init/complete_halo_swap) except
+   // when the spins are to be sent to their own rank, in which case they are copied on the device
    //---------------------------------------------------------------------------
    void exchange_halo(){
 
@@ -48,6 +49,7 @@ namespace internal{
 
       std::vector<MPI_Request> requests;
       for(int p = 0; p < vmpi::num_processors; p++){
+         if(p == vmpi::my_rank) continue; // copied on the device (start_halo)
          if(vmpi::send_num_array[p] != 0){
             requests.push_back(MPI_REQUEST_NULL);
             MPI_Isend(send + 3 * vmpi::send_start_index_array[p] * real_size, 3 * vmpi::send_num_array[p], type, p, 48, MPI_COMM_WORLD, &requests.back());
