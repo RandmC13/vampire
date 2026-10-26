@@ -41,6 +41,10 @@
 #   MGPU_RANKS compare the multi-GPU version on this number of ranks (see above)
 #   MPIRUN    MPI launcher for MGPU_RANKS (default: mpirun --oversubscribe --bind-to none)
 #   NO_CACHE  set to 1 to rebuild and rerun the reference version even if it is cached
+#   TIMINGS   set to 0 to skip the timing of the reference version: the benchmark cases
+#             still run with the working tree version and their outputs are still
+#             compared, against the cached reference outputs (for changes not meant to
+#             affect speed; the default 1 times both versions under the same conditions)
 #
 # Results are packed into developers/test/validation/results/identity-<ref>-<host>-<date>.tar.gz
 #
@@ -49,7 +53,7 @@
 # computer, GPU and driver, CUDA compiler, build settings, number of ranks, seeds,
 # validation cases, vtest.py and extra input lines (the two most recent sets are
 # kept). The working tree version is always built and run in full; the timed
-# benchmarks run both versions again.
+# benchmarks run both versions again (unless TIMINGS=0).
 #
 # Note: the reference version is built from an exported copy of the commit; the
 # working tree version is built incrementally in results/identity-build (see
@@ -100,6 +104,15 @@ extra=(); for line in "${stress[@]}"; do extra+=(--extra "$line"); done
 keep_cases=hamr-granular,hamr-granular-t0
 configs=(--extra "config:atoms=end" --extra "config:output-format=binary")
 
+# timed benchmarks: hamr-perf and a 5 nm thermal-perf system (host overhead bound)
+small=(--extra "dimensions:system-size-x = 5.0 !nm" --extra "dimensions:system-size-y = 5.0 !nm")
+benches=("bench hamr-perf" "bench-small thermal-perf")
+if [ -n "${MGPU_RANKS:-}" ]; then
+   small=(--ranks 1 --seeds 1 --extra "dimensions:system-size-x = 32 !nm" --extra "dimensions:system-size-y = 32 !nm"
+          --extra "sim:program = time-series" --extra "sim:temperature = 300.0" --extra "sim:total-time-steps = 2000")
+   benches=("bench-small hamr-granular")
+fi
+
 #------------------------------------------------------------------------------
 # cache of the reference version: everything its outputs depend on is in the key
 #------------------------------------------------------------------------------
@@ -108,7 +121,7 @@ key_text=$(
    echo "build ${CUDA_ARCH:-} ${MAKEFLAGS:-}"
    nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
    nvcc --version | tail -n 2
-   printf '%s\n' "${stress[@]}"
+   printf '%s\n' "${stress[@]}" "${small[@]}"
    (cd developers/test/validation && find cases -type f | sort | xargs sha256sum && sha256sum vtest.py)
 )
 cache=$results/identity-cache/$(echo "$key_text" | sha256sum | cut -c1-16)
@@ -216,27 +229,30 @@ done > $report
 #------------------------------------------------------------------------------
 # timings: hamr-perf and a 5 nm thermal-perf system (host overhead bound)
 #------------------------------------------------------------------------------
-small=(--extra "dimensions:system-size-x = 5.0 !nm" --extra "dimensions:system-size-y = 5.0 !nm")
-benches=("bench hamr-perf" "bench-small thermal-perf")
-if [ -n "${MGPU_RANKS:-}" ]; then
-   small=(--ranks 1 --seeds 1 --extra "dimensions:system-size-x = 32 !nm" --extra "dimensions:system-size-y = 32 !nm"
-          --extra "sim:program = time-series" --extra "sim:temperature = 300.0" --extra "sim:total-time-steps = 2000")
-   benches=("bench-small hamr-granular")
-fi
 for pr in dp sp; do
    for v in ref new; do
-      [ -z "${MGPU_RANKS:-}" ] && $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench --precision $pr --cases hamr-perf > /dev/null
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-bench-small --precision $pr --cases ${benches[-1]#* } "${small[@]}" > /dev/null
+      for b in "${benches[@]}"; do
+         set=${b% *}; c=${b#* }
+         rm -rf $results/id-$v-$pr-$set
+         # the reference outputs are cached, so without timings only the working tree version runs
+         if [ $v = ref ] && [ "${TIMINGS:-1}" = 0 ] && [ -d $cache/id-ref-$pr-$set ]; then
+            ln -s $PWD/$cache/id-ref-$pr-$set $results/id-ref-$pr-$set; continue
+         fi
+         if [ $set = bench ]; then $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-$set --precision $pr --cases $c > /dev/null
+         else $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-$set --precision $pr --cases $c "${small[@]}" > /dev/null; fi
+         [ $v = ref ] && { rm -rf $cache/id-ref-$pr-$set; cp -r $results/id-ref-$pr-$set $cache/; }
+      done
    done
    for b in "${benches[@]}"; do
       set=${b% *}; c=${b#* }
       for v in ref new; do
          run=run; [ $c = hamr-granular ] && run=seed1
          d=$results/id-$v-$pr-$set/$c/$run
-         echo "$pr $c$([ $set = bench-small ] && echo " ($([ -n "${MGPU_RANKS:-}" ] && echo '32 nm, 1 rank' || echo '5 nm'))") $v: $(grep -h 'Simulation run time' $d/stdout | awk '{print $NF}') s, $(grep -c . $d/output) output lines, identical output: $(cmp -s <(grep -av '^#' $results/id-ref-$pr-$set/$c/$run/output) <(grep -av '^#' $d/output) && echo yes || echo NO)"
+         echo "$pr $c$([ $set = bench-small ] && echo " ($([ -n "${MGPU_RANKS:-}" ] && echo '32 nm, 1 rank' || echo '5 nm'))") $v$([ -L $results/id-$v-$pr-$set ] && echo ' (cached, earlier run)'): $(grep -h 'Simulation run time' $d/stdout | awk '{print $NF}') s, $(grep -c . $d/output) output lines, identical output: $(cmp -s <(grep -av '^#' $results/id-ref-$pr-$set/$c/$run/output) <(grep -av '^#' $d/output) && echo yes || echo NO)"
       done
    done
 done | tee $out/benchmarks.txt
+grep -q 'identical output: NO' $out/benchmarks.txt && fail=1
 rm -f vampire-cuda-id-*
 
 tar czf $results/$name.tar.gz --exclude='*.data' --exclude='*.meta' -C $results $name
@@ -255,6 +271,7 @@ for pr in dp sp; do
    echo "$pr gpu:skip-non-magnetic-atoms vs without: $(grep -c IDENTICAL $out/skip-$pr.txt) identical, $(grep 'DIFFERENT\|FAIL\|not active' $out/skip-$pr.txt | grep -vc OVERALL) different"
    grep "DIFFERENT\|not active\|^time" $out/skip-$pr.txt | sed 's/^/   /'
 done
+grep 'identical output: NO' $out/benchmarks.txt
 [ $fail = 0 ] && echo "ALL RUNS IDENTICAL" || echo "DIFFERENCES FOUND (see $report)"
 echo "Archive: $results/$name.tar.gz"
 exit $fail
