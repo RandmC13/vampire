@@ -33,23 +33,33 @@
 #                         (default: develop)
 #
 # Environment variables:
-#   SEEDS     seeds per statistical case (default: 2)
+#   SEEDS     seeds per statistical case (default: 1; a byte for byte comparison needs
+#             only one, statistical comparisons are for run_gpu_suite.sh and ab_compare.sh)
 #   JOBS      parallel build jobs (default: number of cores)
 #   GPU_JOBS  validation runs sharing the GPU at the same time (default: 4); results do
 #             not depend on it, the timed benchmarks always run alone
 #   MGPU_RANKS compare the multi-GPU version on this number of ranks (see above)
 #   MPIRUN    MPI launcher for MGPU_RANKS (default: mpirun --oversubscribe --bind-to none)
+#   NO_CACHE  set to 1 to rebuild and rerun the reference version even if it is cached
 #
 # Results are packed into developers/test/validation/results/identity-<ref>-<host>-<date>.tar.gz
 #
-# Note: the reference version is built from an exported copy of the commit;
-# the working tree build runs 'make clean' before and after.
+# The reference binaries and the outputs of their validation runs are kept in
+# results/identity-cache and reused by later runs with the same reference commit,
+# computer, GPU and driver, CUDA compiler, build settings, number of ranks, seeds,
+# validation cases, vtest.py and extra input lines (the two most recent sets are
+# kept). The working tree version is always built and run in full; the timed
+# benchmarks run both versions again.
+#
+# Note: the reference version is built from an exported copy of the commit; the
+# working tree version is built incrementally in results/identity-build (see
+# incremental_build.sh); the working tree itself is not cleaned.
 #------------------------------------------------------------------------------
 set -u
 cd "$(dirname "$0")/../../.."
 
 ref=${1:-develop}
-seeds=${SEEDS:-2}
+seeds=${SEEDS:-1}
 jobs=${JOBS:-$(nproc)}
 gpu_jobs=${GPU_JOBS:-4}
 sha=$(git rev-parse --short "$ref") || exit 1
@@ -90,31 +100,63 @@ extra=(); for line in "${stress[@]}"; do extra+=(--extra "$line"); done
 keep_cases=hamr-granular,hamr-granular-t0
 configs=(--extra "config:atoms=end" --extra "config:output-format=binary")
 
-{ echo "reference: $ref ($sha), seeds $seeds, target $target ${MGPU_RANKS:+on $MGPU_RANKS ranks}"; nvidia-smi; nvcc --version; echo "working tree: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
+#------------------------------------------------------------------------------
+# cache of the reference version: everything its outputs depend on is in the key
+#------------------------------------------------------------------------------
+key_text=$(
+   echo "ref $(git rev-parse "$ref") host $(hostname -s) target $target ranks ${MGPU_RANKS:-} seeds $seeds"
+   echo "build ${CUDA_ARCH:-} ${MAKEFLAGS:-}"
+   nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+   nvcc --version | tail -n 2
+   printf '%s\n' "${stress[@]}"
+   (cd developers/test/validation && find cases -type f | sort | xargs sha256sum && sha256sum vtest.py)
+)
+cache=$results/identity-cache/$(echo "$key_text" | sha256sum | cut -c1-16)
+[ "${NO_CACHE:-0}" = 1 ] && rm -rf $cache
+mkdir -p $cache; echo "$key_text" > $cache/key.txt; touch $cache
+ls -dt $results/identity-cache/*/ | tail -n +3 | xargs -r rm -rf
+
+source developers/test/validation/incremental_build.sh
+
+{ echo "reference: $ref ($sha), seeds $seeds, target $target ${MGPU_RANKS:+on $MGPU_RANKS ranks}, cache $cache"; nvidia-smi; nvcc --version; echo "working tree: $(git rev-parse HEAD)"; git status --short; } > $out/system.txt 2>&1
 
 for pr in dp sp; do
    PR=$(echo $pr | tr a-z A-Z)
 
-   echo "=== Building reference version ($sha, $pr) ==="
-   src=$results/identity-src-$sha
-   rm -rf $src; mkdir -p $src
-   git archive "$ref" | tar -x -C $src
-   if ! make -C $src -j$jobs $target CUDA_PR=-DCUDA_$PR > $out/build-ref-$pr.log 2>&1; then echo "Build failed, see $out/build-ref-$pr.log"; exit 1; fi
-   cp $src/$binary ./vampire-cuda-id-ref-$pr
-   rm -rf $src
+   cached=0; [ -f $cache/complete-$pr ] && cached=1
+   if [ $cached = 0 ]; then
+      echo "=== Building reference version ($sha, $pr) ==="
+      src=$results/identity-src-$sha
+      rm -rf $src; mkdir -p $src
+      git archive "$ref" | tar -x -C $src
+      if ! make -C $src -j$jobs $target CUDA_PR=-DCUDA_$PR > $out/build-ref-$pr.log 2>&1; then echo "Build failed, see $out/build-ref-$pr.log"; exit 1; fi
+      cp $src/$binary $cache/vampire-ref-$pr
+      rm -rf $src
+   else
+      echo "=== Reference version ($sha, $pr) from $cache ==="
+   fi
+   cp $cache/vampire-ref-$pr ./vampire-cuda-id-ref-$pr
 
    echo "=== Building working tree version ($pr) ==="
-   make clean > /dev/null
-   if ! make -j$jobs $target CUDA_PR=-DCUDA_$PR > $out/build-new-$pr.log 2>&1; then echo "Build failed, see $out/build-new-$pr.log"; exit 1; fi
-   mv $binary ./vampire-cuda-id-new-$pr
-   make clean > /dev/null
+   if ! incremental_build $results/identity-build/$target-$pr $target CUDA_PR=-DCUDA_$PR > $out/build-new-$pr.log 2>&1; then echo "Build failed, see $out/build-new-$pr.log"; exit 1; fi
+   cp $results/identity-build/$target-$pr/$binary ./vampire-cuda-id-new-$pr
 
-   for v in ref new; do
-      echo "=== Validation cases, $v version ($pr) ==="
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}"
-      echo "=== Validation cases with statistics output, $v version ($pr) ==="
-      $vt run --exe ./vampire-cuda-id-$v-$pr --label id-$v-$pr-stress --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}" "${extra[@]}"
+   for set in "" -stress; do
+      rm -rf $results/id-ref-$pr$set
+      if [ $cached = 0 ]; then
+         echo "=== Validation cases${set:+ with statistics output}, ref version ($pr) ==="
+         if [ -z "$set" ]; then $vt run --exe ./vampire-cuda-id-ref-$pr --label id-ref-$pr --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}"
+         else $vt run --exe ./vampire-cuda-id-ref-$pr --label id-ref-$pr-stress --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}" "${extra[@]}"; fi
+         rm -rf $cache/id-ref-$pr$set; mv $results/id-ref-$pr$set $cache/
+      fi
+      ln -s $PWD/$cache/id-ref-$pr$set $results/id-ref-$pr$set
    done
+   touch $cache/complete-$pr
+
+   echo "=== Validation cases, new version ($pr) ==="
+   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}"
+   echo "=== Validation cases with statistics output, new version ($pr) ==="
+   $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-stress --precision $pr --seeds $seeds --jobs $gpu_jobs "${ranks[@]}" "${extra[@]}"
 
    echo "=== Cases with non-magnetic atoms, with and without gpu:skip-non-magnetic-atoms ($pr) ==="
    $vt run --exe ./vampire-cuda-id-new-$pr --label id-new-$pr-noskip --precision $pr --cases $keep_cases --seeds 1 --jobs $gpu_jobs "${ranks[@]}" "${configs[@]}"
