@@ -24,6 +24,10 @@
 //--------------------------------------------------------------------------------
 namespace hierarchical{
 
+   // compute each cell's interaction list and tensors at every field update instead of storing them
+   // (set from dipole:on-the-fly-tensors)
+   extern bool on_the_fly_tensors;
+
    //-----------------------------------------------------------------------------
    // Function to initialise hierarchical module
    //-----------------------------------------------------------------------------

@@ -68,8 +68,23 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       int cell_i = cells::cell_id_array[lc];
 
       // Store range of hierarchical cells contributing to dipole field for lc cell
-      const int start = ha::interaction_list_start_index[lc];
-      const int end = ha::interaction_list_end_index[lc];
+      // interactions of this cell: stored, or computed now with dipole:on-the-fly-tensors
+      int slot = lc;
+      if(hierarchical::on_the_fly_tensors){
+         slot = 0;
+         ha::interaction_list.clear();
+         ha::add_cell_interactions(lc, slot);
+         const size_t n = ha::interaction_list.size();
+         ha::rij_tensor_xx.resize(n);
+         ha::rij_tensor_xy.resize(n);
+         ha::rij_tensor_xz.resize(n);
+         ha::rij_tensor_yy.resize(n);
+         ha::rij_tensor_yz.resize(n);
+         ha::rij_tensor_zz.resize(n);
+         ha::compute_cell_tensors(lc, slot);
+      }
+      const int start = ha::interaction_list_start_index[slot];
+      const int end = ha::interaction_list_end_index[slot];
 
       // Self demagnetisation factor multiplying m(i). Only meaningful for a
       // cell that actually has magnetic atoms: a non-magnetic-only probe
