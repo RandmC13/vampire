@@ -75,6 +75,34 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
   random media the "m_z vs intended" colour mode shows agreement with the bit each grain sits in, and greys out
   grains the laser never melts (H3: only 148 of 416 grains, a ~24 nm band, melt in a 58 nm track).
 
+## Generality (2026-10-27, user: everything must work for future runs)
+
+- Head model now copies VAMPIRE's track logic: `max_tracks = floor((Ly - 1 A - 2 padding) / track_size)`,
+  `bits_per_track = floor((Lx - 1 A) / bit_size)`, tracks reduced to `round(number_of_bits / bits_per_track)` only
+  if that is fewer; sequences trimmed or padded with field-free 0 bits to fill the tracks (user-defined sequences
+  read from `hamr:bit-sequence`). Checked against the 2-track overnight run's `B_applied` (1e-16 T) and head
+  positions in its log.
+- `grain.txt` leading columns are taken from the input's `grain:` keywords in order (the overnight run has
+  `time-steps`, H3 `real-time`); unknown-width keywords before `grain:magnetisation` stop the reducer with a
+  message naming the table to extend.
+- Grids adapt (TOP_MAX, LAYER_MAX in reduce.py); `--layer-factor 1` gives per-atom layers.
+- Coordinate files without grain IDs: Voronoi outlines, labelled approximate; snapshot checks against grain.txt
+  need the IDs and are skipped.
+- Truncated snapshots (copies caught mid-transfer) are skipped with a warning and listed in the manifest.
+- Space-time rows shrink below 1 px for large runs (canvas height capped), track separators for several tracks;
+  time ticks spaced by the run length.
+
+## Viewer changes from the second review (2026-10-27)
+
+- Theme toggle moved next to the run name (it pushed the stage buttons on narrow screens).
+- Start / end buttons (Home / End keys) to compare the first and last frames.
+- Correct-grain counts follow the timeline (bits lane, inspector: "at t" and "at end"); the analysis section
+  keeps the final numbers.
+- *Bit cells* overlay: bit regions on every track, and the band hotter than the freezing temperature.
+- Atom views print the snapshot time on the image when it is not the timeline's time. Grains view = grain.txt at
+  every grain frame (1 ps in H3); atom views = the nearest spin snapshot (10 ps in H3), so with few snapshots the
+  two differ by the time between them.
+
 ## Physics choices
 
 - The head field is rebuilt from the input with VAMPIRE's own trapezoid (`docs/analysis.md`), not read from
