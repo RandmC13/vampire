@@ -27,6 +27,85 @@ namespace dipole{
    namespace internal{
 
       //------------------------------------------------------------------------
+      // Function to compute the tensor row of cell celli: its interactions with
+      // every cell, stored in rij_tensor_*[row]. Used for every local cell when
+      // the tensors are stored, and at every field update with
+      // dipole:on-the-fly-tensors (one row, reused for each local cell).
+      //------------------------------------------------------------------------
+      void compute_tensor_row(const int celli,
+                              const int row,
+                              const double real_cutoff,
+                              const std::vector<int>& cells_num_atoms_in_cell_global,
+                              const std::vector<double>& cells_pos_and_mom_array,
+                              const std::vector<int>& list_of_atoms_with_cells,
+                              const std::vector< std::vector<double> >& atoms_in_cells_array){
+
+            // celli is guaranteed present in cells_local_cell_array only when
+            // it is a valid receiver: either a magnetic cell (the only case
+            // possible with cells:probe-non-magnetic-cells off, so this is
+            // behaviour-preserving by construction) or -- when that flag is
+            // enabled -- a non-magnetic-only probe cell. Either way it
+            // should get a tensor row built; compute_inter_tensor/
+            // compute_intra_tensor guard the case where celli itself has no
+            // magnetic atoms to avoid dividing by zero.
+            {
+            //std::cout << i << '\t' << "interaction" << "\t"  << cells_num_cells << "\t" << cells_num_atoms_in_cell[i] <<  std::endl;
+
+               // Loop over all other cells to calculate contribution to local cell
+               for( int cellj = 0; cellj < cells_num_cells; cellj++ ){
+
+                  //--------------------------------------------------------------
+                  // Calculation of inter part of dipolar tensor
+                  //--------------------------------------------------------------
+                  if ( cells_num_atoms_in_cell_global[cellj] > 0 ){ // only calculate interaction if there are atoms in remote cell
+
+                     // check if cell is not the same
+                     if( celli != cellj ){
+                        // calculate inter term of dipolar tensor
+                        compute_inter_tensor(celli,
+                                             cellj,
+                                             row,
+                                             real_cutoff,
+                                             cells_num_atoms_in_cell_global,
+                                             cells_pos_and_mom_array,
+                                             list_of_atoms_with_cells,
+                                             atoms_in_cells_array);
+
+                     } // End of Inter part
+
+                     //--------------------------------------------------------------
+                     // Calculation of intra part of dipolar tensor
+                     //--------------------------------------------------------------
+                     else if( celli == cellj ){
+
+                        //Compute inter component of dipolar tensor
+                        compute_intra_tensor(celli,
+                                             cellj,
+                                             row,
+                                             cells_num_atoms_in_cell_global,
+                                             list_of_atoms_with_cells,
+                                             atoms_in_cells_array);
+
+                     }
+                     // End of Intra part
+
+                     // check for close to zero value tensors and round down to zero
+                     if (dipole::internal::rij_tensor_xx[row][cellj]*dipole::internal::rij_tensor_xx[row][cellj] < 1e-15) dipole::internal::rij_tensor_xx[row][cellj] = 0.0;
+                     if (dipole::internal::rij_tensor_xy[row][cellj]*dipole::internal::rij_tensor_xy[row][cellj] < 1e-15) dipole::internal::rij_tensor_xy[row][cellj] = 0.0;
+                     if (dipole::internal::rij_tensor_xz[row][cellj]*dipole::internal::rij_tensor_xz[row][cellj] < 1e-15) dipole::internal::rij_tensor_xz[row][cellj] = 0.0;
+                     if (dipole::internal::rij_tensor_yy[row][cellj]*dipole::internal::rij_tensor_yy[row][cellj] < 1e-15) dipole::internal::rij_tensor_yy[row][cellj] = 0.0;
+                     if (dipole::internal::rij_tensor_yz[row][cellj]*dipole::internal::rij_tensor_yz[row][cellj] < 1e-15) dipole::internal::rij_tensor_yz[row][cellj] = 0.0;
+                     if (dipole::internal::rij_tensor_zz[row][cellj]*dipole::internal::rij_tensor_zz[row][cellj] < 1e-15) dipole::internal::rij_tensor_zz[row][cellj] = 0.0;
+               //   std::cout << i<< '\t' <<j << '\t' <<   dipole::internal::rij_tensor_xx[row][j]<< '\t' <<  dipole::internal::rij_tensor_xy[row][j]<< '\t' <<  dipole::internal::rij_tensor_xz[row][j]<< '\t' <<  dipole::internal::rij_tensor_yy[row][j] << '\t' <<  dipole::internal::rij_tensor_yz[row][j] << '\t' <<  dipole::internal::rij_tensor_zz[row][j] << std::endl;
+               }
+               }
+            }
+
+         return;
+
+      }
+
+      //------------------------------------------------------------------------
       // Function to initialise dipole tensors with default scheme.
       //
       // The tensors between local cells with the cutoff range are calculated
@@ -107,74 +186,26 @@ namespace dipole{
          // Compute the dipole tensor
          //--------------------------------------------------------------------------------------------
 
-         // loop over local cells
-         for( int lc = 0; lc < cells_num_local_cells; lc++){
+         // with dipole:on-the-fly-tensors the rows are computed at each field update instead
+         // (dipole::internal::update_field), from the data kept here
+         if(dipole::internal::on_the_fly_tensors){
+            dipole::internal::otf_cutoff = real_cutoff;
+            dipole::internal::otf_global_atoms_in_cell_count = cells_num_atoms_in_cell_global;
+            dipole::internal::otf_cells_pos_and_mom_array = cells_pos_and_mom_array;
+            dipole::internal::otf_list_of_cells_with_atoms.swap(list_of_atoms_with_cells);
+            dipole::internal::otf_atoms_in_cells_array.swap(atoms_in_cells_array);
+         }
+         else{
+            // loop over local cells
+            for( int lc = 0; lc < cells_num_local_cells; lc++){
 
-            // print out progress to screen
-            if(fmod(ceil(lc),ceil(cells_num_local_cells)/10) == 0) std::cout << "." << std::flush;
+               // print out progress to screen
+               if(fmod(ceil(lc),ceil(cells_num_local_cells)/10) == 0) std::cout << "." << std::flush;
 
-            // get global cell ID of source cell
-            int celli = cells_local_cell_array[lc];
+               // get global cell ID of source cell and compute its tensor row
+               compute_tensor_row(cells_local_cell_array[lc], lc, real_cutoff, cells_num_atoms_in_cell_global,
+                                  cells_pos_and_mom_array, list_of_atoms_with_cells, atoms_in_cells_array);
 
-            // celli is guaranteed present in cells_local_cell_array only when
-            // it is a valid receiver: either a magnetic cell (the only case
-            // possible with cells:probe-non-magnetic-cells off, so this is
-            // behaviour-preserving by construction) or -- when that flag is
-            // enabled -- a non-magnetic-only probe cell. Either way it
-            // should get a tensor row built; compute_inter_tensor/
-            // compute_intra_tensor guard the case where celli itself has no
-            // magnetic atoms to avoid dividing by zero.
-            {
-            //std::cout << i << '\t' << "interaction" << "\t"  << cells_num_cells << "\t" << cells_num_atoms_in_cell[i] <<  std::endl;
-
-               // Loop over all other cells to calculate contribution to local cell
-               for( int cellj = 0; cellj < cells_num_cells; cellj++ ){
-
-                  //--------------------------------------------------------------
-                  // Calculation of inter part of dipolar tensor
-                  //--------------------------------------------------------------
-                  if ( cells_num_atoms_in_cell_global[cellj] > 0 ){ // only calculate interaction if there are atoms in remote cell
-
-                     // check if cell is not the same
-                     if( celli != cellj ){
-                        // calculate inter term of dipolar tensor
-                        compute_inter_tensor(celli,
-                                             cellj,
-                                             lc,
-                                             real_cutoff,
-                                             cells_num_atoms_in_cell_global,
-                                             cells_pos_and_mom_array,
-                                             list_of_atoms_with_cells,
-                                             atoms_in_cells_array);
-
-                     } // End of Inter part
-
-                     //--------------------------------------------------------------
-                     // Calculation of intra part of dipolar tensor
-                     //--------------------------------------------------------------
-                     else if( celli == cellj ){
-
-                        //Compute inter component of dipolar tensor
-                        compute_intra_tensor(celli,
-                                             cellj,
-                                             lc,
-                                             cells_num_atoms_in_cell_global,
-                                             list_of_atoms_with_cells,
-                                             atoms_in_cells_array);
-
-                     }
-                     // End of Intra part
-
-                     // check for close to zero value tensors and round down to zero
-                     if (dipole::internal::rij_tensor_xx[lc][cellj]*dipole::internal::rij_tensor_xx[lc][cellj] < 1e-15) dipole::internal::rij_tensor_xx[lc][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_xy[lc][cellj]*dipole::internal::rij_tensor_xy[lc][cellj] < 1e-15) dipole::internal::rij_tensor_xy[lc][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_xz[lc][cellj]*dipole::internal::rij_tensor_xz[lc][cellj] < 1e-15) dipole::internal::rij_tensor_xz[lc][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_yy[lc][cellj]*dipole::internal::rij_tensor_yy[lc][cellj] < 1e-15) dipole::internal::rij_tensor_yy[lc][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_yz[lc][cellj]*dipole::internal::rij_tensor_yz[lc][cellj] < 1e-15) dipole::internal::rij_tensor_yz[lc][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_zz[lc][cellj]*dipole::internal::rij_tensor_zz[lc][cellj] < 1e-15) dipole::internal::rij_tensor_zz[lc][cellj] = 0.0;
-               //   std::cout << i<< '\t' <<j << '\t' <<   dipole::internal::rij_tensor_xx[lc][j]<< '\t' <<  dipole::internal::rij_tensor_xy[lc][j]<< '\t' <<  dipole::internal::rij_tensor_xz[lc][j]<< '\t' <<  dipole::internal::rij_tensor_yy[lc][j] << '\t' <<  dipole::internal::rij_tensor_yz[lc][j] << '\t' <<  dipole::internal::rij_tensor_zz[lc][j] << std::endl;
-               }
-               }
             }
          }
 
