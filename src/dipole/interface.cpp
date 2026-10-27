@@ -101,6 +101,13 @@ namespace dipole{
          dipole::cutoff=dpur;
          return true;
       }
+      test="on-the-fly-tensors";
+      if(word==test){
+         // tensor solver: compute each cell's tensors when the field is updated instead of storing them all
+         dipole::internal::on_the_fly_tensors = true;
+         return true;
+      }
+      //-------------------------------------------------------------------
       test="atomistic-tensor-enabled";
       if(word==test){
          dipole::atomsitic_tensor_enabled=true;
