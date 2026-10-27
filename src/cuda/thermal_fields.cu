@@ -71,7 +71,8 @@ namespace vcuda{
             curandState * rand_states,
             cu::material_parameters_t * material_params,
             int * material,
-            int n_atoms
+            int n_atoms,
+            const int * active
             )
       {
          int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -79,9 +80,11 @@ namespace vcuda{
          // Load the curand state into local memory once for all atoms of this thread
          curandState local_state = rand_states[tid];
 
-         for (int i = tid;
-            i < n_atoms;
-            i += blockDim.x * gridDim.x){
+         for (int k = tid;
+            k < n_atoms;
+            k += blockDim.x * gridDim.x){
+
+            const int i = active ? active[k] : k;
 
             // Get material of atom i
             int mid = material[i];
@@ -150,7 +153,7 @@ namespace vcuda{
             cu::d_rand_state,
             cu::mp::d_material_params,
             cu::atoms::d_materials,
-            num_atoms);
+            num_atoms, nullptr);
 
          check_cuda_errors (__FILE__, __LINE__);
 

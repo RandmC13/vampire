@@ -85,6 +85,14 @@ namespace hamr{
    void save_checkpoint(std::ostream& chkfile);
    void load_checkpoint(std::istream& chkfile);
 
+   //-----------------------------------------------------------------------------
+   // Active window (hamr:active-window): true once the write has started with it
+   // update for the current head position, returning the [first, last+1) pairs of
+   // the atoms to integrate
+   //-----------------------------------------------------------------------------
+   bool active_window_enabled();
+   const std::vector<int>& update_active_window();
+
    //-----------------------------------------------------------------------------------------------
    // Externally visible variables used for HAMR calculation
    //-----------------------------------------------------------------------------------------------
