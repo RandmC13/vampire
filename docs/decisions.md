@@ -119,6 +119,13 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
   `output`: H3 did not write `B_applied`. **Finding: the H3 write (inputs from the supervisor's template) ran at a
   2 T peak field, not 1 T**: with only `sim:applied-field-strength` set, Hmax/Hmin keep their defaults (+1/-1 T)
   and the ramp climbs Hmax - Hmin. Reported to the user 2026-10-27; it is a property of the inputs, not of hamrvis.
+- **Bits lost to the lead-in** (found 2026-10-27): `hamr_continuous.cpp` starts its bit loop after the lead-in
+  (half a bit + NPS, `ne` steps) but ends it at `bits_per_track * nb` steps into the track, so it writes
+  `ceil((bits_per_track * nb - ne) / nb)` bits per track and leaves the field off over the rest. H3 (6 nm bits,
+  5 nm NPS) reports 33 bits and writes 32; its log has 32 "Written bit" lines. The head's track is
+  `bits written so far / bits_per_track` (integer division), so with bits lost later tracks are written over earlier
+  ones. hamrvis models both (`Hamr.written`, `Hamr.track_y`); cells never written have intended polarity 0, shown
+  as "no field". Bundles reduced before this need a fresh reduce.
 - Correctness uses the signed z field (`bit polarity x unit-vector z`): H3 writes with (0, 0, -1).
 - Freezing temperature measured from the data (median centre temperature at the decision moments), 588 K for H3,
   instead of requiring a Curie temperature on the command line.
@@ -148,6 +155,8 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
 ## Testing
 
 - `tests/fixture-run`: a 2,624-atom granular HAMR write made with VAMPIRE (regenerate: `tests/make_fixture.sh`).
+- `tests/fixture-leadin`: the same film with a lead-in longer than a bit and two tracks (output and log only):
+  VAMPIRE reports 6 bits and writes 4, the second track on the first.
 - `tests/test_hamrvis.py`: field model vs VAMPIRE's B_applied, default 2 T peak, column averages vs a direct numpy
   computation, analysis output, export, and the viewer's JavaScript model vs the Python one (node).
 - Visual checks: screenshots with Playwright + the `@sparticuz/chromium` npm package (the Playwright browser
