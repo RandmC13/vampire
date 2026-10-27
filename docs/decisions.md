@@ -103,6 +103,16 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
   every grain frame (1 ps in H3); atom views = the nearest spin snapshot (10 ps in H3), so with few snapshots the
   two differ by the time between them.
 
+## Bit polarity (2026-10-27, user: a better write metric than single grains)
+
+- A bit's polarity = mean m_z over the bit cell (x shifted by the freeze lag, one bit length) inside the band
+  hotter than Tc (|y - track centre| <= sigma_y sqrt(2 ln((Tmax - Tmin)/(Tc - Tmin))); the whole track if there
+  is no Tc), weighted by the grain-map pixels each grain has in that region (pixels ~ atom columns), using the
+  grain magnetisation of the current frame. Without a grain map: grains whose centre lies in the region, weighted
+  by atom count. A bit is correct when the sign matches the intended field direction.
+- H3: 30 of 33 bits correct at the end, against 118 of 148 melted grains; bits hold 3-4 partial grains of
+  either sign, so their mean |m_z| is often small (~0.1-0.3).
+
 ## Physics choices
 
 - The head field is rebuilt from the input with VAMPIRE's own trapezoid (`docs/analysis.md`), not read from
