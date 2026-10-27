@@ -99,8 +99,8 @@ namespace dipole{
       vutil::vtimer_t dipole_scaling_build_timer;
       dipole_scaling_build_timer.start();
 
-      if(dipole::internal::on_the_fly_tensors && dipole::internal::solver != dipole::internal::tensor){
-         err::fatal("Error - dipole:on-the-fly-tensors is only available with dipole:solver = tensor.");
+      if(dipole::internal::on_the_fly_tensors && dipole::internal::solver != dipole::internal::tensor && dipole::internal::solver != dipole::internal::hierarchical){
+         err::fatal("Error - dipole:on-the-fly-tensors is only available with dipole:solver = tensor or hierarchical.");
       }
 
       switch (dipole::internal::solver){
@@ -143,6 +143,7 @@ namespace dipole{
          case dipole::internal::hierarchical:
             std::cout     << "Initialising dipole field calculation using hierarchical solver" << std::endl;
             zlog << zTs() << "Initialising dipole field calculation using hierarchical solver" << std::endl;
+            hierarchical::on_the_fly_tensors = dipole::internal::on_the_fly_tensors;
             hierarchical::initialize(cs::system_dimensions[0], cs::system_dimensions[1], cs::system_dimensions[2], atom_coords_x, atom_coords_y, atom_coords_z, dipole::internal::num_atoms);
             break;
 

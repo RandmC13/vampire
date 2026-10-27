@@ -72,6 +72,12 @@ namespace hierarchical{
 
       extern double av_cell_size;
 
+      extern double tensor_cutoff;
+      extern std::vector<int> tensor_atoms_in_cell_global;
+      extern std::vector<double> tensor_cells_pos_and_mom;
+      extern std::vector<int> tensor_list_of_cells_with_atoms;
+      extern std::vector< std::vector<double> > tensor_atoms_in_cells;
+
       //-------------------------------------------------------------------------
       // Internal function declarations
       //-------------------------------------------------------------------------
@@ -86,6 +92,9 @@ namespace hierarchical{
                                                 std::vector < bool >& magnetic);    // is magnetic);
 
       // new version of inter tensor method
+      void add_cell_interactions(const int lc, const int slot);
+      void compute_cell_tensors(const int lc, const int slot);
+
       void calc_inter(const int celli,                                                // global ID of cell i
                       const int cellj,                                                // global ID of cell i
                       const int interaction_no,                                       // interaction number

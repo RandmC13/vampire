@@ -89,13 +89,6 @@ namespace dipole{
                      }
                      // End of Intra part
 
-                     // check for close to zero value tensors and round down to zero
-                     if (dipole::internal::rij_tensor_xx[row][cellj]*dipole::internal::rij_tensor_xx[row][cellj] < 1e-15) dipole::internal::rij_tensor_xx[row][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_xy[row][cellj]*dipole::internal::rij_tensor_xy[row][cellj] < 1e-15) dipole::internal::rij_tensor_xy[row][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_xz[row][cellj]*dipole::internal::rij_tensor_xz[row][cellj] < 1e-15) dipole::internal::rij_tensor_xz[row][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_yy[row][cellj]*dipole::internal::rij_tensor_yy[row][cellj] < 1e-15) dipole::internal::rij_tensor_yy[row][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_yz[row][cellj]*dipole::internal::rij_tensor_yz[row][cellj] < 1e-15) dipole::internal::rij_tensor_yz[row][cellj] = 0.0;
-                     if (dipole::internal::rij_tensor_zz[row][cellj]*dipole::internal::rij_tensor_zz[row][cellj] < 1e-15) dipole::internal::rij_tensor_zz[row][cellj] = 0.0;
                //   std::cout << i<< '\t' <<j << '\t' <<   dipole::internal::rij_tensor_xx[row][j]<< '\t' <<  dipole::internal::rij_tensor_xy[row][j]<< '\t' <<  dipole::internal::rij_tensor_xz[row][j]<< '\t' <<  dipole::internal::rij_tensor_yy[row][j] << '\t' <<  dipole::internal::rij_tensor_yz[row][j] << '\t' <<  dipole::internal::rij_tensor_zz[row][j] << std::endl;
                }
                }
