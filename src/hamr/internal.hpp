@@ -118,6 +118,13 @@ namespace hamr{
       extern uint64_t resume_steps;
       void skip_simulated_step();
 
+      //-----------------------------------------------------------------------------
+      // Active window (active_window.cpp)
+      //-----------------------------------------------------------------------------
+      extern bool active_window;      /// integrate only the grains near the head
+      extern double active_window_dT; /// laser temperature rise (K) from which a grain is integrated
+      void initialize_active_window();
+
    } // end of internal namespace
 } // end of hamr namespace
 
