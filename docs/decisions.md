@@ -132,6 +132,13 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
   grey #f0efec, red #e34948 (up), saturating at |m_z| = 0.85; dark theme #3987e5 / #383835 / #e66767. Fields use a
   separate green-purple map. Correct = green, wrong = ochre (red and blue already mean up and down). Laser
   isotherms in ink; the field box takes the colour of the field direction.
+- User feedback 2026-10-27: lines over the grain imagery (isotherms, field box and its label) get a halo in the lane
+  colour so they read over red and blue; the freezing-T isotherm is solid and bold, the others dashed, dash-dot and
+  dotted with falling T, and the legend keys each one by temperature.
+- User feedback 2026-10-27: the bits lane shows every track at once (one labelled row per track, stacked as on the
+  film, the track under the head marked "writing") instead of only the track under the section line, so no track
+  switch is needed. A bit's counts are greyed until one of its grains has frozen (its decision step): before that a
+  grain matches its bit only because of the starting magnetisation.
 - User feedback 2026-10-27: transport bar directly under the film (the main view); slow-motion speeds (0.1x-0.5x);
   space-time as in the first explorer (one row per melted grain sorted by x, time left to right, laser pass dashed,
   decision ticks), not a lane on the film axis; labelled data instead of prose everywhere: a scientific tool.
@@ -155,3 +162,9 @@ Why hamrvis is built the way it is. Newest decisions at the bottom of each secti
 - Run comparison (e.g. the supervisor's grain-rounding sweep) was not requested for the first version.
 - Movie export (canvas MediaRecorder to WebM, or ffmpeg from the reducer) and SVG export.
 - Per-atom read-back field; peak temperature measured from snapshots rather than the laser model.
+- Lossless workflow (user, 2026-10-27: worth implementing later): a bundle that keeps all the simulation data, so the
+  raw VAMPIRE files could be deleted. Today every bundle is lossy, even with `--layer-factor 1`: spin components
+  are int8 (1/127), pixels hold means rather than atoms (no atom IDs or order), non-magnetic atoms are dropped, the
+  top map coarsens above 4M pixels, counts cap at 255. Sketch: per-atom float32 spins per snapshot plus the
+  coordinates, materials and grain IDs once (2x11 run: ~18.6 MB per snapshot, ~2.7 GB vs 6 GB of text); the viewer
+  keeps using the reduced grids.
