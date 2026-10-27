@@ -11,6 +11,8 @@
 
 // System headers
 #include <chrono>
+#include <fstream>
+#include <string>
 #include <sys/resource.h>
 
 // Program headers
@@ -35,6 +37,23 @@ namespace vutil{
       #else
          return double(usage.ru_maxrss);
       #endif
+
+   }
+
+   // Function to read memory entries from /proc/status (linux only) in kB
+   // if /proc/self/status does not exist the function will return -1 and the logging code will fallback to platform independent logic
+   inline double proc_status_kb(const std::string& entry){
+
+      std::ifstream status("/proc/self/status");
+      std::string key;
+      while(status >> key){
+         if(key == entry){
+            double kb = -1.0;
+            status >> kb;
+            return kb;
+         }
+      }
+      return -1.0;
 
    }
 
