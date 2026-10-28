@@ -54,7 +54,8 @@ void update_spin_fields(const int num_atoms, const int first_atom) {
         cu::exchange::d_nbr_start, cu::exchange::d_nbr_atom,
         cu::exchange::d_nbr_J, cu::atoms::d_x_spin, cu::atoms::d_y_spin,
         cu::atoms::d_z_spin, cu::d_x_spin_field, cu::d_y_spin_field,
-        cu::d_z_spin_field, num_atoms, first_atom);
+        cu::d_z_spin_field, cu::num_integrated_atoms(num_atoms),
+        cu::num_integrated_atoms(first_atom), cu::d_active_atoms);
 
     check_cuda_errors(__FILE__, __LINE__);
 
@@ -237,10 +238,12 @@ __global__ void update_isotropic_exchange_and_anisotropy_fields_kernel(
     const int *nbr_start, const int *nbr_atom, const cu_real_t *nbr_J,
     const cu_real_t *x_spin, const cu_real_t *y_spin, const cu_real_t *z_spin,
     cu_real_t *x_sp_field, cu_real_t *y_sp_field, cu_real_t *z_sp_field,
-    int n_atoms, int first_atom) {
+    int n_atoms, int first_atom, const int *active) {
 
-  for (int i = first_atom + blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms;
-       i += blockDim.x * gridDim.x) {
+  for (int k = first_atom + blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms;
+       k += blockDim.x * gridDim.x) {
+
+    const int i = active ? active[k] : k;
 
     // atoms that are not integrated need no field
     if (material_params[material[i]].skip)

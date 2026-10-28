@@ -200,6 +200,51 @@ namespace hamr{
       }
 
       //--------------------------------------------------------------------
+      test="active-window";
+      if(word==test){
+         if(value=="" || value=="true"){
+            hamr::internal::active_window = true;
+            return true;
+         }
+         if(value=="false"){
+            hamr::internal::active_window = false;
+            return true;
+         }
+         terminaltextcolor(RED);
+         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"true\"" << std::endl;
+         std::cerr << "\t\"false\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      //--------------------------------------------------------------------
+      test="active-window-full-snapshots";
+      if(word==test){
+         if(value=="" || value=="true"){
+            hamr::internal::active_window_full_snapshots = true;
+            return true;
+         }
+         if(value=="false"){
+            hamr::internal::active_window_full_snapshots = false;
+            return true;
+         }
+         terminaltextcolor(RED);
+         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"true\"" << std::endl;
+         std::cerr << "\t\"false\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      //--------------------------------------------------------------------
+      test="active-window-temperature";
+      if(word==test){
+         double T = atof(value.c_str());
+         // 0 integrates every grain
+         vin::check_for_valid_value(T, word, line, prefix, unit, "none", 0.0, 1.0e6,"input","0.0 - 1,000,000 K");
+         hamr::internal::active_window_dT = T;
+         return true;
+      }
+      //--------------------------------------------------------------------
       // Keyword not found
       //--------------------------------------------------------------------
       return false;

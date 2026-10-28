@@ -185,7 +185,10 @@ int run(){
    if(sim::load_checkpoint_flag) load_checkpoint();
 
    // Initialize GPU acceleration if enabled
-   if(gpu::acceleration) gpu::initialize();
+   if(gpu::acceleration){
+      gpu::initialize();
+      vout::log_memory_usage("GPU initialisation");
+   }
 
    // Precalculate initial statistics and then reset averages if not continuing a previous simulation
    // RE technically this double counts the last data point in the statistics, need to implement a reset_counter to fix.
@@ -310,6 +313,8 @@ int run(){
    }
 
    //program::LLB_Boltzmann();
+
+   vout::log_memory_usage("simulation");
 
    // De-initialize GPU, copying the final spin configuration to the host first
    // (not kept up to date on the host when statistics are calculated on the GPU)

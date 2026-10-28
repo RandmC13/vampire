@@ -93,3 +93,8 @@ calls of each rank). Its results go to `$WORK/h3/profile` and into the `h3-colle
 the same relaxation with the GPU Monte Carlo integrator on one GPU, in single precision, built from
 the commit it is submitted from, and then a 5 minute write restarted from its checkpoint. Results
 in `$WORK/h3/gpu-relax/<partition>`, next to the CPU relaxation in `$WORK/h3/relax` for comparison.
+
+`h3-window.job` (submitted by hand, one H100) runs the complete write with `hamr:active-window`
+on one GPU, restarted from the same relaxed state as `h3-write.job`, built from the commit it is
+submitted from, after a 5 minute write without the window as the speed reference. Results in
+`$WORK/h3/window`, for comparison with `$WORK/h3/write`; the window spin snapshots stay in scratch.

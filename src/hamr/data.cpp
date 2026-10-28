@@ -69,5 +69,9 @@ namespace hamr{
       std::vector<double> atom_coords_y;
       std::vector<double> atom_coords_z;
 
+      bool active_window = false;
+      double active_window_dT = 1.0; // K
+      bool active_window_full_snapshots = false;
+
    } // end of internal namespace
 } // end of hamr namespace

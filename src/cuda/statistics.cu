@@ -49,14 +49,32 @@ namespace {
    // order, so results are reproducible from run to run, and only the partial
    // sums of each chunk are copied to the host.
    //
-   // The partial sums of each time step are kept on the device in one of
-   // ring_slots slots and copied to the host in one transfer when all slots
-   // are used or when the statistics are read (gpu::stats::get, reset, config
-   // and checkpoint output). The host then processes the steps in order with
+   // The partial sums are kept on the device in a buffer of ring_slots slots
+   // (the ring), each slot holding the partial sums of every chunk for one
+   // time step: the first step after a copy to the host writes slot 0, the
+   // next slot 1, and so on. The used slots are copied to the host in one
+   // transfer when all slots are used or when the statistics are read
+   // (gpu::stats::get, reset, config and checkpoint output), and the next step
+   // starts again at slot 0. The host then processes the steps in order with
    // the same arithmetic as a per-step update, so the statistics are
    // unchanged, but the host does not wait for the device at every step.
    // Code reading the statistics during a simulation must call
    // gpu::stats::get() first.
+   //
+   // A statistic whose mask ids group the atoms of a finer
+   // statistic (system and grain from material-grain, for example) is not
+   // summed on the device: its sums are added from the sums of the finer one.
+   //
+   // With the HAMR active window (hamr:active-window) most atoms are not
+   // integrated, so their spins do not change, and a chunk holding none of
+   // the integrated atoms has the same partial sums at every step. Such a
+   // chunk need not be summed again: each slot still holds its partial sums
+   // from the last step that wrote that slot. This is only correct once every
+   // slot was last written after the chunk's spins stopped changing. Since
+   // the number of slots used between copies varies (outputs copy early), a
+   // chunk that leaves the window is summed until each of the ring_slots
+   // slots has been written once since it left; after that it is skipped.
+   // The statistics are identical to summing every chunk at every step.
    //---------------------------------------------------------------------------
    const int chunk_size = 2048;
    const int reduction_block_size = 256;
@@ -68,10 +86,19 @@ namespace {
       std::vector<int> chunk_mask_id; // mask id of each chunk
       std::vector<double> h_partial;  // partial sums (mx, my, mz, m) of each chunk for each slot
       std::vector<double> sums;       // sums (mx, my, mz, m) of each mask id
-      int* d_atom;                    // atom indices ordered by mask id
-      double* d_moment;               // moments of ordered atoms
-      int* d_chunk_start;             // first ordered atom of each chunk (num_chunks + 1 entries)
-      double* d_partial;              // ring_slots slots of 4 * num_chunks partial sums
+      int source = -1;                // finer statistic the sums are added from (-1: summed on the device)
+      std::vector<int> source_mask_id;// mask id of each mask id of the source (-1: no atoms)
+      int* d_atom = nullptr;          // atom indices ordered by mask id
+      double* d_moment = nullptr;     // moments of ordered atoms
+      int* d_chunk_start = nullptr;   // first ordered atom of each chunk (num_chunks + 1 entries)
+      double* d_partial = nullptr;    // ring_slots slots of 4 * num_chunks partial sums
+      // only used with the HAMR active window (see above)
+      std::vector<int> h_atom;            // host copy of d_atom, to find the chunks of the integrated atoms
+      std::vector<int> h_chunk_start;     // host copy of d_chunk_start
+      std::vector<char> chunk_active;     // 1 if the chunk holds an atom that is integrated
+      std::vector<uint64_t> slots_written;// bit s set: slot s written since the chunk stopped being active
+      std::vector<int> summed_chunks;     // chunks summed at the current step
+      int* d_summed_chunks = nullptr;     // device copy of summed_chunks
    };
 
    std::vector<device_magnetization_t> device_statistics;
@@ -92,17 +119,22 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
-   // Kernel summing spin moments of each chunk
+   // Kernel summing spin moments of each chunk. One block per chunk: block b
+   // sums chunk b, or chunk chunks[b] if a list of chunks is given (HAMR active
+   // window); either way the partial sums go to the chunk's own place in the
+   // slot, and the other chunks' places are left as they are.
    //---------------------------------------------------------------------------
    __global__ void sum_magnetization_kernel(const int* atom, const double* moment, const int* chunk_start,
                                             const cu::cu_real_t* sx, const cu::cu_real_t* sy, const cu::cu_real_t* sz,
-                                            double* partial){
+                                            double* partial, const int* chunks){
 
       __shared__ double sum[4][reduction_block_size];
 
+      // chunk summed by this block
+      const int c = chunks ? chunks[blockIdx.x] : blockIdx.x;
       const int t = threadIdx.x;
       double mx = 0.0, my = 0.0, mz = 0.0, m = 0.0;
-      for(int i = chunk_start[blockIdx.x] + t; i < chunk_start[blockIdx.x + 1]; i += reduction_block_size){
+      for(int i = chunk_start[c] + t; i < chunk_start[c + 1]; i += reduction_block_size){
          const int a = atom[i];
          const double mm = moment[i];
          mx += sx[a] * mm;
@@ -124,23 +156,33 @@ namespace {
          __syncthreads();
       }
 
-      if(t < 4) partial[4 * blockIdx.x + t] = sum[t][0];
+      if(t < 4) partial[4 * c + t] = sum[t][0];
 
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to find the mask id of a statistic for each mask id of a finer
+   // statistic; false if there is a discrepancy in the mask ids for the atoms
+   // between the two statistics
+   //---------------------------------------------------------------------------
+   bool nested_mask(const std::vector<int>& fine, const int fine_size, const std::vector<int>& coarse, std::vector<int>& fine_to_coarse){
+      if(fine.size() != coarse.size()) return false;
+      fine_to_coarse.assign(fine_size, -1);
+      for(size_t atom = 0; atom < fine.size(); atom++){
+         int& id = fine_to_coarse[fine[atom]];
+         if(id == -1) id = coarse[atom];
+         else if(id != coarse[atom]) return false;
+      }
+      return true;
    }
 
    //---------------------------------------------------------------------------
    // Function to set up device data for one magnetisation statistic
    //---------------------------------------------------------------------------
-   void add_device_statistic(::stats::magnetization_statistic_t& statistic){
+   void add_device_statistic(device_magnetization_t& dm, const std::vector<int>& mask, const int num_mask_ids){
 
-      device_magnetization_t dm;
-      dm.statistic = &statistic;
-
-      std::vector<int> mask;
-      std::vector<double> saturation;
-      statistic.get_mask(mask, saturation);
-      const int num_mask_ids = saturation.size();
       const int num_atoms = mask.size();
+      dm.sums.resize(4 * num_mask_ids);
 
       // order atoms by mask id (counting sort, keeps atom order within each mask id)
       std::vector<int> mask_start(num_mask_ids + 1, 0);
@@ -166,7 +208,6 @@ namespace {
       chunk_start.push_back(num_atoms);
       dm.num_chunks = dm.chunk_mask_id.size();
       dm.h_partial.resize(ring_slots * 4 * dm.num_chunks);
-      dm.sums.resize(4 * num_mask_ids);
 
       cudaMalloc((void**)&dm.d_atom, num_atoms * sizeof(int));
       cudaMalloc((void**)&dm.d_moment, num_atoms * sizeof(double));
@@ -175,10 +216,66 @@ namespace {
       cudaMemcpy(dm.d_atom, atom_order.data(), num_atoms * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(dm.d_moment, moment.data(), num_atoms * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(dm.d_chunk_start, chunk_start.data(), chunk_start.size() * sizeof(int), cudaMemcpyHostToDevice);
+      dm.h_atom = atom_order;
+      dm.h_chunk_start = chunk_start;
+      dm.chunk_active.assign(dm.num_chunks, 1);
+      dm.slots_written.assign(dm.num_chunks, 0);
 
       check_cuda_errors(__FILE__, __LINE__);
 
-      device_statistics.push_back(dm);
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to set up the magnetisation statistics calculated on the device
+   //---------------------------------------------------------------------------
+   void initialise_device_statistics(){
+
+      // the host processes the statistics in this order, the same on every process
+      std::vector<::stats::magnetization_statistic_t*> list;
+      if(::stats::calculate_system_magnetization)          list.push_back(&::stats::system_magnetization);
+      if(::stats::calculate_material_magnetization)        list.push_back(&::stats::material_magnetization);
+      if(::stats::calculate_height_magnetization)          list.push_back(&::stats::height_magnetization);
+      if(::stats::calculate_material_height_magnetization) list.push_back(&::stats::material_height_magnetization);
+      if(::stats::calculate_grain_magnetization)           list.push_back(&::stats::grain_magnetization);
+      if(::stats::calculate_material_grain_magnetization)  list.push_back(&::stats::material_grain_magnetization);
+      if(::stats::calculate_material_grain_height_magnetization) list.push_back(&::stats::material_grain_height_magnetization);
+
+      const int n = list.size();
+      std::vector<std::vector<int>> masks(n);
+      std::vector<int> sizes(n);
+      device_statistics.resize(n);
+      for(int i = 0; i < n; i++){
+         std::vector<double> saturation;
+         list[i]->get_mask(masks[i], saturation);
+         sizes[i] = saturation.size();
+         device_statistics[i].statistic = list[i];
+      }
+
+      // finest statistics first; each other one is added from the coarsest summed statistic it groups
+      std::vector<int> order(n);
+      for(int i = 0; i < n; i++) order[i] = i;
+      std::stable_sort(order.begin(), order.end(), [&](int a, int b){ return sizes[a] > sizes[b]; });
+      std::vector<int> summed;
+      std::vector<int> fine_to_coarse;
+      for(const int i : order){
+         device_magnetization_t& dm = device_statistics[i];
+         for(const int j : summed){
+            if((dm.source == -1 || sizes[j] < sizes[dm.source]) && nested_mask(masks[j], sizes[j], masks[i], fine_to_coarse)){
+               dm.source = j;
+               dm.source_mask_id = fine_to_coarse;
+            }
+         }
+         if(dm.source == -1){
+            add_device_statistic(dm, masks[i], sizes[i]);
+            summed.push_back(i);
+         }
+         else{
+            dm.num_chunks = 0;
+            dm.sums.resize(4 * sizes[i]);
+         }
+      }
+      // This line might need better wording
+      zlog << zTs() << "Magnetisation statistics: " << summed.size() << " of " << n << " summed on the GPU, the others added from their sums" << std::endl;
 
    }
 
@@ -265,17 +362,25 @@ namespace {
 
       for(int step = 0; step < pending_steps; step++){
          for(device_magnetization_t& dm : device_statistics){
-
+            if(dm.source != -1) continue;
             // add chunks in a fixed order
             const double* partial = dm.h_partial.data() + step * 4 * dm.num_chunks;
             std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
             for(int c = 0; c < dm.num_chunks; c++){
                for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += partial[4 * c + k];
             }
-
-            dm.statistic->calculate_magnetization_from_sums(dm.sums);
-
          }
+         for(device_magnetization_t& dm : device_statistics){
+            if(dm.source == -1) continue;
+            // add the sums of the finer statistic in a fixed order
+            const std::vector<double>& fine = device_statistics[dm.source].sums;
+            std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
+            for(size_t f = 0; f < dm.source_mask_id.size(); f++){
+               const int id = dm.source_mask_id[f];
+               if(id != -1) for(int k = 0; k < 4; k++) dm.sums[4 * id + k] += fine[4 * f + k];
+            }
+         }
+         for(device_magnetization_t& dm : device_statistics) dm.statistic->calculate_magnetization_from_sums(dm.sums);
          update_derived_statistics();
       }
 
@@ -284,30 +389,72 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
+   // Function to choose the chunks of one statistic to sum at the current step
+   // with the HAMR active window (see the description at the top of this
+   // file): every chunk holding an integrated atom, and every other chunk
+   // until it has written each slot of the ring once since it stopped being
+   // active.
+   //---------------------------------------------------------------------------
+   int window_version_seen = -1; // window (cu::active_window_version) the chunk_active flags were set for
+   void update_summed_chunks(device_magnetization_t& dm){
+
+      // when the integrated atoms have changed, find the chunks that hold any of them
+      if(cu::active_window_version != window_version_seen){
+         std::vector<char> active(::atoms::num_atoms, 0);
+         for(size_t r = 0; r < cu::active_ranges.size(); r += 2) std::fill(active.begin() + cu::active_ranges[r], active.begin() + cu::active_ranges[r+1], 1);
+         for(int c = 0; c < dm.num_chunks; c++){
+            dm.chunk_active[c] = 0;
+            for(int i = dm.h_chunk_start[c]; i < dm.h_chunk_start[c+1] && !dm.chunk_active[c]; i++) dm.chunk_active[c] = active[dm.h_atom[i]];
+         }
+      }
+
+      // an active chunk is always summed and starts its record of written slots afresh; an
+      // inactive one is summed, and the slot of this step marked, until all slots are marked
+      const uint64_t all_slots = ~uint64_t(0) >> (64 - ring_slots);
+      std::vector<int> summed;
+      for(int c = 0; c < dm.num_chunks; c++){
+         if(dm.chunk_active[c]) dm.slots_written[c] = 0;
+         else if(dm.slots_written[c] == all_slots) continue;
+         else dm.slots_written[c] |= uint64_t(1) << pending_steps;
+         summed.push_back(c);
+      }
+      // copy the list to the device only when it has changed (rarely: when the window moves)
+      if(summed != dm.summed_chunks || dm.d_summed_chunks == nullptr){
+         dm.summed_chunks = summed;
+         if(dm.d_summed_chunks == nullptr) cudaMalloc((void**)&dm.d_summed_chunks, dm.num_chunks * sizeof(int));
+         cudaMemcpy(dm.d_summed_chunks, summed.data(), summed.size() * sizeof(int), cudaMemcpyHostToDevice);
+      }
+   }
+
+   //---------------------------------------------------------------------------
    // Function to sum the magnetisation of the current step on the device
    //---------------------------------------------------------------------------
    void sum_device_magnetization(){
 
       if(!device_statistics_initialised){
-         if(::stats::calculate_system_magnetization)          add_device_statistic(::stats::system_magnetization);
-         if(::stats::calculate_material_magnetization)        add_device_statistic(::stats::material_magnetization);
-         if(::stats::calculate_height_magnetization)          add_device_statistic(::stats::height_magnetization);
-         if(::stats::calculate_material_height_magnetization) add_device_statistic(::stats::material_height_magnetization);
-         if(::stats::calculate_grain_magnetization)           add_device_statistic(::stats::grain_magnetization);
-         if(::stats::calculate_material_grain_magnetization)  add_device_statistic(::stats::material_grain_magnetization);
-         if(::stats::calculate_material_grain_height_magnetization) add_device_statistic(::stats::material_grain_height_magnetization);
+         initialise_device_statistics();
          device_statistics_initialised = true;
       }
 
       for(device_magnetization_t& dm : device_statistics){
          if(dm.num_chunks > 0){
-            sum_magnetization_kernel <<< dm.num_chunks, reduction_block_size >>> (
+            // all chunks, or with the HAMR active window only the chunks whose sums may have changed
+            int num_blocks = dm.num_chunks;
+            const int* chunks = nullptr;
+            if(cu::d_active_atoms != nullptr){
+               update_summed_chunks(dm);
+               num_blocks = dm.summed_chunks.size();
+               chunks = dm.d_summed_chunks;
+            }
+            if(num_blocks > 0) sum_magnetization_kernel <<< num_blocks, reduction_block_size >>> (
                dm.d_atom, dm.d_moment, dm.d_chunk_start,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
-               dm.d_partial + pending_steps * 4 * dm.num_chunks);
+               dm.d_partial + pending_steps * 4 * dm.num_chunks, chunks);
             check_cuda_errors(__FILE__, __LINE__);
          }
       }
+      // after all statistics, since each one updates its chunk_active flags when the window changes
+      window_version_seen = cu::active_window_version;
       pending_steps++;
 
       if(pending_steps == ring_slots) process_pending_steps();
@@ -450,6 +597,7 @@ namespace stats{
                cudaFree(dm.d_moment);
                cudaFree(dm.d_chunk_start);
                cudaFree(dm.d_partial);
+               cudaFree(dm.d_summed_chunks);
             }
             device_statistics.clear();
             pending_steps = 0;

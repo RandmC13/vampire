@@ -70,6 +70,15 @@ namespace hierarchical{
       std::vector<double> ha_cells_pos_and_mom_array;    //
       std::vector < int > ha_proc_cell_index_array1D;    //
 
+      // data for computing the interaction tensors of a cell, kept from initialisation
+      double tensor_cutoff = 0.0;                                 // cutoff for atomistic inter-cell tensors (Angstroms)
+      std::vector<int> tensor_atoms_in_cell_global;               // magnetic atoms in each zero-level cell (all CPUs)
+      std::vector<double> tensor_cells_pos_and_mom;               // positions and moments of zero-level cells
+      std::vector<int> tensor_list_of_cells_with_atoms;           // cells with atomistic data on this CPU
+      std::vector< std::vector<double> > tensor_atoms_in_cells;   // atom positions and moments of those cells
+
    } // end of internal namespace
+
+   bool on_the_fly_tensors = false;
 
 } // end of hierarchical namespace

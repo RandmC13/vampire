@@ -21,7 +21,8 @@ namespace mgpu{
       // vmpi::send_atom_translation_array are packed on the device into the
       // send buffer, copied to pinned host memory and sent; received spins are
       // copied to the device and unpacked into the halo atoms listed in
-      // vmpi::recv_atom_translation_array. Values are stored as x,y,z triplets
+      // vmpi::recv_atom_translation_array; the spins a rank sends to itself are
+      // copied on the device instead. Values are stored as x,y,z triplets
       // in the precision of the CUDA build (cu_real_t).
       //------------------------------------------------------------------------
       extern int num_send;        // number of atoms sent

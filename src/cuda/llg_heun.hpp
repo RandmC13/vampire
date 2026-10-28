@@ -71,7 +71,7 @@ namespace vcuda
                cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,
                cu_real_t * dS_x, cu_real_t * dS_y, cu_real_t * dS_z,
-               cu_real_t dt, size_t num_atoms
+               cu_real_t dt, size_t num_atoms, const int * active
                );
 
          __global__ void llg_heun_corrector_step (
@@ -82,7 +82,7 @@ namespace vcuda
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,
                cu_real_t * x_spin_buffer, cu_real_t * y_spin_buffer, cu_real_t * z_spin_buffer,
                cu_real_t * dS_x, cu_real_t * dS_y, cu_real_t * dS_z,
-               cu_real_t dt, size_t num_atoms
+               cu_real_t dt, size_t num_atoms, const int * active
                );
       } /* llg */
 

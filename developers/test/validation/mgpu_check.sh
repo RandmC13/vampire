@@ -66,11 +66,21 @@
 #   MPIRUN     MPI launcher (default: mpirun --oversubscribe --bind-to none)
 #   GPU_JOBS   GPU processes running at the same time (default: 4): runs on n ranks
 #              are started GPU_JOBS/n at a time; results do not depend on it
+#   PRECISIONS precisions of the multi-GPU version to check (default: "dp sp"); one
+#              of them halves the time, for checks between full ones
+#   NO_CACHE   set to 1 to rerun the CPU MPI reference runs even if they are cached
 #
 # Results are packed into developers/test/validation/results/mgpu-check-<host>-<date>.tar.gz
 #
-# Note: the builds share object directories with the other versions; this
-# script runs 'make clean' before each build and at the end.
+# The CPU MPI reference runs (stage 1 and the CPU half of stage 10 and 12) are
+# kept in results/mgpu-check-cache and reused while everything they depend on is
+# unchanged: the source files of the CPU version (all but src/cuda and src/mgpu),
+# the computer, compiler and MPI versions, the numbers of ranks, the validation
+# cases, vtest.py, hamr_chain.sh and this script (the two most recent sets are
+# kept). The time of each stage is written to timing.txt.
+#
+# Note: the versions are built incrementally in results/mgpu-check-build (see
+# incremental_build.sh); the working tree itself is not cleaned.
 #------------------------------------------------------------------------------
 set -u
 cd "$(dirname "$0")/../../.."
@@ -90,6 +100,17 @@ out=$results/$name
 mkdir -p $out
 vt="python3 developers/test/validation/vtest.py"
 source developers/test/validation/hamr_chain.sh
+source developers/test/validation/incremental_build.sh
+precisions=${PRECISIONS:-dp sp}
+
+# stage <description>: prints the description and adds the time of the previous stage to timing.txt
+stage_name=""; stage_start=$(date +%s)
+stage(){
+	local now=$(date +%s)
+	[ -n "$stage_name" ] && printf "%5d s  %s\n" $((now - stage_start)) "$stage_name" >>$out/timing.txt
+	stage_name="$*"; stage_start=$now
+	[ -n "$stage_name" ] && echo "=== $stage_name ==="
+}
 ranks_list=($ranks)
 # the number of ranks after (next_ranks) or before (prev_ranks) <n> in the list, cyclically
 next_ranks(){ local i; for i in ${!ranks_list[@]}; do [ ${ranks_list[$i]} = $1 ] && echo ${ranks_list[$(( (i + 1) % ${#ranks_list[@]} ))]}; done; }
@@ -191,74 +212,99 @@ readback_runs(){
 	done
 }
 
-echo "=== Building CPU MPI version ==="
-make clean
-if ! make -j$jobs parallel >$out/build-parallel.log 2>&1; then
+stage "Building CPU MPI version"
+if ! incremental_build $results/mgpu-check-build/parallel parallel >$out/build-parallel.log 2>&1; then
 	echo "Build failed, see $out/build-parallel.log"
 	exit 1
 fi
-for n in $ranks; do
-	[ $n = 1 ] && continue
-	echo "=== CPU MPI version, $n ranks ==="
-	$vt run --exe ./vampire-parallel --label $name-parallel-np$n --ranks $n --cases $t0 --jobs $(cpu_runs $n)
-done
-echo "=== CPU MPI version, HAMR chain: Monte Carlo relaxation and reference write ==="
-for n in $ranks; do
-	(
-		chain_run relax - $name-parallel-np$n-relax dp "" $MPIRUN -np $n $PWD/vampire-parallel
-		chain_run write $name-parallel-np$n-relax $name-parallel-np$n-chain dp "" $MPIRUN -np $n $PWD/vampire-parallel
-	) &
-	(
-		chain_case=$sparse_case chain_run relax - $name-parallel-np$n-xrelax dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
-		chain_case=$sparse_case chain_run write $name-parallel-np$n-xrelax $name-parallel-np$n-xchain dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
-	) &
-done
-wait
+cp $results/mgpu-check-build/parallel/vampire-parallel .
 
-for pr in dp sp; do
-	echo "=== Building multi-GPU version ($pr) ==="
-	make clean
-	if ! make -j$jobs cuda-multigpu CUDA_ARCH="$arch" CUDA_PR=-DCUDA_$(echo $pr | tr a-z A-Z) >$out/build-mgpu-$pr.log 2>&1; then
+# cache of the CPU MPI reference runs: everything they depend on is in the key
+key_text=$(
+	echo "host $(hostname -s) ranks $ranks"
+	mpirun --version | head -n 1; g++ --version | head -n 1
+	find makefile src hdr -type f ! -path 'src/cuda/*' ! -path 'src/mgpu/*' | sort | xargs sha256sum
+	(cd developers/test/validation && find cases -type f | sort | xargs sha256sum && sha256sum vtest.py hamr_chain.sh mgpu_check.sh)
+)
+cpu_cache=$results/mgpu-check-cache/$(echo "$key_text" | sha256sum | cut -c1-16)
+[ "${NO_CACHE:-0}" = 1 ] && rm -rf $cpu_cache
+mkdir -p $cpu_cache; echo "$key_text" >$cpu_cache/key.txt; touch $cpu_cache
+ls -dt $results/mgpu-check-cache/*/ | tail -n +3 | xargs -r rm -rf
+cpu_labels=()
+for n in $ranks; do
+	[ $n = 1 ] || cpu_labels+=(parallel-np$n)
+	cpu_labels+=(parallel-np$n-relax parallel-np$n-chain parallel-np$n-xrelax parallel-np$n-xchain)
+done
+
+if [ ! -f $cpu_cache/complete ]; then
+	for n in $ranks; do
+		[ $n = 1 ] && continue
+		stage "CPU MPI version, $n ranks"
+		$vt run --exe ./vampire-parallel --label $name-parallel-np$n --ranks $n --cases $t0 --jobs $(cpu_runs $n)
+	done
+	stage "CPU MPI version, HAMR chain: Monte Carlo relaxation and reference write"
+	for n in $ranks; do
+		(
+			chain_run relax - $name-parallel-np$n-relax dp "" $MPIRUN -np $n $PWD/vampire-parallel
+			chain_run write $name-parallel-np$n-relax $name-parallel-np$n-chain dp "" $MPIRUN -np $n $PWD/vampire-parallel
+		) &
+		(
+			chain_case=$sparse_case chain_run relax - $name-parallel-np$n-xrelax dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
+			chain_case=$sparse_case chain_run write $name-parallel-np$n-xrelax $name-parallel-np$n-xchain dp "$keyed" $MPIRUN -np $n $PWD/vampire-parallel
+		) &
+	done
+	wait
+	for l in "${cpu_labels[@]}"; do rm -rf $cpu_cache/$l; mv $results/$name-$l $cpu_cache/$l; done
+	touch $cpu_cache/complete
+else
+	stage "CPU MPI reference runs from $cpu_cache"
+fi
+for l in "${cpu_labels[@]}"; do ln -s $PWD/$cpu_cache/$l $results/$name-$l; done
+
+for pr in $precisions; do
+	stage "Building multi-GPU version ($pr)"
+	if ! incremental_build $results/mgpu-check-build/cuda-multigpu-$pr cuda-multigpu CUDA_ARCH="$arch" CUDA_PR=-DCUDA_$(echo $pr | tr a-z A-Z) >$out/build-mgpu-$pr.log 2>&1; then
 		echo "Build failed, see $out/build-mgpu-$pr.log"
 		exit 1
 	fi
+	cp $results/mgpu-check-build/cuda-multigpu-$pr/vampire-cuda-multigpu .
 	for n in $ranks; do
-		echo "=== Multi-GPU version ($pr), $n ranks ==="
+		stage "Multi-GPU version ($pr), $n ranks"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $t0,$spiral "${configs[@]}"
-		echo "=== Multi-GPU version ($pr), $n ranks, finite temperature and program cases, one seed ==="
+		stage "Multi-GPU version ($pr), $n ranks, finite temperature and program cases, one seed"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $ft_end --seeds 1 "${configs[@]}"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "sim:save-checkpoint=end"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-ft --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $ft_cont --seeds 1 "${configs_cont[@]}"
-		echo "=== Multi-GPU version ($pr), $n ranks, continuation from a checkpoint ==="
+		stage "Multi-GPU version ($pr), $n ranks, continuation from a checkpoint"
 		continue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-continue
-		echo "=== Multi-GPU version ($pr), $n ranks, read-back restarted from the end of the granular writes ==="
+		stage "Multi-GPU version ($pr), $n ranks, read-back restarted from the end of the granular writes"
 		readback_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$n-ft $name-$pr-np$n-readback
-		echo "=== Multi-GPU version ($pr), $n ranks, granular writes with gpu:skip-non-magnetic-atoms ==="
+		stage "Multi-GPU version ($pr), $n ranks, granular writes with gpu:skip-non-magnetic-atoms"
 		$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-np$n-skip --ranks $n --jobs $(gpu_runs $n) --precision $pr --cases $readback --seeds 1 "${configs[@]}" --extra "gpu:skip-non-magnetic-atoms"
-		echo "=== Multi-GPU version ($pr), $n ranks, HAMR chain: write from the CPU relaxation, CPU load of its checkpoint ==="
+		stage "Multi-GPU version ($pr), $n ranks, HAMR chain: write from the CPU relaxation, CPU load of its checkpoint"
 		chain_run write $name-parallel-np$n-relax $name-$pr-np$n-chain $pr "" $MPIRUN -np $n $PWD/vampire-cuda-multigpu
 		chain_run load $name-$pr-np$n-chain $name-$pr-np$n-chainload $pr "" $MPIRUN -np $n $PWD/vampire-parallel
 	done
 	for n in $ranks; do
 		p=$(prev_ranks $n)
-		echo "=== Multi-GPU version ($pr), $n ranks, continuation from the checkpoints saved on $p ranks ==="
+		stage "Multi-GPU version ($pr), $n ranks, continuation from the checkpoints saved on $p ranks"
 		xcontinue_runs $PWD/vampire-cuda-multigpu $n $name-$pr-np$p-continue $name-$pr-np$n-xcontinue
-		echo "=== Multi-GPU version ($pr), $n ranks, 1 % fill HAMR chain: write from the CPU relaxation on $p ranks, CPU load on $(next_ranks $n) ranks ==="
+		stage "Multi-GPU version ($pr), $n ranks, 1 % fill HAMR chain: write from the CPU relaxation on $p ranks, CPU load on $(next_ranks $n) ranks"
 		chain_case=$sparse_case chain_run write $name-parallel-np$p-xrelax $name-$pr-np$n-xchain $pr "$keyed" $MPIRUN -np $n $PWD/vampire-cuda-multigpu
 		chain_case=$sparse_case chain_run load $name-$pr-np$n-xchain $name-$pr-np$n-xchainload $pr "$keyed" $MPIRUN -np $(next_ranks $n) $PWD/vampire-parallel
 	done
 	first=$(echo $ranks | awk '{print $1}')
-	echo "=== Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds ==="
+	stage "Multi-GPU version ($pr), $first rank(s), finite temperature and program cases, all seeds"
 	$vt run --exe ./vampire-cuda-multigpu --label $name-$pr-stat --ranks $first --jobs $(gpu_runs $first) --precision $pr --cases $ft
 done
-make clean
+stage ""
 rm -f vampire-parallel vampire-cuda-multigpu
 
 #------------------------------------------------------------------------------
 # comparisons
 #------------------------------------------------------------------------------
 first=$(echo $ranks | awk '{print $1}')
-for pr in dp sp; do
+for pr in $precisions; do
 	for n in $ranks; do
 		if [ $n = 1 ]; then
 			$vt compare --test $name-$pr-np$n --ref cpu --cases $t0,$spiral --verbose >$out/compare-$pr-np$n.txt
@@ -322,4 +368,6 @@ for f in $out/chain-*.txt $out/xchain-*.txt; do
 	echo "$(basename $f .txt) (write vs CPU write; CPU load vs write): $(grep OVERALL $f | paste -sd';')"
 	grep "FAIL\|DIFFERENT" $f | grep -v OVERALL | sed 's/^/   /'
 done
+echo "precisions checked: $precisions; CPU MPI reference runs: $([ -n "$(find $cpu_cache -newer $out/system.txt -name complete)" ] && echo "run now and cached" || echo "from the cache")"
+echo "time per stage: $out/timing.txt (total $(awk '{ t += $1 } END { printf "%.0f", t / 60 }' $out/timing.txt) min)"
 echo "Archive: $results/$name.tar.gz"

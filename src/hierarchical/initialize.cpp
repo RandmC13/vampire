@@ -450,36 +450,38 @@ void initialize(const double system_dimensions_x,
    // restart the timer
    timer.start();
 
+   // centre of moment of each coarse cell: moment-weighted mean position of the cells it contains (cells
+   // without magnetic atoms have no moment and do not count); the fourth entry is the total moment. A coarse
+   // cell without magnetic atoms keeps its geometric centre and zero moment: it is no source of dipole field.
    for (int level = 1; level < ha::num_levels; level ++ ){
-      n_cells = 0;
-      int start = ha::cells_level_start_index[level];
-      int end   = ha::cells_level_end_index[level];
-      //   std::cout << "A" << level << '\t' << start << "\t" << end <<std::endl;
-      for (int cell = start; cell < end; cell++){
-         int start_cell_in_cell = ha::cells_in_cells_start_index[cell];
-         int end_cell_in_cell = ha::cells_in_cells_end_index[cell];
-         int N_cells = end_cell_in_cell - start_cell_in_cell;
-         for (int interaction = start_cell_in_cell; interaction < end_cell_in_cell; interaction ++ ){
-            int cell_in_cell = ha::cells_in_cells[interaction];
-            // std::cout << "B" << level << '\t' << cell << '\t' << cell_in_cell << "\t" << ha::cell_positions[cell*3 + 2] <<  "\t" <<ha::cell_dimensions[cell*3 + 2] << "\t" << ha::cell_positions[cell_in_cell*3 + 2] <<  "\t" <<ha::cell_dimensions[cell_in_cell*3 + 2] << "\t" << start_cell_in_cell << '\t' << end_cell_in_cell <<std::endl;
-            ha::cell_positions_mom[4*cell+0] += ha::cell_positions_mom[4*cell_in_cell+0];
-            ha::cell_positions_mom[4*cell+1] += ha::cell_positions_mom[4*cell_in_cell+1];
-            ha::cell_positions_mom[4*cell+2] += ha::cell_positions_mom[4*cell_in_cell+2];
-            ha::cell_positions_mom[4*cell+3] += ha::cell_positions_mom[4*cell_in_cell+3];
+      for (int cell = ha::cells_level_start_index[level]; cell < ha::cells_level_end_index[level]; cell++){
+         double px = 0.0;
+         double py = 0.0;
+         double pz = 0.0;
+         double moment = 0.0;
+         for (int interaction = ha::cells_in_cells_start_index[cell]; interaction < ha::cells_in_cells_end_index[cell]; interaction ++ ){
+            const int cell_in_cell = ha::cells_in_cells[interaction];
+            const double w = ha::cell_positions_mom[4*cell_in_cell+3];
+            px += w * ha::cell_positions_mom[4*cell_in_cell+0];
+            py += w * ha::cell_positions_mom[4*cell_in_cell+1];
+            pz += w * ha::cell_positions_mom[4*cell_in_cell+2];
+            moment += w;
             ha::num_atoms_in_cell[cell] += ha::num_atoms_in_cell[cell_in_cell];
-
          }
-         ha::cell_positions_mom[4*cell+0] = ha::cell_positions_mom[4*cell+0]/N_cells;
-         ha::cell_positions_mom[4*cell+1] = ha::cell_positions_mom[4*cell+1]/N_cells;
-         ha::cell_positions_mom[4*cell+2] = ha::cell_positions_mom[4*cell+2]/N_cells;
-         ha::cell_positions_mom[4*cell+3] = ha::cell_positions_mom[4*cell+3]/N_cells;
-         // std::cout << ha::cell_positions_mom[4*cell+0] << '\t' << ha::cell_positions[3*cell+0] << "\t" << N_cells <<  std::endl;
-
-         n_cells = n_cells + ha::num_atoms_in_cell[cell]; // this is never used (RE- to delete?)
+         if(moment > 0.0){
+            ha::cell_positions_mom[4*cell+0] = px / moment;
+            ha::cell_positions_mom[4*cell+1] = py / moment;
+            ha::cell_positions_mom[4*cell+2] = pz / moment;
+         }
+         else{
+            ha::cell_positions_mom[4*cell+0] = ha::cell_positions[3*cell+0];
+            ha::cell_positions_mom[4*cell+1] = ha::cell_positions[3*cell+1];
+            ha::cell_positions_mom[4*cell+2] = ha::cell_positions[3*cell+2];
+         }
+         ha::cell_positions_mom[4*cell+3] = moment;
       }
    }
 
-   // stop the timer for segment 6 and save it
    timer.stop();
    segment_time[5] = timer.elapsed_time();
 
@@ -490,111 +492,42 @@ void initialize(const double system_dimensions_x,
    //---------------------------------------------------------------------------
    // Segment 7
    //---------------------------------------------------------------------------
-   // Calculate interaction list for all cells (looping over LOCAL cells only)
-   // this interaction list is therefore distributed, saving memory
+   // Keep the data for computing interaction tensors and calculate the
+   // interaction list for all LOCAL cells (distributed, saving memory). With
+   // dipole:on-the-fly-tensors each cell's list and tensors are computed at
+   // every field update instead (hierarchical::update).
    //---------------------------------------------------------------------------
 
    // restart the timer
    timer.start();
 
-   // data sturcture to store corner positions for each cell
-   std::vector < std::vector < double> >corners;
-   corners.resize(8);
-   for (int i = 0; i < 8; ++i) corners[i].resize(3,0.0);
+   ha::tensor_cutoff = real_cutoff;
+   ha::tensor_atoms_in_cell_global = cells_num_atoms_in_cell_global;
+   ha::tensor_cells_pos_and_mom = cells_pos_and_mom_array;
+   ha::tensor_list_of_cells_with_atoms.swap(list_of_atoms_with_cells);
+   ha::tensor_atoms_in_cells.swap(atoms_in_cells_array);
 
-   // determine the interaction list for local cells
-   int interaction_num = 0;
-   for (int lc = 0; lc < cells_num_local_cells; lc ++){
-
-      std::vector < bool > interacted(ha::total_num_cells,false);
-      ha::interaction_list_start_index[lc] = interaction_num;
-      int cell_i = cells::cell_id_array[lc];
-      double xi = ha::cell_positions[cell_i*3 + 0];
-      double yi = ha::cell_positions[cell_i*3 + 1];
-      double zi = ha::cell_positions[cell_i*3 + 2];
-      for (int level = ha::num_levels - 1; level > -1; level -- ){
-
-         int start = ha::cells_level_start_index[level];
-         int end   = ha::cells_level_end_index[level];
-         for (int cell_j = start; cell_j < end; cell_j++){
-
-            if (interacted[cell_j] == false && level != 0){
-
-               double xj = ha::cell_positions[cell_j*3 + 0];
-               double yj = ha::cell_positions[cell_j*3 + 1];
-               double zj = ha::cell_positions[cell_j*3 + 2];
-               double size_xj = ha::cell_dimensions[cell_j*3 + 0];
-               double size_yj = ha::cell_dimensions[cell_j*3 + 1];
-               double size_zj = ha::cell_dimensions[cell_j*3 + 2];
-
-               corners = ha::calculate_corners(xj,yj,zj,size_xj,size_yj,size_zj);
-
-               int is_corner_outside_range = 0;
-               for (int corner = 0; corner < 8; corner ++){
-
-                  double dx_2 = (xi - corners[corner][0])*(xi-corners[corner][0]);
-                  double dy_2 = (yi - corners[corner][1])*(yi-corners[corner][1]);
-                  double dz_2 = (zi - corners[corner][2])*(zi-corners[corner][2]);
-
-                  double r = sqrt(dx_2 + dy_2 + dz_2);
-                  if (r > ha::interaction_range[level]) is_corner_outside_range ++;
-               }
-
-               if (is_corner_outside_range == 8){
-                  interaction_num ++;
-                  ha::interaction_list_end_index[lc] = interaction_num;
-                  interacted[cell_j] = true;
-                  int start_cell_in_cell = ha::cells_in_cells_start_index[cell_j];
-                  int end_cell_in_cell = ha::cells_in_cells_end_index[cell_j];
-                  ha::interaction_list.push_back(cell_j);
-
-                  //if (cell_i == 0 ha::cell_positions[cell_j*3 + 0]  == 115)  std::cout <<"interacted" << std::endl;//std::cout << cell_j <<  "\t" << ha::cell_positions[cell_j*3 + 0] << "\t" << ha::cell_positions[cell_j*3 + 1] << "\t" << ha::cell_positions[cell_j*3 + 2] <<  "\t" <<ha::cell_dimensions[cell_j*3 + 0] << "\t" <<ha::cell_dimensions[cell_j*3 + 1] <<"\t" <<ha::cell_dimensions[cell_j*3 + 2] << std::endl;
-                  ha::interaction_list_end_index[lc] = interaction_num;
-                  // if (cell_i == 0) std::cout << "CELL POSITION\t" << start_cell_in_cell << '\t' << end_cell_in_cell << '\t' << cell_j << '\t' << ha::cell_positions[cell_j*3 + 0] << "\t" << ha::cell_positions[cell_j*3 + 1] << "\t" << ha::cell_positions[cell_j*3 + 2] <<  "\t" <<ha::cell_dimensions[cell_j*3 + 0] << "\t" <<ha::cell_dimensions[cell_j*3 + 1] <<"\t" <<ha::cell_dimensions[cell_j*3 + 2] << std::endl;
-                  for (int interaction = start_cell_in_cell; interaction < end_cell_in_cell; interaction ++ ){
-                     int sub_cell = ha::cells_in_cells[interaction];
-                     interacted[sub_cell] = true;
-                     //    if (cell_i == 0)     std::cout << "SUBCELL POSITION\t" << sub_cell <<  "\t" << ha::cell_positions[sub_cell*3 + 0] << "\t" << ha::cell_positions[sub_cell*3 + 1] << "\t" << ha::cell_positions[sub_cell*3 + 2] <<  "\t" <<ha::cell_dimensions[sub_cell*3 + 0] << "\t" <<ha::cell_dimensions[sub_cell*3 + 1] <<"\t" <<ha::cell_dimensions[sub_cell*3 + 2] << std::endl;
-                  }
-               }
-               //if (cell_i == 0)  std::cout << '\t' << std::endl;
-            }
-            else if (level != 0){
-               int start_cell_in_cell = ha::cells_in_cells_start_index[cell_j];
-               int end_cell_in_cell = ha::cells_in_cells_end_index[cell_j];
-
-               for (int interaction = start_cell_in_cell; interaction < end_cell_in_cell; interaction ++ ){
-                  int sub_cell = ha::cells_in_cells[interaction];
-                  interacted[sub_cell] = true;
-               }
-            }
-            else if (level == 0 && interacted[cell_j] == false){
-               ha::interaction_list.push_back(cell_j);
-               interaction_num ++;
-               ha::interaction_list_end_index[lc] = interaction_num;
-            }
-         }
-
-      }
-
+   if(!hierarchical::on_the_fly_tensors){
+      for (int lc = 0; lc < cells_num_local_cells; lc ++) internal::add_cell_interactions(lc, lc);
    }
 
    // stop the timer for segment 7 and save it
    timer.stop();
    segment_time[6] = timer.elapsed_time();
 
-   //------------------------------------------------------
-   // end of calculation of the interaction list
-   //------------------------------------------------------
-
    //---------------------------------------------------------------------
    // Check memory requirements and print to screen
    //---------------------------------------------------------------------
 
-   const double total_memory = vmpi::reduce_sum( double(ha::interaction_list.size() ) * 6.0 * 8.0 / 1.0e6 ); // in Megabytes
+   if(hierarchical::on_the_fly_tensors){
+      zlog << zTs() << "\tComputing hierarchical interaction lists and tensors at every field update (dipole:on-the-fly-tensors)" << std::endl;
+   }
+   else{
+      const double total_memory = vmpi::reduce_sum( double(ha::interaction_list.size() ) * 6.0 * 8.0 / 1.0e6 ); // in Megabytes
 
-   zlog << zTs() << "\tTotal memory for hierarchical dipole calculation (all CPUs): " << total_memory << " MB of RAM" << std::endl;
-   std::cout << "Total memory for hierarchical dipole calculation (all CPUs): " << total_memory << " MB of RAM" << std::endl;
+      zlog << zTs() << "\tTotal memory for hierarchical dipole calculation (all CPUs): " << total_memory << " MB of RAM" << std::endl;
+      std::cout << "Total memory for hierarchical dipole calculation (all CPUs): " << total_memory << " MB of RAM" << std::endl;
+   }
 
    zlog << zTs() << "\tNumber of local cells for hierarchical dipole calculation = " << cells_num_local_cells << std::endl;
    zlog << zTs() << "\tNumber of total cells for hierarchical dipole calculation = " << ha::total_num_cells << std::endl;
@@ -608,13 +541,12 @@ void initialize(const double system_dimensions_x,
    // restart the timer
    timer.start();
 
-   //  std::cout << interaction_num << "\t" << cells_num_local_cells << '\t' << cells_num_local_cells*cells_num_cells << std::endl;
-   ha::rij_tensor_xx.resize(interaction_num,0.0);
-   ha::rij_tensor_xy.resize(interaction_num,0.0);
-   ha::rij_tensor_xz.resize(interaction_num,0.0);
-   ha::rij_tensor_yy.resize(interaction_num,0.0);
-   ha::rij_tensor_yz.resize(interaction_num,0.0);
-   ha::rij_tensor_zz.resize(interaction_num,0.0);
+   ha::rij_tensor_xx.resize(ha::interaction_list.size(),0.0);
+   ha::rij_tensor_xy.resize(ha::interaction_list.size(),0.0);
+   ha::rij_tensor_xz.resize(ha::interaction_list.size(),0.0);
+   ha::rij_tensor_yy.resize(ha::interaction_list.size(),0.0);
+   ha::rij_tensor_yz.resize(ha::interaction_list.size(),0.0);
+   ha::rij_tensor_zz.resize(ha::interaction_list.size(),0.0);
 
    // resize B-field cells array
    dipole::cells_field_array_x.resize(cells_num_cells,0.0);
@@ -630,7 +562,6 @@ void initialize(const double system_dimensions_x,
    timer.stop();
    segment_time[7] = timer.elapsed_time();
 
-
    //---------------------------------------------------------------------------
    // Segment 9
    //---------------------------------------------------------------------------
@@ -642,98 +573,8 @@ void initialize(const double system_dimensions_x,
    // restart the timer
    timer.start();
 
-   //std::cout << cells_num_local_cells << std::endl;
-
-   // loop over all local cells which need to be calculated
-   for(int lc=0; lc<cells_num_local_cells; lc++){
-
-      // get the global cell ID
-      int cell_i = cells::cell_id_array[lc];
-
-      // cell_i is guaranteed present in cells::cell_id_array only when it is
-      // a valid receiver: either a magnetic cell (the only case possible
-      // with cells:probe-non-magnetic-cells off, so this is behaviour-
-      // preserving by construction) or -- when that flag is enabled -- a
-      // non-magnetic-only probe cell. Either way it should get an
-      // interaction tensor built; ha::calc_inter/ha::calc_intra guard the
-      // case where cell_i itself has no magnetic atoms.
-      {
-
-         // for each cell loop over cel-cell interactions for all levels, getting frirst and last interactions
-         const int start = ha::interaction_list_start_index[lc];
-         const int end = ha::interaction_list_end_index[lc];
-         // std::cerr << cell_i << '\t' << "interaction" << "\t" << end - start << "\t" << cells_num_cells << "\t" << cells_num_atoms_in_cell[cell_i] << std::endl;
-
-         // now loop over all interactions
-         for(int j = start; j < end; j++){
-
-            // get global cell_j ID
-            int cell_j = ha::interaction_list[j];
-
-            // only calculate interaction if there are atoms in remote cell - I dont understand either of these conditions!
-            // 1) why does the local number of atoms in the cell matter - surely the global number is more meaningful?
-            // 2) why would I only want to calculate interactions with zero-level cells??? surely we want all interactions?
-            if ( cells_num_atoms_in_cell_global[cell_j] != 0 && cell_j < ha::num_zero_level_cells){
-
-               //--------------------------------------------------------------
-               // Calculation of inter part of dipolar tensor
-               //--------------------------------------------------------------
-               // check that remote cell is actually magnetic
-               //if ( cells_num_atoms_in_cell_global[cell_j] > 0 ){
-
-                  // check if cell is not the same
-                  if( cell_i != cell_j ){
-                     // calculate inter term of dipolar tensor
-                     internal::calc_inter(cell_i,
-                                          cell_j,
-                                          j,
-                                          real_cutoff,
-                                          cells_num_atoms_in_cell_global,
-                                          cells_pos_and_mom_array,
-                                          list_of_atoms_with_cells,
-                                          atoms_in_cells_array);
-
-                  } // End of Inter part
-
-                  //--------------------------------------------------------------
-                  // Calculation of intra part of dipolar tensor
-                  //--------------------------------------------------------------
-                  else if( cell_i == cell_j ){
-
-                     //Compute inter component of dipolar tensor
-                     internal::calc_intra(cell_i,
-                                          cell_j,
-                                          j,
-                                          cells_num_atoms_in_cell_global,
-                                          list_of_atoms_with_cells,
-                                          atoms_in_cells_array);
-
-                  }
-                  // End of Intra part
-               //}
-               //    // check for close to zero value tensors and round down to zero
-               //
-               // //   if ( cells_num_atoms_in_cell[cell_j] == 0 && cell_i == 0) std::cout << "HHHHM" << cell_j <<  "\t" << cells_num_atoms_in_cell[cell_j] << std::endl;
-               // // if cell is not the same, compute the inter tensor else compute the intra tensor
-               // if(cell_i!=cell_j) {
-               //    ha::calc_inter(cell_i,cell_j,j, cells_atom_in_cell_coords_array_x, cells_atom_in_cell_coords_array_y, cells_atom_in_cell_coords_array_z);
-               // }
-               // else if (cell_i == cell_j){
-               //    ha::calc_intra(cell_i,cell_j,j, cells_atom_in_cell_coords_array_x, cells_atom_in_cell_coords_array_y, cells_atom_in_cell_coords_array_z);
-               // }
-
-               // zero excessively small components (avoids round off errors comparing different calculation methods)
-               if (ha::rij_tensor_xx[j]*ha::rij_tensor_xx[j] < 1e-15) ha::rij_tensor_xx[j] =0;
-               if (ha::rij_tensor_xy[j]*ha::rij_tensor_xy[j] < 1e-15) ha::rij_tensor_xy[j] =0;
-               if (ha::rij_tensor_xz[j]*ha::rij_tensor_xz[j] < 1e-15) ha::rij_tensor_xz[j] =0;
-               if (ha::rij_tensor_yy[j]*ha::rij_tensor_yy[j] < 1e-15) ha::rij_tensor_yy[j] =0;
-               if (ha::rij_tensor_yz[j]*ha::rij_tensor_yz[j] < 1e-15) ha::rij_tensor_yz[j] =0;
-               if (ha::rij_tensor_zz[j]*ha::rij_tensor_zz[j] < 1e-15) ha::rij_tensor_zz[j] =0;
-               //            std::cout  << cell_i << '\t' << cell_j << "\t" << ha::rij_tensor_xx[j] << '\t' << ha::rij_tensor_xy[j] << '\t' << ha::rij_tensor_xz[j] << '\t' << ha::rij_tensor_yy[j] << '\t' << ha::rij_tensor_yz[j] <<'\t' << ha::rij_tensor_zz[j] << std::endl;
-               //             //std::cout << cells_num_atoms_in_cell[cell_i] << '\t' << cells_num_atoms_in_cell[cell_j] << '\t' <<  cell_i << '\t' << cell_j << "\t" <<  ha::rij_tensor_xx[j] << '\t' << ha::rij_tensor_xy[j] << '\t' << ha::rij_tensor_xz[j] << '\t' << ha::rij_tensor_yy[j] << '\t' << ha::rij_tensor_yz[j] <<'\t' << ha::rij_tensor_zz[j] << std::endl;
-            }
-         }
-      }
+   if(!hierarchical::on_the_fly_tensors){
+      for(int lc = 0; lc < cells_num_local_cells; lc++) internal::compute_cell_tensors(lc, lc);
    }
 
    // stop the timer for segment 9 and save it
