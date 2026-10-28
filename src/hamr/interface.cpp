@@ -218,6 +218,24 @@ namespace hamr{
          err::vexit();
       }
       //--------------------------------------------------------------------
+      test="active-window-full-snapshots";
+      if(word==test){
+         if(value=="" || value=="true"){
+            hamr::internal::active_window_full_snapshots = true;
+            return true;
+         }
+         if(value=="false"){
+            hamr::internal::active_window_full_snapshots = false;
+            return true;
+         }
+         terminaltextcolor(RED);
+         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"true\"" << std::endl;
+         std::cerr << "\t\"false\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      //--------------------------------------------------------------------
       test="active-window-temperature";
       if(word==test){
          double T = atof(value.c_str());

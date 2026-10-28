@@ -21,6 +21,10 @@
 //   jumps to the next track). All grains are integrated for the first 10 ps.
 //   The window is not changed while the laser is off.
 //
+//   Window snapshots: while the window runs, only the atoms of grains
+//   integrated since the previous snapshot can have changed, so a spin
+//   snapshot may hold just those atoms (src/config/atoms_spins.cpp).
+//
 //------------------------------------------------------------------------------
 
 // C++ standard library headers
@@ -53,6 +57,8 @@ namespace hamr{
       std::vector<uint64_t> grain_cool_steps;
       std::vector<bool> grain_active;
       std::vector<int> active_ranges; // [first, last+1) pairs of integrated atoms
+      std::vector<char> grain_changed;  // grain integrated since the last spin snapshot
+      bool snapshot_in_window = false;  // a spin snapshot was written while the window was running
       uint64_t window_hold_steps = 0;
       bool window_initialised = false;
 
@@ -139,6 +145,8 @@ namespace hamr{
          window_hold_steps = uint64_t(round(1.0e-11/mp::dt_SI));
          grain_cool_steps.assign(num_grains, 0);
          grain_active.assign(num_grains, true);
+         grain_changed.assign(num_grains, 1);
+         snapshot_in_window = false;
          window_initialised = true;
 
          zlog << zTs() << "HAMR active window enabled: " << num_grains << " grains, temperature threshold " << active_window_dT
@@ -153,13 +161,40 @@ namespace hamr{
    }
 
    //---------------------------------------------------------------------------
+   // Spin snapshots with the window: a snapshot may hold only the atoms whose
+   // spins changed since the previous snapshot if that snapshot was written
+   // while the window was running (every atom moves before the window starts)
+   //---------------------------------------------------------------------------
+   bool window_snapshot_possible(){
+      return internal::window_initialised && internal::snapshot_in_window && !internal::active_window_full_snapshots;
+   }
+
+   bool spin_changed_since_snapshot(const int atom){
+      return internal::is_magnetic(atom) && internal::grain_changed[atoms::grain_array[atom]];
+   }
+
+   void snapshot_written(){
+      if(!internal::window_initialised) return;
+      internal::snapshot_in_window = true;
+      std::fill(internal::grain_changed.begin(), internal::grain_changed.end(), 0);
+   }
+
+   // marks the grains integrated at the current step as changed since the last snapshot
+   void mark_changed_grains(){
+      for(size_t g = 0; g < internal::grain_active.size(); g++) if(internal::grain_active[g]) internal::grain_changed[g] = 1;
+   }
+
+   //---------------------------------------------------------------------------
    // Updates the window for the current head position (while the laser is on)
    // and returns the [first, last+1) pairs of the atoms to integrate
    //---------------------------------------------------------------------------
    const std::vector<int>& update_active_window(){
 
       using namespace hamr::internal;
-      if(!head_laser_on) return active_ranges;
+      if(!head_laser_on){
+         mark_changed_grains();
+         return active_ranges;
+      }
 
       const double px = head_position_x;
       const double py = head_position_y;
@@ -186,6 +221,7 @@ namespace hamr{
          if(active != grain_active[g]){ grain_active[g] = active; changed = true; }
       }
       if(changed) rebuild_active_ranges();
+      mark_changed_grains();
 
       return active_ranges;
    }
