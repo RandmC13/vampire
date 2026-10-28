@@ -34,6 +34,50 @@ namespace config{
 
 namespace internal{
 
+#ifdef MPICF
+//------------------------------------------------------------------------------
+// Function to write a window snapshot of an io group (one file per node): the
+// ranges and spins of every process in the group are gathered on the io master,
+// which offsets each process's positions by the position of its first atom in
+// the group's file and writes them in process order
+//------------------------------------------------------------------------------
+double write_window_data_group(const std::string& filename, const std::vector<uint64_t>& ranges, const std::vector<double>& buffer){
+
+   // number of range values and spin values of each process
+   const int sizes[2] = {int(ranges.size()), int(buffer.size())};
+   std::vector<int> all_sizes(io_group_master ? 2 * io_group_size : 0);
+   MPI_Gather(sizes, 2, MPI_INT, all_sizes.data(), 2, MPI_INT, io_group_master_id, io_comm);
+
+   std::vector<int> range_counts, range_displs, data_counts, data_displs;
+   std::vector<uint64_t> all_ranges;
+   std::vector<double> all_data;
+   if(io_group_master){
+      int range_total = 0, data_total = 0;
+      for(int p = 0; p < io_group_size; p++){
+         range_counts.push_back(all_sizes[2*p]);
+         range_displs.push_back(range_total);
+         range_total += all_sizes[2*p];
+         data_counts.push_back(all_sizes[2*p+1]);
+         data_displs.push_back(data_total);
+         data_total += all_sizes[2*p+1];
+      }
+      all_ranges.resize(range_total);
+      all_data.resize(data_total);
+   }
+   MPI_Gatherv(ranges.data(), sizes[0], MPI_UINT64_T, all_ranges.data(), range_counts.data(), range_displs.data(), MPI_UINT64_T, io_group_master_id, io_comm);
+   MPI_Gatherv(buffer.data(), sizes[1], MPI_DOUBLE, all_data.data(), data_counts.data(), data_displs.data(), MPI_DOUBLE, io_group_master_id, io_comm);
+
+   if(!io_group_master) return 0.0;
+
+   // the atoms of each process follow those of the processes before it in the file (displacements count x, y, z)
+   for(int p = 0; p < io_group_size; p++){
+      for(int i = 0; i < range_counts[p]; i += 2) all_ranges[range_displs[p] + i] += io_group_displacements[p] / 3;
+   }
+   return write_window_data(filename, collated_buffer.size() / 3, all_ranges, all_data);
+
+}
+#endif
+
 //------------------------------------------------------------------------------
 // Function to output atomic spin positions to disk
 //------------------------------------------------------------------------------
@@ -48,19 +92,19 @@ void atoms(const bool allow_window){
    //------------------------------------------
    // With the HAMR active window only the atoms of grains integrated since the
    // previous snapshot can have changed: write just those (window snapshot),
-   // in binary format and serial or single GPU runs
+   // in binary format, one file per node or per process (the same decision on
+   // every process)
    //------------------------------------------
    bool window = false;
-   #ifndef MPICF
-      if(allow_window && hamr::window_snapshot_possible()){
-         if(config::internal::mode != legacy && config::internal::format == binary) window = true;
-         else{
-            static bool logged = false;
-            if(!logged) zlog << zTs() << "Spin snapshots are written in full with hamr:active-window: window snapshots need the binary format" << std::endl;
-            logged = true;
-         }
+   if(allow_window && hamr::window_snapshot_possible()){
+      if(config::internal::mode != legacy && config::internal::mode != mpi_io && config::internal::format == binary) window = true;
+      else{
+         static bool logged = false;
+         if(!logged) zlog << zTs() << "Spin snapshots are written in full with hamr:active-window: window snapshots need the binary format "
+                          << "and one file per node or per process" << std::endl;
+         logged = true;
       }
-   #endif
+   }
 
    //------------------------------------------
    // Output Meta Data
@@ -162,14 +206,18 @@ void atoms(const bool allow_window){
       }
 
       case config::internal::fpprocess:
-         io_time = write_data(filename, config::internal::local_buffer);
+         if(window) io_time = write_window_data(filename, local_output_atom_list.size(), window_ranges, window_buffer);
+         else io_time = write_data(filename, config::internal::local_buffer);
          break;
 
       case config::internal::fpnode:
-         // Gather data from all processors in io group
-         MPI_Gatherv(&local_buffer[0], local_buffer.size(), MPI_DOUBLE, &collated_buffer[0], &io_group_recv_counts[0], &io_group_displacements[0], MPI_DOUBLE, io_group_master_id, io_comm);
-         // output data on master io processes
-         if(config::internal::io_group_master) io_time = write_data(filename, config::internal::collated_buffer);
+         if(window) io_time = write_window_data_group(filename, window_ranges, window_buffer);
+         else{
+            // Gather data from all processors in io group
+            MPI_Gatherv(&local_buffer[0], local_buffer.size(), MPI_DOUBLE, &collated_buffer[0], &io_group_recv_counts[0], &io_group_displacements[0], MPI_DOUBLE, io_group_master_id, io_comm);
+            // output data on master io processes
+            if(config::internal::io_group_master) io_time = write_data(filename, config::internal::collated_buffer);
+         }
          double max_io_time = 0.0;
          // calculate actual bandwidth on root process
          MPI_Reduce(&io_time, &max_io_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
