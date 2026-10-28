@@ -90,6 +90,7 @@ namespace hamr{
    // update for the current head position, returning the [first, last+1) pairs of
    // the atoms to integrate
    //-----------------------------------------------------------------------------
+   bool active_window_requested(); // hamr:active-window set in the input (for the decomposition)
    bool active_window_enabled();
    const std::vector<int>& update_active_window();
 

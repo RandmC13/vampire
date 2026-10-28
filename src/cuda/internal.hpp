@@ -16,6 +16,7 @@
 //---------------------------------------------------------------------
 
 // C++ standard library headers
+#include <algorithm>
 #include <vector>
 
 // Include type definitions for cuda code
@@ -81,14 +82,17 @@ void update_external_fields();
 void update_dipolar_fields();
 void update_cell_magnetizations();
 void update_hamr_field();
-// atoms integrated with the HAMR active window (hamr:active-window)
+// atoms integrated with the HAMR active window (hamr:active-window), in increasing order; nullptr: all atoms
 extern int *d_active_atoms;
-extern int num_active_atoms;
+extern std::vector<int> h_active_atoms; // host copy
 void update_active_atoms(); // copies the window's atoms to d_active_atoms when it changes
 extern std::vector<int> active_ranges; // the window's atoms as [first, last+1) pairs
 extern int active_window_version;      // incremented when the window changes
-// number of atoms the kernels loop over: all, or the atoms of the active window
-inline int num_integrated_atoms(const int num_atoms){ return d_active_atoms ? num_active_atoms : num_atoms; }
+// number of the atoms 0 to num_atoms-1 the kernels loop over: all, or those in the active window; kernels
+// for the atoms first to last-1 loop over positions num_integrated_atoms(first) to num_integrated_atoms(last)-1
+inline int num_integrated_atoms(const int num_atoms){
+   return d_active_atoms ? std::lower_bound(h_active_atoms.begin(), h_active_atoms.end(), num_atoms) - h_active_atoms.begin() : num_atoms;
+}
 void update_global_thermal_field();
 void update_applied_fields();
 void update_fmr_fields();

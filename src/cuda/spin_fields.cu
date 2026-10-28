@@ -54,8 +54,8 @@ void update_spin_fields(const int num_atoms, const int first_atom) {
         cu::exchange::d_nbr_start, cu::exchange::d_nbr_atom,
         cu::exchange::d_nbr_J, cu::atoms::d_x_spin, cu::atoms::d_y_spin,
         cu::atoms::d_z_spin, cu::d_x_spin_field, cu::d_y_spin_field,
-        cu::d_z_spin_field, cu::num_integrated_atoms(num_atoms), first_atom,
-        cu::d_active_atoms);
+        cu::d_z_spin_field, cu::num_integrated_atoms(num_atoms),
+        cu::num_integrated_atoms(first_atom), cu::d_active_atoms);
 
     check_cuda_errors(__FILE__, __LINE__);
 

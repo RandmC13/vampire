@@ -44,6 +44,7 @@
 #include "program.hpp"
 #include "sim.hpp"
 #include "vio.hpp"
+#include "vmpi.hpp"
 
 // hamr headers
 #include "internal.hpp"
@@ -66,21 +67,35 @@ namespace hamr{
          return mp::material[atoms::type_array[atom]].non_magnetic == 0;
       }
 
+      // atoms integrated by this process (halo atoms are copies of other processes' atoms)
+      int num_owned_atoms(){
+         #ifdef MPICF
+            return vmpi::num_core_atoms + vmpi::num_bdry_atoms;
+         #else
+            return atoms::num_atoms;
+         #endif
+      }
+
       void rebuild_active_ranges(){
          active_ranges.clear();
          bool in_range = false;
-         for(int atom = 0; atom < atoms::num_atoms; atom++){
+         const int num_local = num_owned_atoms();
+         for(int atom = 0; atom < num_local; atom++){
             const bool active = is_magnetic(atom) && grain_active[atoms::grain_array[atom]];
             if(active && !in_range) active_ranges.push_back(atom);
             if(!active && in_range) active_ranges.push_back(atom);
             in_range = active;
          }
-         if(in_range) active_ranges.push_back(atoms::num_atoms);
+         if(in_range) active_ranges.push_back(num_local);
 
          int num_grains = 0;
          for(size_t g = 0; g < grain_active.size(); g++) if(grain_active[g]) num_grains++;
-         int num_atoms = 0;
+         // every process changes the window at the same step, so the total can be summed here
+         uint64_t num_atoms = 0;
          for(size_t r = 0; r < active_ranges.size(); r += 2) num_atoms += active_ranges[r+1] - active_ranges[r];
+         #ifdef MPICF
+            MPI_Allreduce(MPI_IN_PLACE, &num_atoms, 1, MPI_UINT64_T, MPI_SUM, MPI_COMM_WORLD);
+         #endif
          zlog << zTs() << "HAMR active window: " << num_grains << " grains, " << num_atoms << " atoms integrated, head at "
               << head_position_x*0.1 << " nm, " << head_position_y*0.1 << " nm" << std::endl;
       }
@@ -92,9 +107,6 @@ namespace hamr{
       void initialize_active_window(){
 
          std::vector<std::string> unsupported;
-         #ifdef MPICF
-            unsupported.push_back("the parallel (MPI) version");
-         #endif
          if(integrate::integrator != integrate::integrator_t::llg_heun) unsupported.push_back("integrators other than llg-heun");
          if(::dipole::activated) unsupported.push_back("dipole fields");
          if(::exchange::get_exchange_type() != 0) unsupported.push_back("vectorial or tensorial exchange");
@@ -104,10 +116,11 @@ namespace hamr{
          if(sim::spin_torque_fields_enabled() || sim::vcma_fields_enabled()) unsupported.push_back("spin torque or voltage controlled anisotropy fields");
 
          // grains must evolve independently: no exchange between a magnetic atom and an atom outside its grain
-         // (same tolerance as the GPU neighbour list)
+         // (same tolerance as the GPU neighbour list); the neighbours of local atoms include halo atoms
          const double tol = 1e-10;
+         const int num_local = num_owned_atoms();
          int bond_i = -1, bond_j = -1;
-         for(int atom = 0; atom < atoms::num_atoms && bond_i < 0; atom++){
+         for(int atom = 0; atom < num_local && bond_i < 0; atom++){
             if(!is_magnetic(atom)) continue;
             for(int nn = atoms::neighbour_list_start_index[atom]; nn <= atoms::neighbour_list_end_index[atom]; nn++){
                const int j = atoms::neighbour_list_array[nn];
@@ -115,9 +128,14 @@ namespace hamr{
                if(!is_magnetic(j) || atoms::grain_array[j] != atoms::grain_array[atom]){ bond_i = atom; bond_j = j; break; }
             }
          }
-         if(bond_i >= 0){
+         int bond_found = bond_i >= 0;
+         #ifdef MPICF
+            MPI_Allreduce(MPI_IN_PLACE, &bond_found, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+         #endif
+         if(bond_found){
             std::ostringstream bond;
-            bond << "exchange between atoms of different grains or with non-magnetic atoms (atoms " << bond_i << " and " << bond_j << ")";
+            bond << "exchange between atoms of different grains or with non-magnetic atoms";
+            if(bond_i >= 0) bond << " (atoms " << bond_i << " and " << bond_j << ")";
             unsupported.push_back(bond.str());
          }
 
@@ -128,12 +146,16 @@ namespace hamr{
             err::fatal(message);
          }
 
+         // grains and their boxes over all processes, so that every process makes the same decisions
          int num_grains = 0;
-         for(int atom = 0; atom < atoms::num_atoms; atom++) if(is_magnetic(atom)) num_grains = std::max(num_grains, atoms::grain_array[atom] + 1);
+         for(int atom = 0; atom < num_local; atom++) if(is_magnetic(atom)) num_grains = std::max(num_grains, atoms::grain_array[atom] + 1);
+         #ifdef MPICF
+            MPI_Allreduce(MPI_IN_PLACE, &num_grains, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+         #endif
          grain_min_x.assign(num_grains,  1e300); grain_max_x.assign(num_grains, -1e300);
          grain_min_y.assign(num_grains,  1e300); grain_max_y.assign(num_grains, -1e300);
          // shortcut: a grain split by a periodic boundary gets a box across the film and is always integrated
-         for(int atom = 0; atom < atoms::num_atoms; atom++){
+         for(int atom = 0; atom < num_local; atom++){
             if(!is_magnetic(atom)) continue;
             const int g = atoms::grain_array[atom];
             grain_min_x[g] = std::min(grain_min_x[g], atom_coords_x[atom]);
@@ -141,6 +163,12 @@ namespace hamr{
             grain_min_y[g] = std::min(grain_min_y[g], atom_coords_y[atom]);
             grain_max_y[g] = std::max(grain_max_y[g], atom_coords_y[atom]);
          }
+         #ifdef MPICF
+            MPI_Allreduce(MPI_IN_PLACE, grain_min_x.data(), num_grains, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, grain_min_y.data(), num_grains, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, grain_max_x.data(), num_grains, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, grain_max_y.data(), num_grains, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+         #endif
 
          window_hold_steps = uint64_t(round(1.0e-11/mp::dt_SI));
          grain_cool_steps.assign(num_grains, 0);
@@ -155,6 +183,10 @@ namespace hamr{
       }
 
    } // end of internal namespace
+
+   bool active_window_requested(){
+      return internal::active_window;
+   }
 
    bool active_window_enabled(){
       return internal::window_initialised;

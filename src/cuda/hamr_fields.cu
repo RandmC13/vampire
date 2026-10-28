@@ -232,11 +232,11 @@ namespace vcuda{
          active_ranges = ranges;
          active_window_version++;
 
-         std::vector<int> active;
+         std::vector<int>& active = cu::h_active_atoms;
+         active.clear();
          for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = ranges[r]; atom < ranges[r+1]; atom++) active.push_back(atom);
          if(cu::d_active_atoms == nullptr) cudaMalloc((void**)&cu::d_active_atoms, ::atoms::num_atoms * sizeof(int));
          cudaMemcpy(cu::d_active_atoms, active.data(), active.size() * sizeof(int), cudaMemcpyHostToDevice);
-         cu::num_active_atoms = active.size();
 
          check_cuda_errors (__FILE__, __LINE__);
       }

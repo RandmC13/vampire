@@ -5,13 +5,15 @@
 #   Free BSD licence (see licence file for details).
 #
 #------------------------------------------------------------------------------
-# Checks hamr:active-window on a HAMR write of 9 bits along a granular FePt
-# film (60 x 8 nm, 2 nm grains height, laser FWHM 8 nm, 1000 m/s):
+# Checks hamr:active-window on HAMR writes of 9 bits on a granular FePt film
+# (2 nm grain height, laser FWHM 8 nm, 1000 m/s): one track along a 60 x 8 nm
+# film, or three tracks of 3 bits on a 20 x 80 nm film (wide film):
 #
-#   1. identity: on a film of magnetic grains only, the window with
+#   1. identity: on the wide film of magnetic grains only, the window with
 #      hamr:active-window-temperature = 0 (every grain integrated) gives output
 #      identical to the run without the window
-#   2. statistics: on the film with a non-magnetic fill and sensor layer, SEEDS
+#   2. statistics: on the 60 x 8 nm film (the wide film with FILM=wide) with a
+#      non-magnetic fill and sensor layer, SEEDS
 #      seeds with and without the window (threshold 1 K): z-scores of the
 #      seed-mean system magnetisation at every output and of the final
 #      magnetisation of every grain; FAIL if any |z| exceeds ZMAX (default 4)
@@ -28,8 +30,15 @@
 #    developers/test/validation/hamr_window_check.sh [vampire binary]
 #
 # The binary defaults to ./vampire-serial (CUDA binaries run on the GPU).
-# SEEDS defaults to 8, JOBS (runs at a time) to 1. Results go to a temporary
-# directory, which is removed unless KEEP=1.
+# SEEDS defaults to 8, JOBS (runs at a time) to 1. With RANKS=N every run uses
+# mpirun -np N, or $MPIRUN -np N (e.g. MPIRUN="mpirun --bind-to none" for
+# several runs at a time) (MPI and multi-GPU versions; the window then splits the film
+# across the track, while runs without it use the usual decomposition). The
+# multi-GPU version runs with gpu:decomposition-independent-order, so its
+# results do not depend on the decomposition. The 20 x 80 nm film splits across
+# the track at 2, 4 and 6 processes without the window too, so the identity
+# holds for the MPI version. Results go to a temporary directory, which is
+# removed unless KEEP=1, or to the (new, empty) directory WORK, which is kept.
 #------------------------------------------------------------------------------
 set -eu
 
@@ -37,8 +46,17 @@ exe=$(realpath "${1:-./vampire-serial}")
 seeds=${SEEDS:-8}
 jobs=${JOBS:-1}
 zmax=${ZMAX:-4}
+film=${FILM:-narrow}
+mpi=""
+[ -n "${RANKS:-}" ] && mpi="${MPIRUN:-mpirun} -np $RANKS"
+mgpu=0
+case $(basename "$exe") in *multigpu*) mgpu=1;; esac
 here=$(dirname "$(realpath "$0")")
-work=$(mktemp -d)
+if [ -n "${WORK:-}" ]; then
+   work=$(realpath -m "$WORK"); mkdir -p "$work"; KEEP=1
+else
+   work=$(mktemp -d)
+fi
 [ "${KEEP:-0}" = 1 ] && echo "results in $work" || trap 'rm -rf "$work"' EXIT
 
 # material file of the granular HAMR case: low density fill, thin sensor layer,
@@ -50,11 +68,14 @@ sed -e 's/^material\[4\]:density = 1.0/material[4]:density = 0.01/' \
 grep -v '^material\[[45]\]' "$work/full.mat" | sed 's/^material:num-materials *= *5/material:num-materials=3/' > "$work/grains.mat"
 grep -q '^material:num-materials=3' "$work/grains.mat"
 
-run(){ # name material seed [extra input lines]
-   local dir="$work/$1" mat=$2 seed=$3; shift 3
+run(){ # name material film (narrow or wide) seed [extra input lines]
+   local dir="$work/$1" mat=$2 size=60x8 seed=$4
+   [ "$3" = wide ] && size=20x80
+   shift 4
    mkdir "$dir"
    cp "$work/$mat" "$dir/FePt_sensor.mat"
-   sed -e 's/system-size-x = 8 !nm/system-size-x = 60 !nm/' \
+   sed -e "s/system-size-x = 8 !nm/system-size-x = ${size%x*} !nm/" \
+       -e "s/system-size-y = 8 !nm/system-size-y = ${size#*x} !nm/" \
        -e 's/system-size-z = 20 !nm/system-size-z = 4 !nm/' \
        -e 's/grain-height = 10 !nm/grain-height = 2 !nm/' \
        -e 's/laser-FWHM-\([xy]\) = 5/laser-FWHM-\1 = 8/' \
@@ -65,19 +86,20 @@ run(){ # name material seed [extra input lines]
        -e 's/output-rate = 500/output-rate = 1000/' \
        "$here/cases/hamr-granular/input" > "$dir/input"
    echo "sim:integrator-random-seed = $seed" >> "$dir/input"
+   [ "$mgpu" = 1 ] && echo "gpu:decomposition-independent-order" >> "$dir/input"
    for line in "$@"; do echo "$line" >> "$dir/input"; done
    local start=$(date +%s.%N)
-   (cd "$dir" && "$exe" > stdout 2>&1) || { tail -n 20 "$dir/stdout"; return 1; }
+   (cd "$dir" && $mpi "$exe" > stdout 2>&1) || { tail -n 20 "$dir/stdout"; return 1; }
    echo "$(date +%s.%N) - $start" | bc > "$dir/seconds"
 }
 export -f run
-export work exe here
+export work exe here mpi mgpu
 
 fail=0
 
 # 1. identity
-run id-off grains.mat 1
-run id-window grains.mat 1 "hamr:active-window" "hamr:active-window-temperature = 0"
+run id-off grains.mat wide 1
+run id-window grains.mat wide 1 "hamr:active-window" "hamr:active-window-temperature = 0"
 for f in output grain.txt; do
    if cmp -s <(grep -v '^#' "$work/id-off/$f") <(grep -v '^#' "$work/id-window/$f"); then
       echo "PASS identity: $f identical with every grain in the window"
@@ -88,8 +110,8 @@ done
 
 # 2. statistics
 for s in $(seq 1 "$seeds"); do
-   echo "run off-$s full.mat $s"
-   echo "run window-$s full.mat $s hamr:active-window"
+   echo "run off-$s full.mat $film $s"
+   echo "run window-$s full.mat $film $s hamr:active-window"
 done | xargs -P "$jobs" -I{} bash -c '{}'
 
 python3 - "$work" "$seeds" "$zmax" << 'EOF' || fail=1
@@ -118,7 +140,7 @@ EOF
 
 # statistics of a window run calculated from the spins on the host: the same
 # trajectory, so the output must agree with the device statistics to rounding
-run window-cpustats-1 full.mat 1 "hamr:active-window" "gpu:calculate-statistics-on-cpu=true"
+run window-cpustats-1 full.mat $film 1 "hamr:active-window" "gpu:calculate-statistics-on-cpu=true"
 python3 - "$work" "${TOL:-1e-10}" << 'EOF' || fail=1
 import sys, numpy as np
 work, tol = sys.argv[1], float(sys.argv[2])
@@ -130,8 +152,8 @@ EOF
 
 # 3. window snapshots
 snapshots=(config:atoms "config:output-format = binary" "config:atoms-output-rate = 5000")
-run snap-window-1 full.mat 1 "hamr:active-window" "${snapshots[@]}"
-run snap-full-1 full.mat 1 "hamr:active-window" "hamr:active-window-full-snapshots" "${snapshots[@]}"
+run snap-window-1 full.mat narrow 1 "hamr:active-window" "${snapshots[@]}"
+run snap-full-1 full.mat narrow 1 "hamr:active-window" "hamr:active-window-full-snapshots" "${snapshots[@]}"
 python3 - "$work" << 'EOF' || fail=1
 import sys, os, re, numpy as np
 work = sys.argv[1]
@@ -191,7 +213,7 @@ if [ "${PERF:-0}" != 0 ]; then
           -e 's/output-rate = 500/output-rate = 1000/' \
           "$here/cases/hamr-granular/input" > "$work/perf-$m/input"
       [ $m = window ] && echo "hamr:active-window" >> "$work/perf-$m/input"
-      (cd "$work/perf-$m" && timeout "$PERF" "$exe" > stdout 2>&1) || true
+      (cd "$work/perf-$m" && timeout "$PERF" $mpi "$exe" > stdout 2>&1) || true
    done
    python3 - "$work" << 'EOF'
 import sys, re, datetime

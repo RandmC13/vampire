@@ -368,6 +368,9 @@ void llg_heun() {
 
   const size_t num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
 
+  // atoms to integrate (HAMR active window)
+  cu::update_active_atoms();
+
   // fields at the start of the step
   internal::update_fields(true);
 
@@ -376,7 +379,8 @@ void llg_heun() {
       cu::atoms::d_y_spin, cu::atoms::d_z_spin, cu::d_x_spin_field,
       cu::d_y_spin_field, cu::d_z_spin_field, cu::d_x_external_field,
       cu::d_y_external_field, cu::d_z_external_field, cu::llg::d_ds_x,
-      cu::llg::d_ds_y, cu::llg::d_ds_z, ::mp::dt, num_local_atoms, nullptr);
+      cu::llg::d_ds_y, cu::llg::d_ds_z, ::mp::dt,
+      cu::num_integrated_atoms(num_local_atoms), cu::d_active_atoms);
   check_cuda_errors(__FILE__, __LINE__);
 
   // fields of the predicted spins
@@ -388,7 +392,8 @@ void llg_heun() {
       cu::d_y_spin_field, cu::d_z_spin_field, cu::d_x_external_field,
       cu::d_y_external_field, cu::d_z_external_field, cu::llg::d_x_spin_buffer,
       cu::llg::d_y_spin_buffer, cu::llg::d_z_spin_buffer, cu::llg::d_ds_x,
-      cu::llg::d_ds_y, cu::llg::d_ds_z, ::mp::dt, num_local_atoms, nullptr);
+      cu::llg::d_ds_y, cu::llg::d_ds_z, ::mp::dt,
+      cu::num_integrated_atoms(num_local_atoms), cu::d_active_atoms);
   check_cuda_errors(__FILE__, __LINE__);
 }
 
