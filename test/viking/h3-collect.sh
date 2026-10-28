@@ -13,7 +13,7 @@
 set -eu
 WORK=${WORK:-$HOME/scratch/vampire-benchmarks}
 cd $WORK/h3
-echo "Space used:"; du -sh relax write read bench profile gpu-relax window 2> /dev/null || true
+echo "Space used:"; du -sh relax write read bench profile gpu-relax window window-profile 2> /dev/null || true
 [ -f bench/bench.csv ] && echo "bench.csv: $(($(wc -l < bench/bench.csv) - 1)) runs, $(awk -F, 'NR > 1 && $10 == 0' bench/bench.csv | wc -l) with no time steps measured"
 cat */time.txt 2> /dev/null || true
 
@@ -21,6 +21,7 @@ files=(commit.txt dry-run.txt logs bench bin/*.build.log)
 [ -d profile ] && files+=(profile)
 [ -d gpu-relax ] && files+=(gpu-relax)
 [ -d window ] && files+=(window)
+[ -d window-profile ] && files+=(window-profile)
 for stage in relax write read; do
    [ -d $stage ] && files+=($(cd $stage && find . -maxdepth 1 -type f ! -name '*.chk' ! -name '*.data' ! -name '*.meta' | sed "s|^\.|$stage|"))
 done
@@ -29,5 +30,5 @@ if [ -d write ]; then
    [ -n "$last" ] && files+=($(ls -d write/spins-$last* write/atoms-coords* write/non-magnetic-atoms* 2> /dev/null || true))
 fi
 archive=$WORK/viking-h3-$(date +%Y%m%d-%H%M).tar.gz
-tar czf $archive --exclude='*.chk' --exclude='bench/runs/*/*.data' --exclude='*.nsys-rep' --exclude='profile/src-original' --exclude='gpu-relax/src-*' --exclude='gpu-relax/*/*/*.data' --exclude='gpu-relax/*/*/*.meta' --exclude='window/src-*' --exclude='window/*/*.data' --exclude='window/*/*.meta' "${files[@]}"
+tar czf $archive --exclude='*.chk' --exclude='bench/runs/*/*.data' --exclude='*.nsys-rep' --exclude='profile/src-original' --exclude='gpu-relax/src-*' --exclude='gpu-relax/*/*/*.data' --exclude='gpu-relax/*/*/*.meta' --exclude='window/src-*' --exclude='window/*/*.data' --exclude='window/*/*.meta' --exclude='window-profile/src-*' "${files[@]}"
 echo "Archive: $archive ($(du -h $archive | cut -f1))"
