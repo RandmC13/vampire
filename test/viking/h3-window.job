@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-h3-window
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --partition=gpuplus
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#SBATCH --time=04:00:00
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# The write of the HAMR chain with hamr:active-window on one GPU (multi-GPU
+# version on one rank, single precision, gpu:skip-non-magnetic-atoms),
+# restarted from the same relaxed state as h3-write.job ($WORK/h3/relax), for
+# comparison with that write (grain outcomes, correct bits, final grain
+# magnetisation) and to measure the speed-up. A timed write of $WINDOW seconds
+# without the window, built from the same commit, gives the reference speed.
+#
+# Built from commit COMMIT (default: HEAD of the checkout it is submitted from).
+# Results in $WORK/h3/window: bench.csv (reference row), write/ (output,
+# grain files, window spin snapshots, time.txt). No checkpoint is saved.
+#
+# Submit from test/viking (after replacing VIKING_ACCOUNT; WORK must be set, or the log
+# file cannot be created and the job fails at once):
+#    export WORK=${WORK:-$HOME/scratch/vampire-benchmarks}
+#    sbatch --export=ALL,REPO=$(git rev-parse --show-toplevel),WORK=$WORK \
+#           --output=$WORK/h3/logs/%x-%j.log h3-window.job
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+export MPIRUN=$REPO/test/viking/mgpu-launch.sh
+[ -f $H3/relax/ranks.txt ] || { echo "Error: no relaxed state in $H3/relax"; exit 1; }
+G=$H3/window
+mkdir -p $G
+commit=$(git -C $REPO rev-parse ${COMMIT:-HEAD})
+echo "$commit" > $G/commit.txt
+src=$G/src-$SLURM_JOB_ID
+rm -rf $src; mkdir -p $src
+git -C $REPO archive $commit | tar -x -C $src
+bin=$H3/bin/vampire-mgpu-sp-window
+BUILD_SRC=$src build cuda-multigpu vampire-cuda-multigpu $bin CUDA_ARCH=-arch=native CUDA_PR=-DCUDA_SP
+rm -rf $src
+gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)
+
+# reference speed without the window
+csv=$G/bench.csv
+[ -f $csv ] || echo "partition,device,nodes,ranks,ranks_per_node,precision,skip,atoms,setup_s,steps,window_s,steps_per_s,full_write_h,peak_rss_max_mib,peak_rss_sum_mib,peak_gpu_max_mib,exit" > $csv
+dir=$G/nowindow
+stage_dir write $dir
+echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+result=$(bench_run $dir $MPIRUN -np 1 $SAMPLE $bin)
+atoms=$(awk -F': ' '/Total number of atoms/ { print $2 }' $dir/stdout | head -n 1)
+rate=$(echo $result | cut -d, -f4)
+echo "$result" | awk -F, -v pre="$SLURM_JOB_PARTITION,$gpu,1,1,1,sp,1,${atoms:-0}" -v h=$(full_write_h $rate) \
+   '{ print pre "," $1 "," $2 "," $3 "," $4 "," h "," $5 "," $6 "," $7 "," $8 }' | tee -a $csv
+
+# complete write with the window
+dir=$G/write
+stage_dir write $dir
+printf '%s\n' "gpu:skip-non-magnetic-atoms" "hamr:active-window" >> $dir/input
+sed -i '/^sim:save-checkpoint/d' $dir/input
+link_checkpoint $H3/relax $dir
+echo 1 > $dir/ranks.txt
+cd $dir
+start=$(date +%s)
+$MPIRUN -np 1 $SAMPLE $bin > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "window write: $(( $(date +%s) - start )) s on 1 GPU ($gpu), commit $commit" | tee time.txt
+rm -f vampire*.chk   # links to the relaxed state

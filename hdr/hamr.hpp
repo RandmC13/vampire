@@ -85,6 +85,24 @@ namespace hamr{
    void save_checkpoint(std::ostream& chkfile);
    void load_checkpoint(std::istream& chkfile);
 
+   //-----------------------------------------------------------------------------
+   // Active window (hamr:active-window): true once the write has started with it
+   // update for the current head position, returning the [first, last+1) pairs of
+   // the atoms to integrate
+   //-----------------------------------------------------------------------------
+   bool active_window_requested(); // hamr:active-window set in the input (for the decomposition)
+   bool active_window_enabled();
+   const std::vector<int>& update_active_window();
+
+   //-----------------------------------------------------------------------------
+   // Spin snapshots with the active window: whether the next snapshot may hold
+   // only the atoms that changed since the previous one, whether an atom has
+   // changed, and notice that a snapshot has been written
+   //-----------------------------------------------------------------------------
+   bool window_snapshot_possible();
+   bool spin_changed_since_snapshot(const int atom);
+   void snapshot_written();
+
    //-----------------------------------------------------------------------------------------------
    // Externally visible variables used for HAMR calculation
    //-----------------------------------------------------------------------------------------------

@@ -123,6 +123,14 @@ of all statistical comparisons pooled together: when test and reference sample t
 approximately standard normal (mean ~0, rms ~1, ~4.6 % beyond 2), which is a sharper test than the per-quantity
 pass/fail. Rows of a per-row case are correlated, so judge the pooled values rather than a single case.
 
+## Dipole solvers
+
+`developers/test/validation/dipole_check.sh [vampire binary] [MPI ranks]` (CPU, a few seconds) runs a uniformly
+magnetised Co film (40 x 12 x 3 nm, 1 nm cells) with the tensor and hierarchical solvers, with and without
+`dipole:on-the-fly-tensors`: on-the-fly tensors must give identical fields, and the hierarchical field must agree with the
+tensor field to `TOL` tesla (default 1e-3; the film is longer than the range the hierarchical solver sums cell by cell,
+so its far-field approximation is tested).
+
 ## Case format (`cases/<case>/case.json`)
 
 All case inputs use `output:column-headers` and `output:precision=16`

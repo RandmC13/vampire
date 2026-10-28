@@ -75,7 +75,8 @@ namespace vcuda{
             curandState * rand_states,
             cu::material_parameters_t * material_params,
             int * material,
-            const int n_atoms
+            const int n_atoms,
+            const int * active
             )
       {
          int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -83,10 +84,12 @@ namespace vcuda{
          // Load the curand state into local memory once for all atoms of this thread
          curandState local_state = rand_states[tid];
 
-         for (int i = tid;
-            i < n_atoms;
-            i += blockDim.x * gridDim.x)
+         for (int k = tid;
+            k < n_atoms;
+            k += blockDim.x * gridDim.x)
          {
+
+            const int i = active ? active[k] : k;
 
             // Get material of atom i
             int mid = material[i];
@@ -209,13 +212,34 @@ namespace vcuda{
             cu::d_rand_state,
             cu::mp::d_material_params,
             cu::atoms::d_materials,
-            num_atoms);
+            cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
 
          check_cuda_errors (__FILE__, __LINE__);
 
          return;
       } // end apply_local_temperature_and_field
 
+
+      // Copies the atoms of the HAMR active window to the device when the window changes
+      std::vector<int> active_ranges;
+      int active_window_version = 0;
+      void update_active_atoms(){
+
+         if(!::hamr::active_window_enabled()) return;
+
+         const std::vector<int>& ranges = ::hamr::update_active_window();
+         if(cu::d_active_atoms != nullptr && ranges == active_ranges) return;
+         active_ranges = ranges;
+         active_window_version++;
+
+         std::vector<int>& active = cu::h_active_atoms;
+         active.clear();
+         for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = ranges[r]; atom < ranges[r+1]; atom++) active.push_back(atom);
+         if(cu::d_active_atoms == nullptr) cudaMalloc((void**)&cu::d_active_atoms, ::atoms::num_atoms * sizeof(int));
+         cudaMemcpy(cu::d_active_atoms, active.data(), active.size() * sizeof(int), cudaMemcpyHostToDevice);
+
+         check_cuda_errors (__FILE__, __LINE__);
+      }
 
       // Host Function to calculate update hamr field
       void update_hamr_field()
@@ -248,7 +272,7 @@ namespace vcuda{
                cu::d_rand_state,
                cu::mp::d_material_params,
                cu::atoms::d_materials,
-               num_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
 
             check_cuda_errors (__FILE__, __LINE__);
          }

@@ -9,6 +9,7 @@ data.o \
 initialize.o \
 intra.o \
 inter.o \
+interactions.o \
 interface.o \
 mag.o \
 update.o

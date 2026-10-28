@@ -73,9 +73,12 @@ namespace internal{
          const uint64_t * atom_key, const uint64_t step, const uint2 seed,
          const cu::material_parameters_t * material_params,
          const int * material,
-         const int n_atoms){
+         const int n_atoms,
+         const int * active){
 
-      for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms; i += blockDim.x * gridDim.x){
+      for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
+
+         const int i = active ? active[k] : k; // all atoms, or the listed ones (HAMR active window)
 
          const cu::material_parameters_t mat = material_params[material[i]];
          if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
@@ -116,9 +119,12 @@ namespace internal{
          const uint64_t * atom_key, const uint64_t step, const uint2 seed,
          const cu::material_parameters_t * material_params,
          const int * material,
-         const int n_atoms){
+         const int n_atoms,
+         const int * active){
 
-      for(int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_atoms; i += blockDim.x * gridDim.x){
+      for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
+
+         const int i = active ? active[k] : k; // all atoms, or the listed ones (HAMR active window)
 
          const cu::material_parameters_t mat = material_params[material[i]];
          if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
@@ -224,19 +230,21 @@ namespace internal{
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
                Tmin, DeltaT, one_over_denx, one_over_deny, px, py,
                Hx_app, Hy_app, Hz_app, Hloc_min_x, Hloc_max_x, Hloc_min_y, Hloc_max_y,
-               d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms);
+               d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
          }
          else{
             global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
-               sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms);
+               sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
          }
       }
       // otherwise the global thermal field and the applied fields
       else{
          global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
             cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
-            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms);
+            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms, nullptr);
          cu::update_applied_fields();
       }
       check_cuda_errors(__FILE__, __LINE__);

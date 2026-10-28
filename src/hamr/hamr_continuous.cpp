@@ -92,6 +92,8 @@ namespace hamr{
          hamr::internal::resume_steps = sim::time - sim::equilibration_time;
       }
 
+      if(hamr::internal::active_window) hamr::internal::initialize_active_window();
+
       //--------------------------------------------//
       // Start hamr simulation
       //--------------------------------------------//
