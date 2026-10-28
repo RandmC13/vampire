@@ -98,3 +98,8 @@ in `$WORK/h3/gpu-relax/<partition>`, next to the CPU relaxation in `$WORK/h3/rel
 on one GPU, restarted from the same relaxed state as `h3-write.job`, built from the commit it is
 submitted from, after a 5 minute write without the window as the speed reference. Results in
 `$WORK/h3/window`, for comparison with `$WORK/h3/write`; the window spin snapshots stay in scratch.
+
+`h3-window-profile.job` (submitted by hand, one H100) profiles the same write with Nsight Systems,
+with and without `hamr:active-window`: a 20 s capture of each, the one with the window taken with
+the head in the middle of the track. Results in `$WORK/h3/window-profile` (`report.sqlite` and
+summary tables of each capture).

@@ -98,7 +98,6 @@ namespace hamr{
       // Start hamr simulation
       //--------------------------------------------//
       int bit_tot = 0;
-      int bit = 0;
       int track = 0;
       const uint64_t total_sim_time = total_time + sim::equilibration_time;
       const uint64_t total_final_time = final_time + total_sim_time;
@@ -106,7 +105,6 @@ namespace hamr{
       while(sim::time < total_sim_time){ // loop over whole time
 
          track = int(round(bit_tot/n_bits_per_track));
-         bit = bit_tot - track*n_bits_per_track;
          // Set head position at beginning of track
          hamr::internal::head_position_x +=Deltax; //= head_position_initial + BL*bit;
          hamr::internal::head_position_y = TW*(0.5 + track) + padding;
@@ -145,7 +143,8 @@ namespace hamr{
          //-----------------------------------------//
          // Enter in track => within bits
          //-----------------------------------------//
-         while(tmp_track_time < track_time){
+         // tmp_track_time already includes the lead-in, so every bit of the track is written
+         while(tmp_track_time < extra_time + track_time){
 
             // Decleare integer time step within bit
             uint64_t tmp_bit_time = 0;
@@ -179,7 +178,7 @@ namespace hamr{
             } // end of loop over single bit region
 
             // Print update on screen and log file
-            zlog << zTs() << "Written bit " << bit_tot+1 << " : bit " << bit+1 << " on track " << track+1 <<  std::endl;
+            zlog << zTs() << "Written bit " << bit_tot+1 << " : bit " << bit_tot - track*n_bits_per_track + 1 << " on track " << track+1 <<  std::endl;
             zlog << zTs() << "Head moving to position: " << (hamr::internal::head_position_x+Deltax)*0.1 << " nm, " << hamr::internal::head_position_y*0.1 << " nm" << std::endl;
 
             bit_tot++;
