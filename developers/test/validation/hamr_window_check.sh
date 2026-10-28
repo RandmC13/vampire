@@ -18,8 +18,11 @@
 #      and the statistics of one window run calculated from the spins on the
 #      host agree with the device statistics (largest difference below TOL,
 #      default 1e-10)
-#   3. the run times with and without the window
-#   4. with PERF=<seconds>: the speed on a 300 x 20 x 20 nm film (4.3 million
+#   3. window snapshots: one window run with spin snapshots every 5 ps, written
+#      as window snapshots and in full: the output is identical, and every
+#      snapshot rebuilt from the window snapshots is identical to the full one
+#   4. the run times with and without the window
+#   5. with PERF=<seconds>: the speed on a 300 x 20 x 20 nm film (4.3 million
 #      atoms), each run stopped after PERF seconds (600 is enough on a laptop GPU)
 #
 #    developers/test/validation/hamr_window_check.sh [vampire binary]
@@ -125,12 +128,47 @@ print(('PASS' if d <= tol else 'FAIL') + f' window statistics: device and host s
 sys.exit(int(d > tol))
 EOF
 
-# 3. run times
+# 3. window snapshots
+snapshots=(config:atoms "config:output-format = binary" "config:atoms-output-rate = 5000")
+run snap-window-1 full.mat 1 "hamr:active-window" "${snapshots[@]}"
+run snap-full-1 full.mat 1 "hamr:active-window" "hamr:active-window-full-snapshots" "${snapshots[@]}"
+python3 - "$work" << 'EOF' || fail=1
+import sys, os, re, numpy as np
+work = sys.argv[1]
+rows = lambda f: [l for l in open(f) if not l.startswith('#')]
+def series(run):
+    state, i = None, 0
+    while os.path.exists(meta := f'{run}/spins-{i:08d}.meta'):
+        text = open(meta).read()
+        data = f'{run}/' + re.search(r'^(spins-\S+\.data)$', text, re.M).group(1)
+        with open(data, 'rb') as f:
+            if 'Spin data: window' in text:
+                n, r = np.fromfile(f, np.uint64, 2)
+                ranges = np.fromfile(f, np.uint64, 2 * int(r)).astype(int).reshape(-1, 2)
+                s = np.fromfile(f, np.float64).reshape(-1, 3)
+                pos = np.concatenate([np.arange(a, a + c) for a, c in ranges]) if len(ranges) else []
+                state[pos] = s
+            else:
+                n = int(np.fromfile(f, np.uint64, 1)[0])
+                state = np.fromfile(f, np.float64).reshape(n, 3)
+        yield 'Spin data: window' in text, os.path.getsize(data), state.copy()
+        i += 1
+ok = all(rows(f'{work}/snap-window-1/{f}') == rows(f'{work}/snap-full-1/{f}') for f in ('output', 'grain.txt'))
+w, f = list(series(f'{work}/snap-window-1')), list(series(f'{work}/snap-full-1'))
+same = len(w) == len(f) and all(np.array_equal(a[2], b[2]) for a, b in zip(w, f))
+nw = sum(a[0] for a in w)
+print(('PASS' if ok and same and nw > 0 else 'FAIL') + f' window snapshots: {len(w)} snapshots ({nw} window), output '
+      f'{"identical" if ok else "differs"}, rebuilt snapshots {"identical" if same else "differ"}; spin data '
+      f'{sum(a[1] for a in w) / 1e6:.1f} MB instead of {sum(b[1] for b in f) / 1e6:.1f} MB')
+sys.exit(int(not (ok and same and nw > 0)))
+EOF
+
+# 4. run times
 for m in off window; do
    echo "$m: $(cat "$work"/$m-[0-9]*/seconds | awk '{t += $1} END {printf "%.1f s per run", t/NR}')"
 done
 
-# 4. speed (PERF=<seconds> per run): a 300 x 20 x 20 nm film (FePt 10 nm high,
+# 5. speed (PERF=<seconds> per run): a 300 x 20 x 20 nm film (FePt 10 nm high,
 #    sensor layer above, laser FWHM 30 nm), written for PERF seconds with and
 #    without the window; wall time per bit from the log, from bit 4 on (all
 #    grains are integrated for the first 10 ps)

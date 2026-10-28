@@ -19,6 +19,7 @@
 #include "atoms.hpp"
 #include "cells.hpp"
 #include "config.hpp"
+#include "hamr.hpp"
 #include "material.hpp"
 #include "sim.hpp"
 #include "stats.hpp"
@@ -36,13 +37,30 @@ namespace internal{
 //------------------------------------------------------------------------------
 // Function to output atomic spin positions to disk
 //------------------------------------------------------------------------------
-void atoms(){
+void atoms(const bool allow_window){
 
    // instantiate timer for total output time including overheads
    vutil::vtimer_t total_timer;
 
    // start timer
    total_timer.start();
+
+   //------------------------------------------
+   // With the HAMR active window only the atoms of grains integrated since the
+   // previous snapshot can have changed: write just those (window snapshot),
+   // in binary format and serial or single GPU runs
+   //------------------------------------------
+   bool window = false;
+   #ifndef MPICF
+      if(allow_window && hamr::window_snapshot_possible()){
+         if(config::internal::mode != legacy && config::internal::format == binary) window = true;
+         else{
+            static bool logged = false;
+            if(!logged) zlog << zTs() << "Spin snapshots are written in full with hamr:active-window: window snapshots need the binary format" << std::endl;
+            logged = true;
+         }
+      }
+   #endif
 
    //------------------------------------------
    // Output Meta Data
@@ -53,15 +71,32 @@ void atoms(){
    const double real_time = double(sim::time) * mp::dt_SI;
 
    if(config::internal::mode != legacy && vmpi::my_rank == 0){
-      write_meta(real_time, sim::temperature, sim::H_vec[0], sim::H_vec[1], sim::H_vec[2], sim::H_applied, magnetisation[0], magnetisation[1], magnetisation[2]);
+      write_meta(real_time, sim::temperature, sim::H_vec[0], sim::H_vec[1], sim::H_vec[2], sim::H_applied, magnetisation[0], magnetisation[1], magnetisation[2], window);
    }
 
    //------------------------------------------
    // Output spin data
    //------------------------------------------
 
-   // copy data to local buffer
-   copy_data_to_buffer(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array, local_output_atom_list, config::internal::local_buffer);
+   // copy data to local buffer: all output atoms, or for a window snapshot the changed ones as
+   // (first position, number) ranges of positions in the output order
+   std::vector<uint64_t> window_ranges;
+   std::vector<double> window_buffer;
+   if(window){
+      for(uint64_t p = 0; p < local_output_atom_list.size(); p++){
+         const uint64_t atom = local_output_atom_list[p];
+         if(!hamr::spin_changed_since_snapshot(atom)) continue;
+         if(!window_ranges.empty() && window_ranges[window_ranges.size() - 2] + window_ranges.back() == p) window_ranges.back()++;
+         else{
+            window_ranges.push_back(p);
+            window_ranges.push_back(1);
+         }
+         window_buffer.push_back(atoms::x_spin_array[atom]);
+         window_buffer.push_back(atoms::y_spin_array[atom]);
+         window_buffer.push_back(atoms::z_spin_array[atom]);
+      }
+   }
+   else copy_data_to_buffer(atoms::x_spin_array, atoms::y_spin_array, atoms::z_spin_array, local_output_atom_list, config::internal::local_buffer);
 
    // Determine output filename
    std::stringstream file_sstr;
@@ -147,8 +182,10 @@ void atoms(){
       //-----------------------------------------------------
       // Serial mode output (ignores most io directives)
       //-----------------------------------------------------
+      // window snapshot
+      if(window) io_time = write_window_data(filename, local_output_atom_list.size(), window_ranges, window_buffer);
       // check for legacy output
-      if(config::internal::mode == config::internal::legacy) io_time = config::internal::legacy_atoms();
+      else if(config::internal::mode == config::internal::legacy) io_time = config::internal::legacy_atoms();
       // otherwise use new one by default
       else io_time = write_data(filename, config::internal::local_buffer);
    #endif
@@ -157,7 +194,13 @@ void atoms(){
    total_timer.stop();
 
    // Output bandwidth to log file
-   zlog << config::internal::io_data_size/io_time << " GB/s in " << io_time << " s [ " << total_timer.elapsed_time() << " s]" << std::endl;
+   const double data_size = window ? 1.0e-9 * double(sizeof(double)) * double(window_buffer.size()) : config::internal::io_data_size;
+   zlog << data_size/io_time << " GB/s in " << io_time << " s [ " << total_timer.elapsed_time() << " s]";
+   if(window) zlog << " (window snapshot, " << window_buffer.size() / 3 << " atoms in " << window_ranges.size() / 2 << " ranges)";
+   zlog << std::endl;
+
+   // the spins of the next snapshot are compared with this one (HAMR active window)
+   hamr::snapshot_written();
 
    // increment file counter
    sim::output_atoms_file_counter++;

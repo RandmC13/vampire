@@ -123,6 +123,7 @@ namespace hamr{
       //-----------------------------------------------------------------------------
       extern bool active_window;      /// integrate only the grains near the head
       extern double active_window_dT; /// laser temperature rise (K) from which a grain is integrated
+      extern bool active_window_full_snapshots; /// write every spin snapshot in full with the window
       void initialize_active_window();
 
    } // end of internal namespace

@@ -117,7 +117,7 @@ void output(){ // should include variables for data to be outputted, eg spins, c
                 if(atoms::num_non_magnetic_atoms > 0) config::internal::atoms_non_magnetic();
 
              }
-            config::internal::atoms(); // call function to output spins coords
+            config::internal::atoms(true); // call function to output spins coords (a window snapshot if possible)
 
             //for Spin-lattice simulations - Modified by Mara Strungaru 2022
             if (config::internal::sld_format) config::internal::atoms_coords_sld();// call function to output coords for dynamic lattice calc
