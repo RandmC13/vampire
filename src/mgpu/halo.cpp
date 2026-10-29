@@ -79,9 +79,9 @@ namespace internal{
    //---------------------------------------------------------------------------
    void report_halo_times(){
 
-      const int n = 7;
+      const int n = 8;
       const double mine[n] = {double(vmpi::num_core_atoms + vmpi::num_bdry_atoms), double(num_recv), double(num_send),
-                              double(num_swaps), halo_copy_time(), mpi_time, halo_wait_time()};
+                              double(num_swaps), halo_copy_time(), mpi_time, halo_wait_time(), double(device_only_halo)};
       std::vector<double> all(n * vmpi::num_processors);
       MPI_Gather(mine, n, MPI_DOUBLE, all.data(), n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
       if(vmpi::my_rank != 0) return;
@@ -91,7 +91,9 @@ namespace internal{
       for(int p = 0; p < vmpi::num_processors; p++){
          const double* r = &all[n * p];
          report << "Multi-GPU rank " << p << ": " << uint64_t(r[0]) << " local atoms, " << uint64_t(r[1]) << " halo atoms received, "
-                << uint64_t(r[2]) << " sent; " << uint64_t(r[3]) << " halo updates: GPU copies " << r[4] << " s, MPI " << r[5] << " s, GPU waiting " << r[6] << " s\n";
+                << uint64_t(r[2]) << " sent; " << uint64_t(r[3]) << " halo updates: ";
+         if(r[7] != 0.0) report << "copied on the device, not timed\n";
+         else report << "GPU copies " << r[4] << " s, MPI " << r[5] << " s, GPU waiting " << r[6] << " s\n";
       }
       std::cout << report.str() << std::flush;
       zlog << zTs() << "Halo exchange times\n" << report.str() << std::flush;

@@ -51,6 +51,7 @@ cu::cu_real_t *d_recv_buffer = nullptr;
 // first, count.
 std::pair<int, int> self_send(0, 0), self_recv(0, 0);
 std::vector<std::pair<int, int>> remote_send, remote_recv;
+bool device_only_halo = false;
 
 // Function to return at most two ranges which represent all of the atoms not
 // present in the rank's own "segment" of data. If the rank's "segment" sits in
@@ -160,6 +161,7 @@ void allocate_device_halo(const std::vector<int> &send_atoms,
       remote_ranges(self_send.first, self_send.second, send_atoms.size());
   remote_recv =
       remote_ranges(self_recv.first, self_recv.second, recv_atoms.size());
+  device_only_halo = remote_send.empty() && remote_recv.empty();
   cudaStreamCreateWithFlags(&halo_stream, cudaStreamNonBlocking);
   cudaEventCreateWithFlags(&step_done, cudaEventDisableTiming);
   cudaEventCreate(&pack_start);
@@ -232,6 +234,19 @@ void start_halo() {
 }
 
 void finish_halo() {
+  if (device_only_halo) {
+    // every halo spin comes from this rank and was copied on the device, so the
+    // host need not wait: the unpack follows the copy on the halo stream (the
+    // updates are not timed, as their events are read only after a wait)
+    exchange_halo();
+    unpack_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
+        d_recv_atoms, num_recv, d_recv_buffer, cu::atoms::d_x_spin,
+        cu::atoms::d_y_spin, cu::atoms::d_z_spin);
+    check_cuda_errors(__FILE__, __LINE__);
+    cudaEventRecord(unpack_end, halo_stream);
+    cudaStreamWaitEvent(0, unpack_end, 0);
+    return;
+  }
   // everything launched on the default stream so far does not need halo spins
   // (recorded in a second event, as wait_start still times the last update)
   cudaEventRecord(next_wait_start, 0);
