@@ -38,6 +38,9 @@ namespace mgpu{
       // copies them to h_send_buffer; finish_halo() exchanges the buffers (MPI),
       // copies the received spins back to the device and makes the default
       // stream wait for them. Work launched in between overlaps the update.
+      // A rank whose halo spins all come from itself (device_only_halo) skips
+      // the host: the spins are copied on the device and the host does not wait.
+      extern bool device_only_halo;
       void start_halo();
       void finish_halo();
       double halo_copy_time(); // GPU time in seconds spent packing, unpacking and copying halo spins
