@@ -22,14 +22,19 @@ namespace mgpu{
       // send buffer, copied to pinned host memory and sent; received spins are
       // copied to the device and unpacked into the halo atoms listed in
       // vmpi::recv_atom_translation_array; the spins a rank sends to itself are
-      // copied on the device instead. Values are stored as x,y,z triplets
-      // in the precision of the CUDA build (cu_real_t).
+      // copied on the device from atom to atom instead. Values are stored as
+      // x,y,z triplets in the precision of the CUDA build (cu_real_t). With the
+      // HAMR active window only the atoms of grains integrated at the current
+      // or the previous step are copied (the others have not changed), so the
+      // buffers hold the selected atoms of each rank one after the other.
       //------------------------------------------------------------------------
       extern int num_send;        // number of atoms sent
       extern int num_recv;        // number of atoms received
       extern void* h_send_buffer; // pinned host buffers (3 values per atom)
       extern void* h_recv_buffer;
       extern int real_size;       // size of one value in bytes (8 or 4)
+      // first atom and number of atoms of each rank in the send and receive buffers
+      extern std::vector<int> peer_send_start, peer_send_num, peer_recv_start, peer_recv_num;
 
       // device side (kernels.cu)
       void allocate_device_halo(const std::vector<int>& send_atoms, const std::vector<int>& recv_atoms);
@@ -43,6 +48,7 @@ namespace mgpu{
       extern bool device_only_halo;
       void start_halo();
       void finish_halo();
+      void select_halo_atoms(); // chooses the halo atoms to copy when the HAMR active window changes
       double halo_copy_time(); // GPU time in seconds spent packing, unpacking and copying halo spins
       double halo_wait_time(); // GPU time in seconds the default stream waited for halo spins
 

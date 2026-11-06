@@ -12,6 +12,7 @@
 #define HAMR_H_
 
 // System headers
+#include <cstdint>
 #include <iosfwd>
 #include <string>
 #include <vector>
@@ -93,6 +94,8 @@ namespace hamr{
    bool active_window_requested(); // hamr:active-window set in the input (for the decomposition)
    bool active_window_enabled();
    const std::vector<int>& update_active_window();
+   bool atom_in_window(const int atom); // the atom (local or halo) belongs to a grain of the window
+   uint64_t window_changes();           // number of times the grains of the window have changed (same on every process)
 
    //-----------------------------------------------------------------------------
    // Spin snapshots with the active window: whether the next snapshot may hold

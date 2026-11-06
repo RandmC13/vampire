@@ -38,7 +38,8 @@ namespace internal{
    //---------------------------------------------------------------------------
    // Function to exchange the packed halo spins with the other ranks, with the
    // same messages as the MPI version (vmpi::mpi_init/complete_halo_swap) except
-   // when the spins are to be sent to their own rank, in which case they are copied on the device
+   // when the spins are to be sent to their own rank, in which case they are copied on the device,
+   // and with the HAMR active window, which leaves out the atoms that have not changed
    //---------------------------------------------------------------------------
    void exchange_halo(){
 
@@ -50,13 +51,13 @@ namespace internal{
       std::vector<MPI_Request> requests;
       for(int p = 0; p < vmpi::num_processors; p++){
          if(p == vmpi::my_rank) continue; // copied on the device (start_halo)
-         if(vmpi::send_num_array[p] != 0){
+         if(peer_send_num[p] != 0){
             requests.push_back(MPI_REQUEST_NULL);
-            MPI_Isend(send + 3 * vmpi::send_start_index_array[p] * real_size, 3 * vmpi::send_num_array[p], type, p, 48, MPI_COMM_WORLD, &requests.back());
+            MPI_Isend(send + 3 * peer_send_start[p] * real_size, 3 * peer_send_num[p], type, p, 48, MPI_COMM_WORLD, &requests.back());
          }
-         if(vmpi::recv_num_array[p] != 0){
+         if(peer_recv_num[p] != 0){
             requests.push_back(MPI_REQUEST_NULL);
-            MPI_Irecv(recv + 3 * vmpi::recv_start_index_array[p] * real_size, 3 * vmpi::recv_num_array[p], type, p, 48, MPI_COMM_WORLD, &requests.back());
+            MPI_Irecv(recv + 3 * peer_recv_start[p] * real_size, 3 * peer_recv_num[p], type, p, 48, MPI_COMM_WORLD, &requests.back());
          }
       }
       MPI_Waitall(requests.size(), requests.data(), MPI_STATUSES_IGNORE);
