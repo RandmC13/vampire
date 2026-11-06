@@ -61,6 +61,7 @@ namespace hamr{
       std::vector<char> grain_changed;  // grain integrated since the last spin snapshot
       bool snapshot_in_window = false;  // a spin snapshot was written while the window was running
       uint64_t window_hold_steps = 0;
+      uint64_t num_window_changes = 0;
       bool window_initialised = false;
 
       bool is_magnetic(const int atom){
@@ -77,6 +78,7 @@ namespace hamr{
       }
 
       void rebuild_active_ranges(){
+         num_window_changes++;
          active_ranges.clear();
          bool in_range = false;
          const int num_local = num_owned_atoms();
@@ -209,6 +211,14 @@ namespace hamr{
       if(!internal::window_initialised) return;
       internal::snapshot_in_window = true;
       std::fill(internal::grain_changed.begin(), internal::grain_changed.end(), 0);
+   }
+
+   uint64_t window_changes(){
+      return internal::num_window_changes;
+   }
+
+   bool atom_in_window(const int atom){
+      return internal::is_magnetic(atom) && internal::grain_active[atoms::grain_array[atom]];
    }
 
    // marks the grains integrated at the current step as changed since the last snapshot

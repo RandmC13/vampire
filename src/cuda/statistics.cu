@@ -9,6 +9,7 @@
 
 // C++ standard library headers
 #include <algorithm>
+#include <deque>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -51,13 +52,17 @@ namespace {
    //
    // The partial sums are kept on the device in a buffer of ring_slots slots
    // (the ring), each slot holding the partial sums of every chunk for one
-   // time step: the first step after a copy to the host writes slot 0, the
-   // next slot 1, and so on. The used slots are copied to the host in one
-   // transfer when all slots are used or when the statistics are read
-   // (gpu::stats::get, reset, config and checkpoint output), and the next step
-   // starts again at slot 0. The host then processes the steps in order with
-   // the same arithmetic as a per-step update, so the statistics are
-   // unchanged, but the host does not wait for the device at every step.
+   // time step; successive steps write successive slots, going round the
+   // ring. Every batch_steps steps, and when the statistics are read
+   // (gpu::stats::get, reset, config and checkpoint output), the slots
+   // written since the last copy (a batch) are copied to the same slots of a
+   // pinned host copy of the ring, without waiting. The host processes the
+   // batches in order with the same arithmetic as a per-step update, so the
+   // statistics are unchanged: when a batch is copied while two older ones
+   // are waiting, the oldest is processed (its copy has normally finished,
+   // and the device still has later steps to work on), and reading the
+   // statistics processes all of them. The batches are processed at the same
+   // steps on every process, since the statistics are summed over processes.
    // Code reading the statistics during a simulation must call
    // gpu::stats::get() first.
    //
@@ -79,12 +84,14 @@ namespace {
    const int chunk_size = 2048;
    const int reduction_block_size = 256;
    const int ring_slots = 64;
+   const int batch_steps = 16;    // steps per copy to the host
+   const int batches_waiting = 2; // batches copied but not processed, at most
 
    struct device_magnetization_t{
       ::stats::magnetization_statistic_t* statistic;
       int num_chunks;
       std::vector<int> chunk_mask_id; // mask id of each chunk
-      std::vector<double> h_partial;  // partial sums (mx, my, mz, m) of each chunk for each slot
+      double* h_partial = nullptr;    // pinned host copy of the ring: partial sums (mx, my, mz, m) of each chunk for each slot
       std::vector<double> sums;       // sums (mx, my, mz, m) of each mask id
       int source = -1;                // finer statistic the sums are added from (-1: summed on the device)
       std::vector<int> source_mask_id;// mask id of each mask id of the source (-1: no atoms)
@@ -104,7 +111,22 @@ namespace {
    std::vector<device_magnetization_t> device_statistics;
    bool device_statistics_initialised = false;
    bool fallback_logged = false;
-   int pending_steps = 0; // steps summed on the device but not yet processed on the host
+   int pending_steps = 0; // steps summed on the device but not yet copied to the host
+   int copied_steps = 0;  // steps copied to the host but not yet processed
+   int first_slot = 0;    // slot of the oldest step not yet processed
+
+   // a batch of steps copied to the host; done is recorded after its copies
+   struct batch_t{
+      int steps;
+      cudaEvent_t done;
+   };
+   std::deque<batch_t> batches;
+   std::vector<cudaEvent_t> free_events;
+
+   // slot of the step being summed
+   int current_slot(){
+      return (first_slot + copied_steps + pending_steps) % ring_slots;
+   }
 
    //---------------------------------------------------------------------------
    // Function to stop if a kernel has failed. Release builds do not check each
@@ -207,12 +229,12 @@ namespace {
       }
       chunk_start.push_back(num_atoms);
       dm.num_chunks = dm.chunk_mask_id.size();
-      dm.h_partial.resize(ring_slots * 4 * dm.num_chunks);
+      cudaMallocHost((void**)&dm.h_partial, ring_slots * 4 * dm.num_chunks * sizeof(double));
 
       cudaMalloc((void**)&dm.d_atom, num_atoms * sizeof(int));
       cudaMalloc((void**)&dm.d_moment, num_atoms * sizeof(double));
       cudaMalloc((void**)&dm.d_chunk_start, chunk_start.size() * sizeof(int));
-      cudaMalloc((void**)&dm.d_partial, dm.h_partial.size() * sizeof(double));
+      cudaMalloc((void**)&dm.d_partial, ring_slots * 4 * dm.num_chunks * sizeof(double));
       cudaMemcpy(dm.d_atom, atom_order.data(), num_atoms * sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(dm.d_moment, moment.data(), num_atoms * sizeof(double), cudaMemcpyHostToDevice);
       cudaMemcpy(dm.d_chunk_start, chunk_start.data(), chunk_start.size() * sizeof(int), cudaMemcpyHostToDevice);
@@ -348,43 +370,93 @@ namespace {
    }
 
    //---------------------------------------------------------------------------
-   // Function to process, in order, the steps summed on the device since the
-   // last call, as a per-step update would have done
+   // Function to process one step from its slot of the host copy of the ring,
+   // as a per-step update would have done
    //---------------------------------------------------------------------------
-   void process_pending_steps(){
+   void process_step(const int slot){
+
+      for(device_magnetization_t& dm : device_statistics){
+         if(dm.source != -1) continue;
+         // add chunks in a fixed order
+         const double* partial = dm.h_partial + slot * 4 * dm.num_chunks;
+         std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
+         for(int c = 0; c < dm.num_chunks; c++){
+            for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += partial[4 * c + k];
+         }
+      }
+      for(device_magnetization_t& dm : device_statistics){
+         if(dm.source == -1) continue;
+         // add the sums of the finer statistic in a fixed order
+         const std::vector<double>& fine = device_statistics[dm.source].sums;
+         std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
+         for(size_t f = 0; f < dm.source_mask_id.size(); f++){
+            const int id = dm.source_mask_id[f];
+            if(id != -1) for(int k = 0; k < 4; k++) dm.sums[4 * id + k] += fine[4 * f + k];
+         }
+      }
+      for(device_magnetization_t& dm : device_statistics) dm.statistic->calculate_magnetization_from_sums(dm.sums);
+      update_derived_statistics();
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to process the oldest batch once its copies have finished
+   //---------------------------------------------------------------------------
+   void process_oldest_batch(){
+
+      const batch_t batch = batches.front();
+      batches.pop_front();
+      cudaEventSynchronize(batch.done);
+      free_events.push_back(batch.done);
+      check_device_errors();
+
+      for(int step = 0; step < batch.steps; step++){
+         process_step(first_slot);
+         first_slot = (first_slot + 1) % ring_slots;
+      }
+      copied_steps -= batch.steps;
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to start transferring the steps summed since the last transfer
+   // (a batch) to the host's ring, without waiting for it to finish
+   //---------------------------------------------------------------------------
+   void copy_pending_steps(){
 
       if(pending_steps == 0) return;
 
+      // the batch may wrap round the end of the ring
+      const int first = (first_slot + copied_steps) % ring_slots;
+      const int part = std::min(pending_steps, ring_slots - first);
       for(device_magnetization_t& dm : device_statistics){
-         if(dm.num_chunks > 0) cudaMemcpy(dm.h_partial.data(), dm.d_partial, pending_steps * 4 * dm.num_chunks * sizeof(double), cudaMemcpyDeviceToHost);
-      }
-      check_device_errors();
-
-      for(int step = 0; step < pending_steps; step++){
-         for(device_magnetization_t& dm : device_statistics){
-            if(dm.source != -1) continue;
-            // add chunks in a fixed order
-            const double* partial = dm.h_partial.data() + step * 4 * dm.num_chunks;
-            std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
-            for(int c = 0; c < dm.num_chunks; c++){
-               for(int k = 0; k < 4; k++) dm.sums[4 * dm.chunk_mask_id[c] + k] += partial[4 * c + k];
-            }
-         }
-         for(device_magnetization_t& dm : device_statistics){
-            if(dm.source == -1) continue;
-            // add the sums of the finer statistic in a fixed order
-            const std::vector<double>& fine = device_statistics[dm.source].sums;
-            std::fill(dm.sums.begin(), dm.sums.end(), 0.0);
-            for(size_t f = 0; f < dm.source_mask_id.size(); f++){
-               const int id = dm.source_mask_id[f];
-               if(id != -1) for(int k = 0; k < 4; k++) dm.sums[4 * id + k] += fine[4 * f + k];
-            }
-         }
-         for(device_magnetization_t& dm : device_statistics) dm.statistic->calculate_magnetization_from_sums(dm.sums);
-         update_derived_statistics();
+         if(dm.num_chunks == 0) continue;
+         const size_t slot_size = 4 * dm.num_chunks;
+         cudaMemcpyAsync(dm.h_partial + first * slot_size, dm.d_partial + first * slot_size, part * slot_size * sizeof(double), cudaMemcpyDeviceToHost, 0);
+         if(part < pending_steps) cudaMemcpyAsync(dm.h_partial, dm.d_partial, (pending_steps - part) * slot_size * sizeof(double), cudaMemcpyDeviceToHost, 0);
       }
 
+      batch_t batch;
+      batch.steps = pending_steps;
+      if(free_events.empty()) cudaEventCreateWithFlags(&batch.done, cudaEventDisableTiming);
+      else{
+         batch.done = free_events.back();
+         free_events.pop_back();
+      }
+      cudaEventRecord(batch.done, 0);
+      batches.push_back(batch);
+      copied_steps += pending_steps;
       pending_steps = 0;
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to process, in order, all steps summed on the device so far
+   //---------------------------------------------------------------------------
+   void process_pending_steps(){
+
+      copy_pending_steps();
+      while(!batches.empty()) process_oldest_batch();
 
    }
 
@@ -415,7 +487,7 @@ namespace {
       for(int c = 0; c < dm.num_chunks; c++){
          if(dm.chunk_active[c]) dm.slots_written[c] = 0;
          else if(dm.slots_written[c] == all_slots) continue;
-         else dm.slots_written[c] |= uint64_t(1) << pending_steps;
+         else dm.slots_written[c] |= uint64_t(1) << current_slot();
          summed.push_back(c);
       }
       // copy the list to the device only when it has changed (rarely: when the window moves)
@@ -449,7 +521,7 @@ namespace {
             if(num_blocks > 0) sum_magnetization_kernel <<< num_blocks, reduction_block_size >>> (
                dm.d_atom, dm.d_moment, dm.d_chunk_start,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
-               dm.d_partial + pending_steps * 4 * dm.num_chunks, chunks);
+               dm.d_partial + current_slot() * 4 * dm.num_chunks, chunks);
             check_cuda_errors(__FILE__, __LINE__);
          }
       }
@@ -457,7 +529,10 @@ namespace {
       window_version_seen = cu::active_window_version;
       pending_steps++;
 
-      if(pending_steps == ring_slots) process_pending_steps();
+      if(pending_steps == batch_steps){
+         copy_pending_steps();
+         if(batches.size() > batches_waiting) process_oldest_batch();
+      }
 
    }
 
@@ -597,10 +672,15 @@ namespace stats{
                cudaFree(dm.d_moment);
                cudaFree(dm.d_chunk_start);
                cudaFree(dm.d_partial);
+               cudaFreeHost(dm.h_partial);
                cudaFree(dm.d_summed_chunks);
             }
             device_statistics.clear();
+            for(cudaEvent_t event : free_events) cudaEventDestroy(event);
+            free_events.clear();
             pending_steps = 0;
+            copied_steps = 0;
+            first_slot = 0;
             device_statistics_initialised = false;
          }
       } /* stats */
