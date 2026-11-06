@@ -17,6 +17,7 @@
 // Vampire headers
 #include "atoms.hpp"
 #include "errors.hpp"
+#include "hamr.hpp"
 #include "material.hpp"
 #include "mgpu.hpp"
 #include "vio.hpp"
@@ -39,35 +40,26 @@ namespace mgpu {
 
 namespace internal {
 
-// device copies of the halo atom lists and packed spins
+// Halo spins a rank sends to itself (periodic boundaries in a direction that
+// is not divided between ranks) are copied on the device from their source
+// atom (d_self_source) to the halo atom (d_self_halo); only the spins of the
+// other ranks go through the host: the atoms sent (d_send_atoms) are packed
+// into d_send_buffer, and the atoms received (d_recv_atoms) are unpacked from
+// d_recv_buffer.
+int *d_self_source = nullptr;
+int *d_self_halo = nullptr;
 int *d_send_atoms = nullptr;
 int *d_recv_atoms = nullptr;
 cu::cu_real_t *d_send_buffer = nullptr;
 cu::cu_real_t *d_recv_buffer = nullptr;
-
-// Halo spins a rank will end up sending to itself (periodic boundaries in a
-// direction that is not divided between ranks) are copied on the device; only
-// the spins of the other ranks go through the host. Buffer ranges are in atoms:
-// first, count.
-std::pair<int, int> self_send(0, 0), self_recv(0, 0);
-std::vector<std::pair<int, int>> remote_send, remote_recv;
+int num_self = 0, num_remote_send = 0, num_remote_recv = 0; // atoms currently copied
 bool device_only_halo = false;
+std::vector<int> peer_send_start, peer_send_num, peer_recv_start, peer_recv_num;
 
-// Function to return at most two ranges which represent all of the atoms not
-// present in the rank's own "segment" of data. If the rank's "segment" sits in
-// the middle of the array of atoms then the function returns two ranges: the
-// range of atoms before the rank's own atoms, and the range of atoms after.
-// This is useful to know which atoms require halo exchange to other ranks.
-std::vector<std::pair<int, int>>
-remote_ranges(const int self_start, const int self_count, const int total) {
-  std::vector<std::pair<int, int>> ranges;
-  if (self_start > 0)
-    ranges.push_back(std::make_pair(0, self_start));
-  if (self_start + self_count < total)
-    ranges.push_back(std::make_pair(self_start + self_count,
-                                    total - self_start - self_count));
-  return ranges;
-}
+// full halo lists, and for each entry whether its atom was integrated at the
+// last choice of atoms (select_halo_atoms)
+std::vector<int> all_send_atoms, all_recv_atoms;
+std::vector<char> send_integrated, recv_integrated;
 
 // Stream for the halo update.
 cudaStream_t halo_stream;
@@ -105,6 +97,20 @@ __global__ void pack_spins_kernel(const int *atoms, const int n,
   }
 }
 
+// copies the spins of the source atoms to their halo atoms
+__global__ void copy_spins_kernel(const int *source, const int *halo,
+                                  const int n, cu::cu_real_t *x,
+                                  cu::cu_real_t *y, cu::cu_real_t *z) {
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n;
+       i += blockDim.x * gridDim.x) {
+    const int from = source[i];
+    const int to = halo[i];
+    x[to] = x[from];
+    y[to] = y[from];
+    z[to] = z[from];
+  }
+}
+
 __global__ void unpack_spins_kernel(const int *atoms, const int n,
                                     const cu::cu_real_t *buffer,
                                     cu::cu_real_t *x, cu::cu_real_t *y,
@@ -134,6 +140,10 @@ void allocate_device_halo(const std::vector<int> &send_atoms,
                           const std::vector<int> &recv_atoms) {
 
   real_size = sizeof(cu::cu_real_t);
+  cudaMalloc((void **)&d_self_source,
+             std::max<size_t>(send_atoms.size(), 1) * sizeof(int));
+  cudaMalloc((void **)&d_self_halo,
+             std::max<size_t>(recv_atoms.size(), 1) * sizeof(int));
   cudaMalloc((void **)&d_send_atoms,
              std::max<size_t>(send_atoms.size(), 1) * sizeof(int));
   cudaMalloc((void **)&d_recv_atoms,
@@ -148,20 +158,19 @@ void allocate_device_halo(const std::vector<int> &send_atoms,
                                      sizeof(cu::cu_real_t));
   cudaMallocHost(&h_recv_buffer, std::max<size_t>(3 * recv_atoms.size(), 1) *
                                      sizeof(cu::cu_real_t));
-  cudaMemcpy(d_send_atoms, send_atoms.data(), send_atoms.size() * sizeof(int),
-             cudaMemcpyHostToDevice);
-  cudaMemcpy(d_recv_atoms, recv_atoms.data(), recv_atoms.size() * sizeof(int),
-             cudaMemcpyHostToDevice);
   const int me = vmpi::my_rank;
-  self_send = std::make_pair(vmpi::send_start_index_array[me],
-                             vmpi::send_num_array[me]);
-  self_recv = std::make_pair(vmpi::recv_start_index_array[me],
-                             vmpi::recv_num_array[me]);
-  remote_send =
-      remote_ranges(self_send.first, self_send.second, send_atoms.size());
-  remote_recv =
-      remote_ranges(self_recv.first, self_recv.second, recv_atoms.size());
-  device_only_halo = remote_send.empty() && remote_recv.empty();
+  if (vmpi::send_num_array[me] != vmpi::recv_num_array[me])
+    err::fatal("Error: rank " + std::to_string(me) +
+               " sends a different number of halo atoms to itself than it "
+               "receives");
+  device_only_halo =
+      vmpi::send_num_array[me] == int(send_atoms.size()) &&
+      vmpi::recv_num_array[me] == int(recv_atoms.size());
+  all_send_atoms = send_atoms;
+  all_recv_atoms = recv_atoms;
+  send_integrated.assign(send_atoms.size(), 1);
+  recv_integrated.assign(recv_atoms.size(), 1);
+  select_halo_atoms();
   cudaStreamCreateWithFlags(&halo_stream, cudaStreamNonBlocking);
   cudaEventCreateWithFlags(&step_done, cudaEventDisableTiming);
   cudaEventCreate(&pack_start);
@@ -188,15 +197,100 @@ void free_device_halo() {
   cudaEventDestroy(wait_start);
   cudaEventDestroy(wait_end);
   cudaEventDestroy(next_wait_start);
+  cudaFree(d_self_source);
+  cudaFree(d_self_halo);
   cudaFree(d_send_atoms);
   cudaFree(d_recv_atoms);
   cudaFree(d_send_buffer);
   cudaFree(d_recv_buffer);
   cudaFreeHost(h_send_buffer);
   cudaFreeHost(h_recv_buffer);
-  d_send_atoms = d_recv_atoms = nullptr;
+  d_self_source = d_self_halo = d_send_atoms = d_recv_atoms = nullptr;
   d_send_buffer = d_recv_buffer = nullptr;
   h_send_buffer = h_recv_buffer = nullptr;
+}
+
+//---------------------------------------------------------------------------
+// Function to choose the halo atoms to copy. Without the HAMR active window
+// every atom is copied. With it, a halo atom is copied while the grain of its
+// atom is integrated, and at the step after the grain leaves the window, as
+// its last corrector step changed the spin after the last copy; any other
+// halo spin equals its source spin already. The grains are the same on every
+// rank, so the sender and the receiver of each spin make the same choice.
+//---------------------------------------------------------------------------
+void select_halo_atoms() {
+
+  const bool window = cu::d_active_atoms != nullptr;
+  const int me = vmpi::my_rank;
+  std::vector<int> self_source, self_halo, send, recv;
+  peer_send_start.assign(vmpi::num_processors, 0);
+  peer_send_num.assign(vmpi::num_processors, 0);
+  peer_recv_start.assign(vmpi::num_processors, 0);
+  peer_recv_num.assign(vmpi::num_processors, 0);
+
+  for (int p = 0; p < vmpi::num_processors; p++) {
+    peer_send_start[p] = send.size();
+    const int first = vmpi::send_start_index_array[p];
+    for (int i = first; i < first + vmpi::send_num_array[p]; i++) {
+      const char integrated = !window || hamr::atom_in_window(all_send_atoms[i]);
+      const bool copy = integrated || send_integrated[i];
+      send_integrated[i] = integrated;
+      if (!copy)
+        continue;
+      if (p == me) {
+        self_source.push_back(all_send_atoms[i]);
+        self_halo.push_back(
+            all_recv_atoms[vmpi::recv_start_index_array[me] + i - first]);
+      } else
+        send.push_back(all_send_atoms[i]);
+    }
+    peer_send_num[p] = send.size() - peer_send_start[p];
+
+    peer_recv_start[p] = recv.size();
+    if (p == me)
+      continue;
+    const int first_recv = vmpi::recv_start_index_array[p];
+    for (int i = first_recv; i < first_recv + vmpi::recv_num_array[p]; i++) {
+      const char integrated = !window || hamr::atom_in_window(all_recv_atoms[i]);
+      const bool copy = integrated || recv_integrated[i];
+      recv_integrated[i] = integrated;
+      if (copy)
+        recv.push_back(all_recv_atoms[i]);
+    }
+    peer_recv_num[p] = recv.size() - peer_recv_start[p];
+  }
+
+  // the last halo update has finished reading the lists: the default stream
+  // waited for it, and the next update waits for this copy
+  num_self = self_source.size();
+  num_remote_send = send.size();
+  num_remote_recv = recv.size();
+  cudaMemcpy(d_self_source, self_source.data(), num_self * sizeof(int),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_self_halo, self_halo.data(), num_self * sizeof(int),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_send_atoms, send.data(), num_remote_send * sizeof(int),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_recv_atoms, recv.data(), num_remote_recv * sizeof(int),
+             cudaMemcpyHostToDevice);
+  check_cuda_errors(__FILE__, __LINE__);
+}
+
+// chooses the halo atoms again when the grains of the window have changed at
+// this or the previous step (counted by the hamr module, so that every rank
+// chooses again at the same step, also when its own atoms are unaffected)
+void update_halo_selection() {
+  static bool window_seen = false;
+  static uint64_t changes_seen = 0;
+  static bool changed_last_step = false;
+  const bool window = cu::d_active_atoms != nullptr;
+  const bool changed = window != window_seen ||
+                       (window && hamr::window_changes() != changes_seen);
+  if (changed || changed_last_step)
+    select_halo_atoms();
+  window_seen = window;
+  changes_seen = hamr::window_changes();
+  changed_last_step = changed;
 }
 
 // adds the times of the last update once it has finished
@@ -215,19 +309,19 @@ void start_halo() {
   if (num_send == 0)
     return;
   cudaEventRecord(pack_start, halo_stream);
-  pack_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
-      d_send_atoms, num_send, cu::atoms::d_x_spin, cu::atoms::d_y_spin,
-      cu::atoms::d_z_spin, d_send_buffer);
-  check_cuda_errors(__FILE__, __LINE__);
-  const size_t value = 3 * sizeof(cu::cu_real_t);
-  if (self_send.second != 0)
-    cudaMemcpyAsync(d_recv_buffer + 3 * self_recv.first,
-                    d_send_buffer + 3 * self_send.first,
-                    self_send.second * value, cudaMemcpyDeviceToDevice,
-                    halo_stream);
-  for (const std::pair<int, int> &r : remote_send) {
-    cudaMemcpyAsync(static_cast<char *>(h_send_buffer) + r.first * value,
-                    d_send_buffer + 3 * r.first, r.second * value,
+  if (num_self != 0) {
+    copy_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
+        d_self_source, d_self_halo, num_self, cu::atoms::d_x_spin,
+        cu::atoms::d_y_spin, cu::atoms::d_z_spin);
+    check_cuda_errors(__FILE__, __LINE__);
+  }
+  if (num_remote_send != 0) {
+    pack_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
+        d_send_atoms, num_remote_send, cu::atoms::d_x_spin,
+        cu::atoms::d_y_spin, cu::atoms::d_z_spin, d_send_buffer);
+    check_cuda_errors(__FILE__, __LINE__);
+    cudaMemcpyAsync(h_send_buffer, d_send_buffer,
+                    3 * num_remote_send * sizeof(cu::cu_real_t),
                     cudaMemcpyDeviceToHost, halo_stream);
   }
   cudaEventRecord(pack_end, halo_stream);
@@ -236,13 +330,9 @@ void start_halo() {
 void finish_halo() {
   if (device_only_halo) {
     // every halo spin comes from this rank and was copied on the device, so the
-    // host need not wait: the unpack follows the copy on the halo stream (the
-    // updates are not timed, as their events are read only after a wait)
+    // host need not wait (the updates are not timed, as their events are read
+    // only after a wait)
     exchange_halo();
-    unpack_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
-        d_recv_atoms, num_recv, d_recv_buffer, cu::atoms::d_x_spin,
-        cu::atoms::d_y_spin, cu::atoms::d_z_spin);
-    check_cuda_errors(__FILE__, __LINE__);
     cudaEventRecord(unpack_end, halo_stream);
     cudaStreamWaitEvent(0, unpack_end, 0);
     return;
@@ -257,16 +347,13 @@ void finish_halo() {
   add_pending_times();
   std::swap(wait_start, next_wait_start);
   exchange_halo();
-  if (num_recv != 0) {
+  if (num_remote_recv != 0) {
     cudaEventRecord(unpack_start, halo_stream);
-    const size_t value = 3 * sizeof(cu::cu_real_t);
-    for (const std::pair<int, int> &r : remote_recv) {
-      cudaMemcpyAsync(d_recv_buffer + 3 * r.first,
-                      static_cast<char *>(h_recv_buffer) + r.first * value,
-                      r.second * value, cudaMemcpyHostToDevice, halo_stream);
-    }
+    cudaMemcpyAsync(d_recv_buffer, h_recv_buffer,
+                    3 * num_remote_recv * sizeof(cu::cu_real_t),
+                    cudaMemcpyHostToDevice, halo_stream);
     unpack_spins_kernel<<<cu::grid_size, cu::block_size, 0, halo_stream>>>(
-        d_recv_atoms, num_recv, d_recv_buffer, cu::atoms::d_x_spin,
+        d_recv_atoms, num_remote_recv, d_recv_buffer, cu::atoms::d_x_spin,
         cu::atoms::d_y_spin, cu::atoms::d_z_spin);
     check_cuda_errors(__FILE__, __LINE__);
   } else
@@ -383,8 +470,9 @@ void llg_heun() {
 
   const size_t num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
 
-  // atoms to integrate (HAMR active window)
+  // atoms to integrate (HAMR active window) and halo atoms to copy
   cu::update_active_atoms();
+  internal::update_halo_selection();
 
   // fields at the start of the step
   internal::update_fields(true);
