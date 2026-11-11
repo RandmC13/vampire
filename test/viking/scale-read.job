@@ -21,6 +21,8 @@ stage_dir read $dir
 cp $S/write-$KIND/vampire0.chk $dir/
 cd $dir
 start=$(date +%s)
-mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $S/bin/vampire-parallel > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+# bound to cores, but allowed to share one where the job's CPUs are hardware threads of fewer cores
+# (a part of a node, as in the dry run); whole nodes get one rank per core as before
+mpirun --bind-to core:overload-allowed -np $SLURM_NTASKS $SAMPLE $S/bin/vampire-parallel > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
 echo "read ($KIND): $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
 rm -f vampire*.chk   # copy of the write's checkpoint
