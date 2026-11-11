@@ -124,7 +124,8 @@ bundle is compared with the raw files by hamrvis's independent reader
 `hamr-vis` branch of `origin` (or the commit given as the second argument), vampire from this
 checkout. Results in `$WORK/h3/scale`: `bundle-window/`, `bundle-full/`, `check-*.log` and
 `check-*.json`, and the run times (the write times also measure the current version on one H100).
-`scale-collect.sh` packs the small files and prints the `rsync` commands that copy the bundles
+The dry run uses the nodes and gpu partitions with 30 minute limits, as the test and gpu_short
+partitions allow too few jobs per user for the chain. `scale-collect.sh` packs the small files and prints the `rsync` commands that copy the bundles
 home, where hamrvis's viewer tests pick them up from `bundles/h3-scale-window` and
 `bundles/h3-scale-full`.
 

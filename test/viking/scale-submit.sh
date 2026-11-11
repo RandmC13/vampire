@@ -19,8 +19,10 @@
 #   scale-reduce full
 #
 # The raw files stay in $WORK/h3/scale until the checks have run. With --dry-run
-# the same jobs run on a 24 x 24 x 20 nm system on the test and gpu_short
-# partitions (A40), to check the chain before the full run.
+# the same jobs run on a 24 x 24 x 20 nm system with 30 minute limits on the
+# nodes and gpu (A40) partitions (the test and gpu_short partitions allow too
+# few jobs per user for the chain), to check it before the full run. If a
+# submission fails, the jobs already submitted are cancelled.
 #
 # Usage (from the vampire checkout on a Viking login node):
 #   test/viking/scale-submit.sh [--dry-run] [vampire commit] [hamrvis commit]
@@ -68,9 +70,9 @@ echo "vampire $commit, hamrvis $hv, results in $S"
 exp="--export=ALL,REPO=$REPO,WORK=$WORK,H3_DRY=$dry"
 opts="--parsable --output=$S/logs/%x-%j.log"
 if [ $dry = 1 ]; then
-   cpu="--partition=test --time=00:30:00"
-   gpu="--partition=gpu_short --time=00:30:00"
-   read="--partition=test --nodes=1 --ntasks-per-node=8 --time=00:30:00"
+   cpu="--partition=nodes --time=00:30:00"
+   gpu="--partition=gpu --time=00:30:00"
+   read="--partition=nodes --nodes=1 --ntasks-per-node=8 --time=00:30:00"
    small="--cpus-per-task=8 --mem=16G"
 else
    cpu="--partition=nodes"
@@ -78,13 +80,21 @@ else
    read="--partition=nodes --nodes=2 --ntasks-per-node=96 --time=01:00:00"
    small=""
 fi
-build=$(sbatch $opts $exp $cpu $small $([ $dry = 1 ] || echo --time=01:00:00) scale-build.job)
-relax=$(sbatch $opts $exp $gpu $([ $dry = 1 ] || echo --time=02:00:00) --dependency=afterok:$build scale-relax.job)
+# submit <sbatch arguments>: prints the job id; if sbatch fails, cancels the jobs of this chain submitted so far
+submit(){
+   local id
+   id=$(sbatch "$@") || { echo "Submission failed: cancelling the jobs of this chain submitted so far: $(tr '\n' ' ' < $S/jobs.txt)" >&2; [ -s $S/jobs.txt ] && scancel $(cat $S/jobs.txt); exit 1; }
+   echo $id >> $S/jobs.txt
+   echo $id
+}
+: > $S/jobs.txt
+build=$(submit $opts $exp $cpu $small $([ $dry = 1 ] || echo --time=01:00:00) scale-build.job)
+relax=$(submit $opts $exp $gpu $([ $dry = 1 ] || echo --time=02:00:00) --dependency=afterok:$build scale-relax.job)
 for kind in window full; do
    t=$([ $kind = window ] && echo 03:00:00 || echo 04:00:00)
-   write=$(sbatch $opts $exp,KIND=$kind $gpu $([ $dry = 1 ] || echo --time=$t) --job-name=vampire-scale-write-$kind --dependency=afterok:$relax scale-write.job)
-   rd=$(sbatch $opts $exp,KIND=$kind $read --job-name=vampire-scale-read-$kind --dependency=afterok:$write scale-read.job)
-   red=$(sbatch $opts $exp,KIND=$kind $cpu $small $([ $dry = 1 ] || echo --time=04:00:00) --job-name=vampire-scale-reduce-$kind --dependency=afterok:$rd scale-reduce.job)
+   write=$(submit $opts $exp,KIND=$kind $gpu $([ $dry = 1 ] || echo --time=$t) --job-name=vampire-scale-write-$kind --dependency=afterok:$relax scale-write.job)
+   rd=$(submit $opts $exp,KIND=$kind $read --job-name=vampire-scale-read-$kind --dependency=afterok:$write scale-read.job)
+   red=$(submit $opts $exp,KIND=$kind $cpu $small $([ $dry = 1 ] || echo --time=04:00:00) --job-name=vampire-scale-reduce-$kind --dependency=afterok:$rd scale-reduce.job)
    echo "$kind: write $write, read $rd, reduce + check $red"
 done
 echo "build $build, relax $relax"
