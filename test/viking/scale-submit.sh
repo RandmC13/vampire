@@ -29,7 +29,9 @@
 #     vampire commit   default HEAD of this checkout
 #     hamrvis commit   default the hamr-vis branch of origin (fetched)
 # Environment: WORK (default ~/scratch/vampire-benchmarks; not on the file
-# system of the home directory), MODULES.
+# system of the home directory), MODULES, GPU_PARTITION (gpuplus, the default:
+# one H100 per GPU job; or gpu: one A40 per GPU job, about three times slower on
+# this write, with time limits to match).
 #------------------------------------------------------------------------------
 set -eu
 cd "$(dirname "$0")"
@@ -76,7 +78,7 @@ if [ $dry = 1 ]; then
    small="--cpus-per-task=8 --mem=16G"
 else
    cpu="--partition=nodes"
-   gpu="--partition=gpuplus"
+   gpu="--partition=${GPU_PARTITION:-gpuplus}"
    read="--partition=nodes --nodes=2 --ntasks-per-node=96 --time=01:00:00"
    small=""
 fi
@@ -89,9 +91,13 @@ submit(){
 }
 : > $S/jobs.txt
 build=$(submit $opts $exp $cpu $small $([ $dry = 1 ] || echo --time=01:00:00) scale-build.job)
-relax=$(submit $opts $exp $gpu $([ $dry = 1 ] || echo --time=02:00:00) --dependency=afterok:$build scale-relax.job)
+# time limits for one H100 (relax ~26 min, window write ~1 h, full write ~1.5 h); one A40 takes about three times
+# as long (benchmarks of this write), limits about twice that
+slow=$([ "${GPU_PARTITION:-gpuplus}" = gpu ] && echo 1 || echo 0)
+relax=$(submit $opts $exp $gpu $([ $dry = 1 ] || { [ $slow = 1 ] && echo --time=03:00:00 || echo --time=02:00:00; }) --dependency=afterok:$build scale-relax.job)
 for kind in window full; do
    t=$([ $kind = window ] && echo 03:00:00 || echo 04:00:00)
+   [ $slow = 1 ] && t=$([ $kind = window ] && echo 06:00:00 || echo 10:00:00)
    write=$(submit $opts $exp,KIND=$kind $gpu $([ $dry = 1 ] || echo --time=$t) --job-name=vampire-scale-write-$kind --dependency=afterok:$relax scale-write.job)
    rd=$(submit $opts $exp,KIND=$kind $read --job-name=vampire-scale-read-$kind --dependency=afterok:$write scale-read.job)
    red=$(submit $opts $exp,KIND=$kind $cpu $small $([ $dry = 1 ] || echo --time=04:00:00) --job-name=vampire-scale-reduce-$kind --dependency=afterok:$rd scale-reduce.job)
