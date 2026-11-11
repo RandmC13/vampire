@@ -198,8 +198,11 @@ void initialize(const double system_dimensions_x,
       // all processors wait here before starting the timer
       vmpi::barrier();
 
-      // get realspace cutoff distance
-      const double real_cutoff = dipole::cutoff * cells::macro_cell_size;
+      // get realspace cutoff distance. On a regular cell grid many cell pairs lie
+      // exactly at the cutoff, and rounding of the cell centres (which depends on
+      // the number of processors) would put each on either side of it; the
+      // relative tolerance of 1e-6 treats them all atomistically
+      const double real_cutoff = dipole::cutoff * cells::macro_cell_size * (1.0 + 1.0e-6);
 
       std::vector< std::vector<double> > atoms_in_cells_array; // 2D list of [cell][atom] for local cells needed for computing dipole tensor
       std::vector<int> list_of_atoms_with_cells; // list of cell IDs to enable parsing of atomistic data
