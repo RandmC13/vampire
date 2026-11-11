@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-scale-write
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Check of hamrvis at scale, stage 2: the write of the HAMR chain (input
+# test/viking/h3/write) on one GPU (multi-GPU version on one rank, single
+# precision, gpu:skip-non-magnetic-atoms), restarted from the relaxation.
+#   KIND=window   with hamr:active-window: window spin snapshots
+#   KIND=full     without: complete spin snapshots (about 90 GB)
+# Its spin snapshots are kept: hamrvis reduces and checks them. The write time
+# also measures the speed of the current version on this GPU.
+# Submitted by scale-submit.sh. Results in $WORK/h3/scale/write-$KIND.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+S=$H3/scale
+: ${KIND:?KIND must be window or full}
+dir=$S/write-$KIND
+stage_dir write $dir
+echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+[ $KIND = window ] && echo "hamr:active-window" >> $dir/input
+cp $S/relax/vampire0.chk $dir/   # a copy: the write saves its own checkpoint for the read
+chmod u+w $dir/vampire0.chk
+echo 1 > $dir/ranks.txt
+cd $dir
+start=$(date +%s)
+$REPO/test/viking/mgpu-launch.sh -np 1 $SAMPLE $S/bin/vampire-mgpu-sp > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "write ($KIND): $(( $(date +%s) - start )) s on 1 GPU ($(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)), commit $(cat $S/commit.txt)" | tee time.txt
+du -sh $dir

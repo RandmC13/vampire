@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-scale-reduce
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=128G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Check of hamrvis at scale, stage 4: reduces the chain of one KIND (relax,
+# write-KIND, read-KIND) to a hamrvis bundle with the hamrvis version exported
+# by scale-submit.sh, then checks every array and number of the bundle against
+# the raw files with hamrvis's independent reader (tests/fidelity/bundle_check.py).
+# Submitted by scale-submit.sh. Results in $WORK/h3/scale: bundle-KIND/,
+# reduce-KIND.log, check-KIND.log, check-KIND.json. The job fails if a check fails.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+S=$H3/scale
+: ${KIND:?KIND must be window or full}
+B=$S/bundle-$KIND
+cd $S/hamrvis
+python3 -c "import sys, numpy; print('python', sys.version.split()[0], 'numpy', numpy.__version__)"
+start=$(date +%s)
+python3 -m hamrvis reduce $S/relax $S/write-$KIND $S/read-$KIND -o $B --name h3-scale-$KIND > $S/reduce-$KIND.log 2>&1 || { tail -n 30 $S/reduce-$KIND.log; exit 1; }
+echo "reduce ($KIND): $(( $(date +%s) - start )) s with $(nproc) CPUs, $(du -sh $B | cut -f1)" | tee $S/time-reduce-$KIND.txt
+start=$(date +%s)
+python3 tests/fidelity/bundle_check.py $B --json $S/check-$KIND.json > $S/check-$KIND.log 2>&1; status=$?
+grep -v '^  snapshot ' $S/check-$KIND.log
+echo "check ($KIND): $(( $(date +%s) - start )) s, exit $status" | tee -a $S/time-reduce-$KIND.txt
+exit $status

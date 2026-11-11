@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-scale-read
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=1
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Check of hamrvis at scale, stage 3: the one step read-back (input
+# test/viking/h3/read) with the CPU MPI version on all ranks of the job,
+# restarted from the end of the write of the same KIND (window or full).
+# Submitted by scale-submit.sh. Results in $WORK/h3/scale/read-$KIND.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+S=$H3/scale
+: ${KIND:?KIND must be window or full}
+dir=$S/read-$KIND
+stage_dir read $dir
+cp $S/write-$KIND/vampire0.chk $dir/
+cd $dir
+start=$(date +%s)
+mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $S/bin/vampire-parallel > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "read ($KIND): $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
+rm -f vampire*.chk   # copy of the write's checkpoint

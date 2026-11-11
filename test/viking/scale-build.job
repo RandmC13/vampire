@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-scale-build
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=32G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Check of hamrvis at scale, stage 0: builds the three binaries of the chain on
+# a CPU node: the CUDA version (relaxation) and the multi-GPU version (writes),
+# single precision, for A40 and H100 GPUs, and the CPU MPI version (reads).
+# Submitted by scale-submit.sh. Binaries in $WORK/h3/scale/bin.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/h3-common.sh
+S=$H3/scale
+arch="CUDA_ARCH=-gencode arch=compute_86,code=sm_86 -gencode arch=compute_90,code=sm_90"
+BUILD_SRC=$S/src build cuda vampire-cuda $S/bin/vampire-cuda-sp "$arch" CUDA_PR=-DCUDA_SP
+BUILD_SRC=$S/src build cuda-multigpu vampire-cuda-multigpu $S/bin/vampire-mgpu-sp "$arch" CUDA_PR=-DCUDA_SP
+BUILD_SRC=$S/src build parallel vampire-parallel $S/bin/vampire-parallel
+ls -l $S/bin

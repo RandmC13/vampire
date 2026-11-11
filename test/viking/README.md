@@ -103,3 +103,28 @@ submitted from, after a 5 minute write without the window as the speed reference
 with and without `hamr:active-window`: a 20 s capture of each, the one with the window taken with
 the head in the middle of the track. Results in `$WORK/h3/window-profile` (`report.sqlite` and
 summary tables of each capture).
+
+## Check of hamrvis at scale
+
+hamrvis (the HAMR visualisation toolkit, branch `hamr-vis`) is checked against a full-size run of
+the chain above, with its raw files still present:
+
+    test/viking/scale-submit.sh --dry-run    # first: the whole check on a small system
+    test/viking/scale-collect.sh             # look at the check results, then delete $WORK/h3/scale
+    test/viking/scale-submit.sh              # the full-size check
+    test/viking/scale-collect.sh
+
+builds the binaries on a CPU node, relaxes the film with the GPU Monte Carlo integrator on one H100,
+then runs two writes from that relaxation at the same time, each on one H100 (multi-GPU version,
+single precision): one with `hamr:active-window` (window spin snapshots) and one without (complete
+spin snapshots, about 90 GB), each followed by the read-back on 2 CPU nodes. Each chain (relax,
+write, read) is then reduced to a hamrvis bundle on a CPU node, and every array and number of the
+bundle is compared with the raw files by hamrvis's independent reader
+(`tests/fidelity/bundle_check.py`); the job fails if any differ. hamrvis is taken from the
+`hamr-vis` branch of `origin` (or the commit given as the second argument), vampire from this
+checkout. Results in `$WORK/h3/scale`: `bundle-window/`, `bundle-full/`, `check-*.log` and
+`check-*.json`, and the run times (the write times also measure the current version on one H100).
+`scale-collect.sh` packs the small files and prints the `rsync` commands that copy the bundles
+home, where hamrvis's viewer tests pick them up from `bundles/h3-scale-window` and
+`bundles/h3-scale-full`.
+
