@@ -124,13 +124,18 @@ def cmd_run(args):
       for c, r in jobs:
          d = os.path.join(base, c, r)
          for f in os.listdir(d):
+            p = os.path.join(d, f)
             if f not in ("output", "grain.txt"):
-               p = os.path.join(d, f)
                shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
+            else:
+               # the host name and directory in the file header describe the machine, not the result
+               with open(p, errors="replace") as fh: lines = fh.readlines()
+               with open(p, "w") as fh: fh.writelines(l for l in lines if not re.match(r"#\s+(hostname|path)\s+:", l))
 
-   meta = {"label": args.label, "exe": exe, "ranks": args.ranks, "version": version, "precision": args.precision,
-           "extra": args.extra, "seed_offset": args.seed_offset, "date": datetime.datetime.now().isoformat(timespec="seconds"),
-           "host": socket.gethostname(), "gpu": gpu}
+   meta = {"label": args.label, "exe": os.path.basename(exe) if args.reference else exe, "ranks": args.ranks, "version": version,
+           "precision": args.precision, "extra": args.extra, "seed_offset": args.seed_offset,
+           "date": datetime.datetime.now().isoformat(timespec="seconds"), "gpu": gpu}
+   if not args.reference: meta["host"] = socket.gethostname()
    with open(os.path.join(base, "meta.json"), "w") as f: json.dump(meta, f, indent=3)
    return 1 if failed else 0
 

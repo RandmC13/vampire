@@ -25,7 +25,7 @@
 #      snapshot rebuilt from the window snapshots is identical to the full one
 #   4. the run times with and without the window
 #   5. with PERF=<seconds>: the speed on a 300 x 20 x 20 nm film (4.3 million
-#      atoms), each run stopped after PERF seconds (600 is enough on a laptop GPU)
+#      atoms), each run stopped after PERF seconds (600 is enough on a small GPU)
 #
 #    developers/test/validation/hamr_window_check.sh [vampire binary]
 #
