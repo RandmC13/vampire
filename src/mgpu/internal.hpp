@@ -1,0 +1,80 @@
+//------------------------------------------------------------------------------
+//
+//   This file is part of the VAMPIRE open source package under the
+//   GNU GPL (version 2) licence (see licence file for details).
+//
+//   (c) S Jenkins 2026. All rights reserved.
+//
+//------------------------------------------------------------------------------
+#ifndef MGPU_INTERNAL_H_
+#define MGPU_INTERNAL_H_
+
+// C++ standard library headers
+#include <vector>
+
+namespace mgpu{
+
+   namespace internal{
+
+      //------------------------------------------------------------------------
+      // Halo exchange buffers. Spins of the boundary atoms listed in
+      // vmpi::send_atom_translation_array are packed on the device into the
+      // send buffer, copied to pinned host memory and sent; received spins are
+      // copied to the device and unpacked into the halo atoms listed in
+      // vmpi::recv_atom_translation_array; the spins a rank sends to itself are
+      // copied on the device from atom to atom instead. Values are stored as
+      // x,y,z triplets in the precision of the CUDA build (cu_real_t). With the
+      // HAMR active window only the atoms of grains integrated at the current
+      // or the previous step are copied (the others have not changed), so the
+      // buffers hold the selected atoms of each rank one after the other.
+      //------------------------------------------------------------------------
+      extern int num_send;        // number of atoms sent
+      extern int num_recv;        // number of atoms received
+      extern void* h_send_buffer; // pinned host buffers (3 values per atom)
+      extern void* h_recv_buffer;
+      extern int real_size;       // size of one value in bytes (8 or 4)
+      // first atom and number of atoms of each rank in the send and receive buffers
+      extern std::vector<int> peer_send_start, peer_send_num, peer_recv_start, peer_recv_num;
+
+      // device side (kernels.cu)
+      void allocate_device_halo(const std::vector<int>& send_atoms, const std::vector<int>& recv_atoms);
+      void free_device_halo();
+      // The halo update runs on its own stream: start_halo() packs the spins and
+      // copies them to h_send_buffer; finish_halo() exchanges the buffers (MPI),
+      // copies the received spins back to the device and makes the default
+      // stream wait for them. Work launched in between overlaps the update.
+      // A rank whose halo spins all come from itself (device_only_halo) skips
+      // the host: the spins are copied on the device and the host does not wait.
+      extern bool device_only_halo;
+      void start_halo();
+      void finish_halo();
+      void select_halo_atoms(); // chooses the halo atoms to copy when the HAMR active window changes
+      double halo_copy_time(); // GPU time in seconds spent packing, unpacking and copying halo spins
+      double halo_wait_time(); // GPU time in seconds the default stream waited for halo spins
+
+      // host side (halo.cpp): exchanges h_send_buffer and h_recv_buffer with the other ranks
+      void exchange_halo();
+
+      // full halo update of the spins on the device without overlap
+      void swap_halo();
+
+      // halo update and fields of the local atoms; external = true adds the
+      // external (thermal, HAMR) fields of the step (kernels.cu)
+      void update_fields(const bool external);
+
+      // writes the halo exchange times of every rank to the log and screen (halo.cpp)
+      void report_halo_times();
+
+      // orders the neighbours of each atom in the device exchange list by atom key (kernels.cu)
+      void sort_neighbours_by_key();
+
+      // thermal noise from the atom keys (thermal.cu)
+      void initialize_noise();
+      void free_noise();
+      void update_external_fields(); // external fields of one time step, incl. thermal and HAMR fields
+
+   } // end of internal namespace
+
+} // end of mgpu namespace
+
+#endif //MGPU_INTERNAL_H_

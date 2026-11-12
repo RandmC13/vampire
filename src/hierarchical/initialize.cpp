@@ -167,8 +167,11 @@ void initialize(const double system_dimensions_x,
       // all processors wait here before starting the timer
       vmpi::barrier();
 
-      // get realspace cutoff distance
-      const double real_cutoff = dipole::cutoff * cells::macro_cell_size;
+      // get realspace cutoff distance. On a regular cell grid many cell pairs lie
+      // exactly at the cutoff, and rounding of the cell centres (which depends on
+      // the number of processors) would put each on either side of it; the
+      // relative tolerance of 1e-6 treats them all atomistically
+      const double real_cutoff = dipole::cutoff * cells::macro_cell_size * (1.0 + 1.0e-6);
 
       std::vector< std::vector<double> > atoms_in_cells_array; // 2D list of [cell][atom] for local cells needed for computing dipole tensor
       std::vector<int> list_of_atoms_with_cells; // list of cell IDs to enable parsing of atomistic data
@@ -703,8 +706,14 @@ void initialize(const double system_dimensions_x,
       // get the global cell ID
       int cell_i = cells::cell_id_array[lc];
 
-      // only calculate interaction for local cells with atoms
-      if (cells_num_atoms_in_cell[cell_i] != 0){
+      // cell_i is guaranteed present in cells::cell_id_array only when it is
+      // a valid receiver: either a magnetic cell (the only case possible
+      // with cells:probe-non-magnetic-cells off, so this is behaviour-
+      // preserving by construction) or -- when that flag is enabled -- a
+      // non-magnetic-only probe cell. Either way it should get an
+      // interaction tensor built; ha::calc_inter/ha::calc_intra guard the
+      // case where cell_i itself has no magnetic atoms.
+      {
 
          // for each cell loop over cel-cell interactions for all levels, getting frirst and last interactions
          const int start = ha::interaction_list_start_index[lc];
@@ -771,13 +780,6 @@ void initialize(const double system_dimensions_x,
                //    ha::calc_intra(cell_i,cell_j,j, cells_atom_in_cell_coords_array_x, cells_atom_in_cell_coords_array_y, cells_atom_in_cell_coords_array_z);
                // }
 
-               // zero excessively small components (avoids round off errors comparing different calculation methods)
-               if (ha::rij_tensor_xx[j]*ha::rij_tensor_xx[j] < 1e-15) ha::rij_tensor_xx[j] =0;
-               if (ha::rij_tensor_xy[j]*ha::rij_tensor_xy[j] < 1e-15) ha::rij_tensor_xy[j] =0;
-               if (ha::rij_tensor_xz[j]*ha::rij_tensor_xz[j] < 1e-15) ha::rij_tensor_xz[j] =0;
-               if (ha::rij_tensor_yy[j]*ha::rij_tensor_yy[j] < 1e-15) ha::rij_tensor_yy[j] =0;
-               if (ha::rij_tensor_yz[j]*ha::rij_tensor_yz[j] < 1e-15) ha::rij_tensor_yz[j] =0;
-               if (ha::rij_tensor_zz[j]*ha::rij_tensor_zz[j] < 1e-15) ha::rij_tensor_zz[j] =0;
                //            std::cout  << cell_i << '\t' << cell_j << "\t" << ha::rij_tensor_xx[j] << '\t' << ha::rij_tensor_xy[j] << '\t' << ha::rij_tensor_xz[j] << '\t' << ha::rij_tensor_yy[j] << '\t' << ha::rij_tensor_yz[j] <<'\t' << ha::rij_tensor_zz[j] << std::endl;
                //             //std::cout << cells_num_atoms_in_cell[cell_i] << '\t' << cells_num_atoms_in_cell[cell_j] << '\t' <<  cell_i << '\t' << cell_j << "\t" <<  ha::rij_tensor_xx[j] << '\t' << ha::rij_tensor_xy[j] << '\t' << ha::rij_tensor_xz[j] << '\t' << ha::rij_tensor_yy[j] << '\t' << ha::rij_tensor_yz[j] <<'\t' << ha::rij_tensor_zz[j] << std::endl;
             }

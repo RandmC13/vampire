@@ -54,16 +54,29 @@ namespace dipole{
       for(int lc=0;lc<dipole::internal::cells_num_local_cells;lc++){
 
          int i = cells::cell_id_array[lc];
+         {
+            // Self demagnetisation factor multiplying m(i). Only meaningful
+            // for a cell that actually has magnetic atoms: a non-magnetic-
+            // only probe cell (cells:probe-non-magnetic-cells) has
+            // cells_volume_array[i]==0 and zero magnetisation, so skip this
+            // term entirely rather than divide by zero volume (which would
+            // otherwise silently produce 8pi/(3*0)*0 = NaN). Such a cell is
+            // still a valid *receiver* below -- it just has no self term.
+            double self_demag = 0.0;
+            double mx_i = 0.0;
+            double my_i = 0.0;
+            double mz_i = 0.0;
+
          if(dipole::internal::cells_num_atoms_in_cell[i]>0){
 
-            // Self demagnetisation factor multiplying m(i)
             const double eightPI_three_cell_volume = 8.0*M_PI/(3.0*dipole::internal::cells_volume_array[i]);
-            double self_demag = eightPI_three_cell_volume;
+               self_demag = eightPI_three_cell_volume;
 
             // Normalise cell magnetisation by the Bohr magneton
-            const double mx_i = cells::mag_array_x[i]*imuB;
-            const double my_i = cells::mag_array_y[i]*imuB;
-            const double mz_i = cells::mag_array_z[i]*imuB;
+               mx_i = cells::mag_array_x[i]*imuB;
+               my_i = cells::mag_array_y[i]*imuB;
+               mz_i = cells::mag_array_z[i]*imuB;
+            }
 
             // Add self-demagnetisation as mu_0/4_PI * 8PI*m_cell/3V
             dipole::cells_field_array_x[i] = self_demag * mx_i;//*0.0; //*0.0
@@ -73,6 +86,14 @@ namespace dipole{
             dipole::cells_mu0Hd_field_array_x[i] = -0.5*self_demag * mx_i;
             dipole::cells_mu0Hd_field_array_y[i] = -0.5*self_demag * my_i;
             dipole::cells_mu0Hd_field_array_z[i] = -0.5*self_demag * mz_i;
+
+            // tensor row of this cell: stored, or computed now with dipole:on-the-fly-tensors
+            int row = lc;
+            if(internal::on_the_fly_tensors){
+               row = 0;
+               internal::compute_tensor_row(internal::cells_local_cell_array[lc], row, internal::otf_cutoff, internal::otf_global_atoms_in_cell_count,
+                                            internal::otf_cells_pos_and_mom_array, internal::otf_list_of_cells_with_atoms, internal::otf_atoms_in_cells_array);
+            }
 
             // Loop over all other cells to calculate contribution to local cell
             for(int j=0;j<dipole::internal::cells_num_cells;j++){
@@ -84,14 +105,14 @@ namespace dipole{
                   const double mz = cells::mag_array_z[j]*imuB;
                // if (i == 0)std::cout<< i << '\t' << mx_i << '\t' << my_i << '\t' << mz_i << "\t" <<  j << '\t' << mx << '\t' << my << '\t' << mz <<std::endl;
 
-                  dipole::cells_field_array_x[i]+=(mx*internal::rij_tensor_xx[lc][j] + my*internal::rij_tensor_xy[lc][j] + mz*internal::rij_tensor_xz[lc][j]);
-                  dipole::cells_field_array_y[i]+=(mx*internal::rij_tensor_xy[lc][j] + my*internal::rij_tensor_yy[lc][j] + mz*internal::rij_tensor_yz[lc][j]);
-                  dipole::cells_field_array_z[i]+=(mx*internal::rij_tensor_xz[lc][j] + my*internal::rij_tensor_yz[lc][j] + mz*internal::rij_tensor_zz[lc][j]);
+                  dipole::cells_field_array_x[i]+=(mx*internal::rij_tensor_xx[row][j] + my*internal::rij_tensor_xy[row][j] + mz*internal::rij_tensor_xz[row][j]);
+                  dipole::cells_field_array_y[i]+=(mx*internal::rij_tensor_xy[row][j] + my*internal::rij_tensor_yy[row][j] + mz*internal::rij_tensor_yz[row][j]);
+                  dipole::cells_field_array_z[i]+=(mx*internal::rij_tensor_xz[row][j] + my*internal::rij_tensor_yz[row][j] + mz*internal::rij_tensor_zz[row][j]);
                   // Demag field
-               // std::cout << "DEMAG\t" << cells::mag_array_x[j] << '\t' << imuB << '\t' <<  mx << '\t' << my << '\t' << mz << '\t' << internal::rij_tensor_xx[lc][j] << '\t' << dipole::cells_field_array_x[i] << std::endl;
-                  dipole::cells_mu0Hd_field_array_x[i] +=(mx*internal::rij_tensor_xx[lc][j] + my*internal::rij_tensor_xy[lc][j] + mz*internal::rij_tensor_xz[lc][j]);
-                  dipole::cells_mu0Hd_field_array_y[i] +=(mx*internal::rij_tensor_xy[lc][j] + my*internal::rij_tensor_yy[lc][j] + mz*internal::rij_tensor_yz[lc][j]);
-                  dipole::cells_mu0Hd_field_array_z[i] +=(mx*internal::rij_tensor_xz[lc][j] + my*internal::rij_tensor_yz[lc][j] + mz*internal::rij_tensor_zz[lc][j]);
+               // std::cout << "DEMAG\t" << cells::mag_array_x[j] << '\t' << imuB << '\t' <<  mx << '\t' << my << '\t' << mz << '\t' << internal::rij_tensor_xx[row][j] << '\t' << dipole::cells_field_array_x[i] << std::endl;
+                  dipole::cells_mu0Hd_field_array_x[i] +=(mx*internal::rij_tensor_xx[row][j] + my*internal::rij_tensor_xy[row][j] + mz*internal::rij_tensor_xz[row][j]);
+                  dipole::cells_mu0Hd_field_array_y[i] +=(mx*internal::rij_tensor_xy[row][j] + my*internal::rij_tensor_yy[row][j] + mz*internal::rij_tensor_yz[row][j]);
+                  dipole::cells_mu0Hd_field_array_z[i] +=(mx*internal::rij_tensor_xz[row][j] + my*internal::rij_tensor_yz[row][j] + mz*internal::rij_tensor_zz[row][j]);
                }
             }
             // Multiply the cells B-field by mu_B * mu_0/(4*pi) /1e-30  <-- (constants::muB * 1e-7 / 1e30)
