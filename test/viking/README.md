@@ -106,7 +106,7 @@ summary tables of each capture).
 
 ## Check of hamrvis at scale
 
-hamrvis (the HAMR visualisation toolkit, branch `hamr-vis`) is checked against a full-size run of
+hamrvis (the HAMR visualisation toolkit, https://github.com/RandmC13/hamrvis) is checked against a full-size run of
 the chain above, with its raw files still present:
 
     test/viking/scale-submit.sh --dry-run    # first: the whole check on a small system
@@ -120,8 +120,8 @@ single precision): one with `hamr:active-window` (window spin snapshots) and one
 spin snapshots, about 90 GB), each followed by the read-back on 2 CPU nodes. Each chain (relax,
 write, read) is then reduced to a hamrvis bundle on a CPU node, and every array and number of the
 bundle is compared with the raw files by hamrvis's independent reader
-(`tests/fidelity/bundle_check.py`); the job fails if any differ. hamrvis is taken from the
-`hamr-vis` branch of `origin` (or the commit given as the second argument), vampire from this
+(`tests/fidelity/bundle_check.py`); the job fails if any differ. hamrvis is taken from
+`main` of its repository (`HAMRVIS_URL`; or the tag or commit given as the second argument), vampire from this
 checkout. Results in `$WORK/h3/scale`: `bundle-window/`, `bundle-full/`, `check-*.log` and
 `check-*.json`, and the run times (the write times also measure the current version on one H100).
 The dry run uses the nodes and gpu partitions with 30 minute limits, as the test and gpu_short

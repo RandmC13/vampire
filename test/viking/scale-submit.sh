@@ -27,7 +27,7 @@
 # Usage (from the vampire checkout on a Viking login node):
 #   test/viking/scale-submit.sh [--dry-run] [vampire commit] [hamrvis commit]
 #     vampire commit   default HEAD of this checkout
-#     hamrvis commit   default the hamr-vis branch of origin (fetched)
+#     hamrvis commit   default main of the hamrvis repository (HAMRVIS_URL, fetched); a tag or commit of it
 # Environment: WORK (default ~/scratch/vampire-benchmarks; not on the file
 # system of the home directory), MODULES, GPU_PARTITION (gpuplus, the default:
 # one H100 per GPU job; or gpu: one A40 per GPU job, about three times slower on
@@ -43,6 +43,7 @@ if grep -l VIKING_ACCOUNT scale-*.job; then
 fi
 export REPO=$(git rev-parse --show-toplevel)
 export WORK=${WORK:-$HOME/scratch/vampire-benchmarks}
+HAMRVIS_URL=${HAMRVIS_URL:-https://github.com/RandmC13/hamrvis.git}
 export H3_DRY=$dry
 S=$WORK/h3/scale
 mkdir -p $S
@@ -56,12 +57,8 @@ if [ -n "$(ls -A $S 2> /dev/null | grep -v '^logs$')" ]; then
 fi
 mkdir -p $S/logs
 commit=$(git rev-parse ${1:-HEAD})
-if [ -n "${2:-}" ]; then
-   hv=$(git -C $REPO rev-parse $2)
-else
-   git -C $REPO fetch -q origin hamr-vis
-   hv=$(git -C $REPO rev-parse FETCH_HEAD)
-fi
+git -C $REPO fetch -q --tags $HAMRVIS_URL main      # hamrvis lives in its own repository
+hv=$(git -C $REPO rev-parse ${2:-FETCH_HEAD}^{commit})
 echo "$commit" > $S/commit.txt
 echo "$hv" > $S/hamrvis-commit.txt
 echo "$dry" > $S/dry-run.txt
