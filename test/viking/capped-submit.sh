@@ -63,7 +63,7 @@ elif [ $mode = test ]; then
    else
       write="--partition=gpuplus --nodes=1 --ntasks-per-node=2 --gres=gpu:2 --time=04:00:00"
    fi
-   read="--partition=test --nodes=1 --ntasks-per-node=8 --time=00:30:00"
+   read="--partition=nodes --nodes=1 --ntasks-per-node=96 --time=01:00:00"
    segments=${SEGMENTS:-1}
 else
    write="--partition=gpu --nodes=2 --ntasks-per-node=3 --gres=gpu:3 --time=3-00:00:00"
