@@ -64,14 +64,16 @@ sim:save-checkpoint = continuous
 sim:save-checkpoint-rate = 250000
 
 #------------------------------------------------------------------------------
-# HAMR head: thermal spot 28 nm FWHM, field box 4 x the bit (56 x 128 nm) 10 nm
-# behind the spot, field rise and fall 0.1 ns, bits of 14 nm (2 grain pitches)
+# HAMR head: thermal spot 50 nm FWHM, so that with the 800 K peak the region hot
+# enough to write (within about 10 K of the FePt Tc) is about 28 nm across, as
+# wide as a track; field box 4 x the bit (56 x 128 nm) 10 nm behind the spot,
+# field rise and fall 0.1 ns, bits of 14 nm (2 grain pitches)
 # on tracks of 32 nm (4.6 grain pitches); tracks 1 and 3 single tone with two
 # bits per transition, track 2 one bit per transition
 #------------------------------------------------------------------------------
 hamr:head-speed = 22 !m/s
-hamr:laser-FWHM-x = 28 !nm
-hamr:laser-FWHM-y = 28 !nm
+hamr:laser-FWHM-x = 50 !nm
+hamr:laser-FWHM-y = 50 !nm
 hamr:head-field-x = 56 !nm
 hamr:head-field-y = 128 !nm
 hamr:NPS = 10 !nm

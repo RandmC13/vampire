@@ -29,7 +29,7 @@ for track in 1 2 3; do
    for ((r = 0; r < n; r++)); do cp $CAP/write/vampire$r-track$track.chk $dir/vampire$r.chk; done
    cd $dir
    start=$(date +%s)
-   mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $bin > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+   mpirun --bind-to core:overload-allowed -np $SLURM_NTASKS $SAMPLE $bin > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
    echo "read after track $track: $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
    rm -f vampire*.chk   # copies of the write's checkpoint files
 done
