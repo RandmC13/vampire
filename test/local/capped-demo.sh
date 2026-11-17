@@ -8,10 +8,10 @@
 # A short demonstration of the capped HAMR write on one local GPU, from the
 # inputs of the Viking run (test/viking/capped/write): the same film, cap, grains,
 # bits (14 x 32 nm), laser, head field and active window, but two tracks of
-# 6 bits on an 85 x 98 nm film and a head at 60 m/s (field rise and fall
-# 40 ps), with a 20 ps equilibration and a spin snapshot every 50 ps. Track 1
+# 6 bits on an 85 x 98 nm film and a head at 90 m/s (field rise and fall
+# 30 ps), with a 20 ps equilibration and a spin snapshot every 50 ps. Track 1
 # (one bit per transition) is written first, then its neighbour, track 2 (two
-# bits per transition). About 3.3 hours on an RTX 3070 in single precision.
+# bits per transition). About 2.2 hours on an RTX 3070 in single precision.
 #
 #   test/local/capped-demo.sh <vampire-cuda binary> [run directory]
 #
@@ -24,9 +24,9 @@ dir=${2:-capped-demo}
 [ -e "$dir" ] && { echo "Error: $dir exists"; exit 1; }
 mkdir -p "$dir"
 cp "$(dirname "$(realpath "$0")")"/../viking/capped/write/* "$dir"/
-printf '%s\n' "" "# demonstration: two tracks of 6 bits on an 85 x 98 nm film, head at 60 m/s" \
+printf '%s\n' "" "# demonstration: two tracks of 6 bits on an 85 x 98 nm film, head at 90 m/s" \
    "dimensions:system-size-x = 85 !nm" "dimensions:system-size-y = 98 !nm" \
-   "hamr:head-speed = 60 !m/s" "hamr:field-rise-time = 40e-12 !s" "hamr:field-fall-time = 40e-12 !s" \
+   "hamr:head-speed = 90 !m/s" "hamr:field-rise-time = 30e-12 !s" "hamr:field-fall-time = 30e-12 !s" \
    "hamr:number-of-bits = 12" "hamr:bit-sequence = 1,-1,1,-1,1,-1,1,1,-1,-1,1,1" "hamr:track-order = 1,2" \
    "sim:equilibration-time-steps = 20000" "config:atoms-output-rate = 50000" "gpu:skip-non-magnetic-atoms" >> "$dir/input"
 cd "$dir"

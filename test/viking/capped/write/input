@@ -88,13 +88,6 @@ hamr:bit-sequence = 1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,
 hamr:track-order = 2,1,3
 hamr:save-track-states
 hamr:active-window
-# grains enter the window at a laser rise of 200 K (500 K; a grain cannot reverse
-# below about 550 K at 22 m/s even at 2 standard deviations below the mean size)
-# and leave below 1 K as by default, so that none is frozen warm; the field box
-# alone does not add grains (0.8 T cannot change FePt or the cap at 300 K,
-# Hk 16 T and 1.2 T)
-hamr:active-window-entry-temperature = 200
-hamr:active-window-field-box = false
 
 #------------------------------------------------------------------------------
 # Data output: every 10 ps; spin snapshots every 1 ns (window snapshots) and
