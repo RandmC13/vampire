@@ -81,6 +81,8 @@ namespace hamr{
 
       bool active_window = false;
       double active_window_dT = 1.0; // K
+      double active_window_entry_dT = -1.0; // K; below 0: active_window_dT
+      bool active_window_field_box = true;
       bool active_window_full_snapshots = false;
       bool active_window_options_set = false; // a window sub-option is set in the input file
       double active_window_margin = 50.0;  // A: continuous layers integrated with their own damping this far from integrated grains

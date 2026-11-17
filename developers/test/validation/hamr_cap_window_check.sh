@@ -27,7 +27,11 @@
 #   4. with SEEDS=N (at least 8): the write on a 100 x 8 nm film with and
 #      without the window: z-scores of the seed-mean system magnetisation at
 #      every output, of the final magnetisation of every grain and of the
-#      cap's magnetisation; FAIL if any |z| exceeds ZMAX (default 4)
+#      cap's magnetisation; FAIL if any |z| exceeds ZMAX (default 4). With
+#      WINDOW_OPTS (quoted input lines, e.g. '"hamr:active-window-field-box =
+#      false"') the window runs of this stage use those options as well; with
+#      STATS_WIDTH (nm, default 8) its film is that wide, with the track in the
+#      middle, so that grains beside the track are warmed but not written
 #
 #    developers/test/validation/hamr_cap_window_check.sh [vampire binary]
 #
@@ -48,6 +52,8 @@ dm=${DM:-0.01}
 mpi=""
 [ -n "${RANKS:-}" ] && mpi="${MPIRUN:-mpirun} -np $RANKS"
 mgpu=0
+window_opts=${WINDOW_OPTS:-}
+stats_width=${STATS_WIDTH:-8}
 case $(basename "$exe") in *multigpu*) mgpu=1;; esac
 here=$(dirname "$(realpath "$0")")
 if [ -n "${WORK:-}" ]; then
@@ -164,8 +170,9 @@ EOF
 # 4. statistics
 if [ "$seeds" -ge 1 ]; then
    for s in $(seq 1 "$seeds"); do
-      echo "run off-$s 100 $s"
-      echo "run window-$s 100 $s hamr:active-window"
+      centre="\"hamr:track-padding = $(( (stats_width - 8) / 2 )) !nm\""
+      echo "width=$stats_width run off-$s 100 $s $centre"
+      echo "width=$stats_width run window-$s 100 $s $centre hamr:active-window $window_opts"
    done | xargs -d '\n' -P "$jobs" -I{} bash -c '{}'
    python3 - "$work" "$seeds" "$zmax" << 'EOF' || fail=1
 import sys, numpy as np
@@ -186,6 +193,11 @@ zg = z(gmz['off'], gmz['window'])
 print(f'system mz at {len(zs)} outputs: max |z| {np.abs(zs).max():.2f}; final {mz["off"][:, -1].mean():+.4f} (off) {mz["window"][:, -1].mean():+.4f} (window)')
 print(f'cap mz at {len(zc)} outputs: max |z| {np.abs(zc).max():.2f}; final {cap["off"][:, -1].mean():+.4f} (off) {cap["window"][:, -1].mean():+.4f} (window)')
 print(f'final mz of {ngrains} grains: max |z| {np.abs(zg).max():.2f}, sum z^2 {np.sum(zg**2):.1f}')
+import re
+log = open(f'{work}/window-1/log').read()
+total = int(re.search(r'(?:Number of atoms generated|Total number of atoms \(all CPUs\)): (\d+)', log).group(1))
+n = [int(k) for k in re.findall(r'HAMR active window: \d+ grains, (\d+) atoms integrated', log)][1:]
+if n: print(f'window (seed 1): {sum(n)/len(n)/total:.1%} of the atoms integrated on average while it changed, at most {max(n)/total:.1%}')
 worst = max(np.abs(zs).max(), np.abs(zc).max(), np.abs(zg).max())
 if seeds < 8:
     print(f'NOTE statistics: largest |z| {worst:.2f} with {seeds} seeds, not judged (at least 8 needed)')
