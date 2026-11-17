@@ -13,12 +13,17 @@
 //   grain evolves only from its own spins, its laser temperature and the head
 //   field. Far from the head a grain sits at the minimum temperature with no
 //   field, where it cannot switch on the time scale of the write, so it is
-//   frozen: its spins are kept and not integrated. A grain is integrated while
-//   the laser raises its temperature anywhere by at least
-//   hamr:active-window-temperature above the minimum, or it overlaps the head
-//   field box, and for a further relaxation time (10 ps) after that, so that it
-//   is frozen in equilibrium at the minimum temperature (also when the head
-//   jumps to the next track). All grains are integrated for the first 10 ps.
+//   frozen: its spins are kept and not integrated. A grain enters the window
+//   when the laser raises its temperature anywhere by at least
+//   hamr:active-window-entry-temperature above the minimum (by default
+//   hamr:active-window-temperature), or it overlaps the head field box (unless
+//   hamr:active-window-field-box = false). It stays while the rise is at least
+//   hamr:active-window-temperature or it overlaps the box, and for a further
+//   relaxation time (10 ps) after that, so that it is frozen in equilibrium at
+//   the minimum temperature (also when the head jumps to the next track): a
+//   higher entry threshold leaves out grains that are warmed but never hot
+//   enough to change, without freezing any grain warm. All grains are
+//   integrated for the first 10 ps.
 //   The window is not changed while the laser is off.
 //
 //   Continuous layers (materials with continuous = true, e.g. a cap over the
@@ -401,8 +406,14 @@ namespace hamr{
             }
          }
 
-         zlog << zTs() << "HAMR active window enabled: " << num_grains << " grains (" << num_split << " split by a periodic boundary), temperature threshold "
-              << active_window_dT << " K above the minimum, grains kept for " << window_hold_steps << " steps after leaving it" << std::endl;
+         if(active_window_entry_dT < 0.0) active_window_entry_dT = active_window_dT;
+         if(active_window_entry_dT < active_window_dT){
+            err::fatal("hamr:active-window-entry-temperature (" + std::to_string(active_window_entry_dT) + " K) must not be below hamr:active-window-temperature (" +
+                       std::to_string(active_window_dT) + " K), at which grains leave the window");
+         }
+         zlog << zTs() << "HAMR active window enabled: " << num_grains << " grains (" << num_split << " split by a periodic boundary), grains enter at a temperature rise of "
+              << active_window_entry_dT << " K and leave below " << active_window_dT << " K above the minimum" << (active_window_field_box ? " or in the head field box" : "")
+              << ", kept for " << window_hold_steps << " steps after leaving" << std::endl;
          if(has_layers){
             zlog << zTs() << "HAMR active window: continuous layers integrated within " << active_window_margin*0.1 << " nm of integrated grains, then a "
                  << active_window_buffer*0.1 << " nm buffer with the damping rising to " << active_window_buffer_damping << std::endl;
@@ -514,8 +525,11 @@ namespace hamr{
          // the laser temperature is largest at the point of the bounding box nearest the head
          const double dx = grain_distance(px, grain_min_x[g], grain_max_x[g], grain_wraps_x[g], Lx);
          const double dy = grain_distance(py, grain_min_y[g], grain_max_y[g], grain_wraps_y[g], Ly);
-         const bool hot = DeltaT * exp(-dx*dx*one_over_denx) * exp(-dy*dy*one_over_deny) >= active_window_dT;
-         const bool in_field = grain_overlaps(grain_min_x[g], grain_max_x[g], grain_wraps_x[g], Lx, box_min_x, box_max_x) &&
+         // a grain in the window (including its hold time) stays down to the lower threshold
+         const double threshold = grain_active[g] ? active_window_dT : active_window_entry_dT;
+         const bool hot = DeltaT * exp(-dx*dx*one_over_denx) * exp(-dy*dy*one_over_deny) >= threshold;
+         const bool in_field = active_window_field_box &&
+                               grain_overlaps(grain_min_x[g], grain_max_x[g], grain_wraps_x[g], Lx, box_min_x, box_max_x) &&
                                grain_overlaps(grain_min_y[g], grain_max_y[g], grain_wraps_y[g], Ly, box_min_y, box_max_y);
          if(hot || in_field) grain_cool_steps[g] = 0;
          else if(grain_cool_steps[g] < window_hold_steps) grain_cool_steps[g]++;

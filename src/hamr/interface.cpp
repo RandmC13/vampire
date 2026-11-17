@@ -269,6 +269,22 @@ namespace hamr{
          return true;
       }
       //--------------------------------------------------------------------
+      test="active-window-entry-temperature";
+      if(word==test){
+         double T = atof(value.c_str());
+         vin::check_for_valid_value(T, word, line, prefix, unit, "none", 0.0, 1.0e6,"input","0.0 - 1,000,000 K");
+         hamr::internal::active_window_entry_dT = T;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-field-box";
+      if(word==test){
+         hamr::internal::active_window_field_box = vin::check_for_valid_bool(value, word, line, prefix, "input");
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
       // Keyword not found
       //--------------------------------------------------------------------
       return false;

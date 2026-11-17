@@ -48,7 +48,7 @@ namespace hamr{
          err::warning("Warning - hamr:active-window has no effect outside sim:program = hamr-simulation and is ignored");
       }
       if(hamr::internal::active_window_options_set && !hamr::active_window_requested()){
-         err::warning("Warning - hamr:active-window-temperature and hamr:active-window-full-snapshots have no effect without hamr:active-window and are ignored");
+         err::warning("Warning - the hamr:active-window-... options have no effect without hamr:active-window and are ignored");
       }
 
       // If program:hamr-simulation not requested, then stop

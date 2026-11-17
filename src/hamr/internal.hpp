@@ -126,7 +126,9 @@ namespace hamr{
       // Active window (active_window.cpp)
       //-----------------------------------------------------------------------------
       extern bool active_window;      /// integrate only the grains near the head
-      extern double active_window_dT; /// laser temperature rise (K) from which a grain is integrated
+      extern double active_window_dT; /// laser temperature rise (K) below which an integrated grain leaves the window
+      extern double active_window_entry_dT; /// laser temperature rise (K) from which a grain enters the window (below 0: active_window_dT)
+      extern bool active_window_field_box;  /// grains overlapping the head field box are integrated
       extern bool active_window_full_snapshots; /// write every spin snapshot in full with the window
       extern bool active_window_options_set;    /// a window sub-option is set in the input file
       extern double active_window_margin;       /// continuous layers: integrated with their own damping within this distance (A) of integrated grains
