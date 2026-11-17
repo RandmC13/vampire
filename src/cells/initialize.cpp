@@ -83,7 +83,6 @@ namespace cells{
       unsigned int dz =  static_cast<unsigned int>(ceil((system_dimensions_z+0.01)/cells::macro_cell_size_z));
 
       cells::num_cells = dx*dy*dz;
-      cells::internal::cell_position_array.resize(3*cells::num_cells);
 
       //std::cout << " variable cells::num_cells = " << cells::num_cells << std::endl;
       zlog << zTs() << "Macrocell size = " << cells::macro_cell_size_x<< "," <<cells::macro_cell_size_y<< "," <<cells::macro_cell_size_z<<  " Angstroms" << std::endl;
@@ -126,8 +125,6 @@ namespace cells{
       const int d[3]={ncx,ncy,ncz};
       const double cs[3] = {cells::macro_cell_size_x, cells::macro_cell_size_y, cells::macro_cell_size_z}; // cell size
 
-      std::vector < double > cell_lattice(3*cells::num_cells,0.0);
-
      // For MPI version, only add local atoms
       #ifdef MPICF
          int num_local_atoms = vmpi::num_core_atoms+vmpi::num_bdry_atoms;
@@ -135,16 +132,11 @@ namespace cells{
          int num_local_atoms = num_atoms;
       #endif
 
-      // Determine number of total atoms
+      // Determine number of atoms in the body (including removed non-magnetic atoms, excluding non-magnetic fill
+      // atoms), counted on each process for its own atoms in create::create_system_type()
+      int total_atoms_non_filler = create::num_total_atoms_non_filler;
       #ifdef MPICF
-         int num_total_atoms=0;
-         int total_non_mag_removed_atoms=0;
-         MPI_Reduce(&num_local_atoms,&num_total_atoms, 1,MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-         MPI_Reduce(&create::num_total_atoms_non_filler,&total_non_mag_removed_atoms, 1, MPI_INT, MPI_SUM, 0,MPI_COMM_WORLD);
-         int total_atoms_non_filler = num_total_atoms + total_non_mag_removed_atoms;
-         MPI_Bcast(&total_atoms_non_filler,1,MPI_INT,0,MPI_COMM_WORLD);
-      #else
-         int total_atoms_non_filler = atoms::num_atoms+create::num_total_atoms_non_filler;
+         MPI_Allreduce(MPI_IN_PLACE, &total_atoms_non_filler, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
       #endif
       // std::cout << "\nTotal number of atoms generated including non-magnetic atoms after Allreduce operation (all CPUs): " << total_atoms_non_filler << std::endl;
 
@@ -209,18 +201,11 @@ namespace cells{
       cells::mag_array_y.resize(cells::num_cells,0.0);
       cells::mag_array_z.resize(cells::num_cells,0.0);
 
-      cells::field_array_x.resize(cells::num_cells,0.0);
-      cells::field_array_y.resize(cells::num_cells,0.0);
-      cells::field_array_z.resize(cells::num_cells,0.0);
-
       cells::num_atoms_in_cell.resize(cells::num_cells,0);
       cells::num_atoms_in_cell_global.resize(0);
       cells::internal::num_any_atoms_in_cell.resize(cells::num_cells,0);
       cells::volume_array.resize(cells::num_cells,0.0);
 
-      cells::internal::total_moment_array.resize(cells::num_cells,0.0);
-
-      cells::fft_cell_id_array.resize(cells::num_cells,0.0);
       // Now add atoms to each cell as magnetic 'centre of mass'
       int num_atoms_magnetic = 0;  /// number of magnetic atoms
       for(int atom=0;atom<num_local_atoms;atom++){
@@ -233,10 +218,7 @@ namespace cells{
          cells::pos_array[3*local_cell+1] += atom_coords_y[atom];
          cells::pos_array[3*local_cell+2] += atom_coords_z[atom];
 
-         // Count every atom (magnetic or not) in the cell. Only consulted
-         // when cells:probe-non-magnetic-cells is enabled, to expose
-         // non-magnetic-only cells to the dipole solvers as valid
-         // field-evaluation points; never affects cells::num_atoms_in_cell.
+         // count every atom (magnetic or not) in the cell, for cells:probe-non-magnetic-cells
          cells::internal::num_any_atoms_in_cell[local_cell]++;
 
          if(mp::material[type].non_magnetic==0){
@@ -258,9 +240,8 @@ namespace cells{
             // add index of cell only if there are atoms inside
             cells::cell_id_array.push_back(local_cell);
          }
-         else if(cells::internal::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[local_cell]>0){
-            // non-magnetic-only cell: expose as a dipole-field evaluation
-            // point (probe) since cells:probe-non-magnetic-cells is enabled
+         else if(cells::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[local_cell]>0){
+            // non-magnetic-only cell kept as a probe (cells:probe-non-magnetic-cells)
             cells::cell_id_array.push_back(local_cell);
          }
       }
@@ -306,18 +287,9 @@ namespace cells{
             cells::pos_array[3*local_cell+2] = cells::pos_array[3*local_cell+2]/cells::num_atoms_in_cell[local_cell];
 
          }
-         else if(cells::internal::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[local_cell]>0){
-            // Non-magnetic-only cell (cells:probe-non-magnetic-cells): there
-            // is no moment to weight by, so use a plain average position of
-            // all atoms in the cell (from the unconditionally-accumulated
-            // cells::pos_array) as this cell's representative position.
-            // cells::pos_and_mom_array[4*cell+3] (total moment) is left at
-            // its zero-initialised default -- this is what keeps such cells
-            // inert as dipole-field *senders* (0 * tensor = 0 contribution
-            // to every other cell) while still letting the solvers treat
-            // them as *receivers*. cells::volume_array is also left at 0
-            // (no magnetic atomic volume here); solvers must not divide by
-            // it for these cells (see dipole/update.cpp, hierarchical/update.cpp).
+         else if(cells::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[local_cell]>0){
+            // non-magnetic-only cell (cells:probe-non-magnetic-cells): plain average position,
+            // zero moment (so it is not a source of dipole field) and zero volume
             const double n_any = double(cells::internal::num_any_atoms_in_cell[local_cell]);
 
             cells::pos_and_mom_array[4*local_cell+0] = cells::pos_array[3*local_cell+0]/n_any;
@@ -393,9 +365,8 @@ namespace cells{
             cells::local_cell_array.push_back(cell);
             cells::num_local_cells++;
          }
-         else if(cells::internal::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[cell]!=0){
-            // non-magnetic-only cell: still a valid local cell to visit as
-            // a dipole-field evaluation point (probe)
+         else if(cells::probe_non_magnetic_cells && cells::internal::num_any_atoms_in_cell[cell]!=0){
+            // non-magnetic-only cell kept as a probe (cells:probe-non-magnetic-cells)
             cells::local_cell_array.push_back(cell);
             cells::num_local_cells++;
          }

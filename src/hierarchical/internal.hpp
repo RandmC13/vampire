@@ -20,9 +20,11 @@
 //---------------------------------------------------------------------
 
 // C++ standard library headers
+#include <string>
 
 // Vampire headers
 #include "hierarchical.hpp"
+#include "vmpi.hpp"
 
 // hierarchical module headers
 #include "vector"
@@ -36,20 +38,21 @@ namespace hierarchical{
       //-------------------------------------------------------------------------
 
       extern int num_levels;
-      //create arrays for data storage
-      extern std::vector < double > cell_positions;
-      extern std::vector < double > cell_positions_mom;
-      extern std::vector < double > cell_dimensions;
+      // arrays for data storage; the shared arrays are held once per shared memory region
+      // (cell geometry is needed only during initialisation and freed at its end)
+      extern vmpi::shared_array_t < double > cell_positions;
+      extern vmpi::shared_array_t < double > cell_positions_mom;
+      extern vmpi::shared_array_t < double > cell_dimensions;
       extern std::vector < int > cells_level_start_index;
       extern std::vector < int > cells_level_end_index;
-      extern std::vector < int > cells_in_cells;
+      extern vmpi::shared_array_t < int > cells_in_cells;
       extern std::vector < int > interaction_range;
-      extern std::vector < int > cells_in_cells_start_index;
-      extern std::vector < int > cells_in_cells_end_index;
+      extern vmpi::shared_array_t < int > cells_in_cells_start_index;
+      extern vmpi::shared_array_t < int > cells_in_cells_end_index;
       extern std::vector <int> interaction_list;
       extern std::vector < int > interaction_list_start_index;
       extern std::vector < int > interaction_list_end_index;
-      extern std::vector < int > num_atoms_in_cell;
+      extern std::vector < int > upward_pass_cells; // coarse cells (level >= 1, by level) holding this process's cells
 
       extern std::vector < int > proc_cell_index_array1D;
       extern std::vector < int > cells_num_atoms_in_cell;
@@ -57,9 +60,15 @@ namespace hierarchical{
       extern int total_num_cells;
       extern int num_zero_level_cells;
 
-      extern std::vector<double> mag_array_x; /// arrays to store cells magnetisation
-      extern std::vector<double> mag_array_y;
-      extern std::vector<double> mag_array_z;
+      extern vmpi::shared_array_t<double> mag_array_x; /// cell magnetisations (all processes), one copy per region
+      extern vmpi::shared_array_t<double> mag_array_y;
+      extern vmpi::shared_array_t<double> mag_array_z;
+      extern std::vector<double> partial_mag_array_x;  /// this process's contribution to the cell magnetisations
+      extern std::vector<double> partial_mag_array_y;
+      extern std::vector<double> partial_mag_array_z;
+      extern std::vector<int> contributing_cells;      // cells (all levels, in order) with a contribution from this process
+      extern std::vector<double> mag_reduction_values; // contributions of this process, x then y then z
+      extern vmpi::shared_sum_t mag_reduction;         // sum of the contributions over processes
 
       extern std::vector<double> rij_tensor_xx;
       extern std::vector<double> rij_tensor_xy;
@@ -72,17 +81,30 @@ namespace hierarchical{
 
       extern double av_cell_size;
 
-      extern double tensor_cutoff;
-      extern std::vector<int> tensor_atoms_in_cell_global;
-      extern std::vector<double> tensor_cells_pos_and_mom;
-      extern std::vector<int> tensor_list_of_cells_with_atoms;
-      extern std::vector< std::vector<double> > tensor_atoms_in_cells;
+      extern bool output_p2p_diagnostic; // log the cost of a point-to-point exchange of cell moments at initialisation
+
+      // how the cell moments are summed between shared memory regions (hierarchical:moment-exchange)
+      enum class moment_exchange_t { all_reduce, point_to_point };
+      extern moment_exchange_t moment_exchange;
+      extern int moment_exchange_level; // highest level exchanged point to point (hierarchical:moment-exchange-level)
+
+      // phases of the field update, timed separately for the scaling study (papers/dipole)
+      enum phase_t { upward_pass = 0, moment_reduction = 1, field_loop = 2, field_distribution = 3, num_phases = 4 };
+      extern std::vector<double> phase_time; // time (s) of each phase of the last update on this process
 
       //-------------------------------------------------------------------------
       // Internal function declarations
       //-------------------------------------------------------------------------
 
       std::vector < std::vector < double> > calculate_corners(double x, double y, double z, double cell_size_x, double cell_size_y, double cell_size_z);
+
+      // function to log the cost of a point-to-point exchange of cell moments
+      void write_p2p_diagnostic();
+
+      // function to set up the point-to-point exchange of cell moments between regions (exchange.cpp)
+      void initialise_moment_exchange();
+      void exchange_moments();                   // sum of the cell moments, point to point (in place of mag_reduction.sum)
+      std::string moment_exchange_phase_times(); // phase times of the last exchange for the DIPOLE_SCALING line
 
       // function to update hierarchical cell magnetizations
       void calculate_hierarchical_magnetisation(std::vector <double>& x_spin_array, // atomic spin directions
@@ -92,9 +114,6 @@ namespace hierarchical{
                                                 std::vector < bool >& magnetic);    // is magnetic);
 
       // new version of inter tensor method
-      void add_cell_interactions(const int lc, const int slot);
-      void compute_cell_tensors(const int lc, const int slot);
-
       void calc_inter(const int celli,                                                // global ID of cell i
                       const int cellj,                                                // global ID of cell i
                       const int interaction_no,                                       // interaction number

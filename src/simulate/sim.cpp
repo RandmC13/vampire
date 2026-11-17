@@ -190,11 +190,6 @@ int run(){
       vout::log_memory_usage("GPU initialisation");
    }
 
-   // Precalculate initial statistics and then reset averages if not continuing a previous simulation
-   // RE technically this double counts the last data point in the statistics, need to implement a reset_counter to fix.
-   stats::update();
-   if(!load_checkpoint_continue_flag) stats::reset();
-
    // For continuous checkpoints inform user about I/O
    if(sim::save_checkpoint_continuous_flag) zlog << zTs() << "Continuously writing checkpoints to disk throughout simulation." << std::endl;
 
@@ -248,7 +243,20 @@ int run(){
                      atoms::num_atoms
    );
 
+   // the lists of atoms in each cell are only needed to initialise the dipole solvers; free them, as they hold an
+   // inner vector for every cell in the system on every process
+   std::vector < std::vector <int> >().swap(cells::index_atoms_array);
+   std::vector < std::vector <double> >().swap(cells::atom_in_cell_coords_array_x);
+   std::vector < std::vector <double> >().swap(cells::atom_in_cell_coords_array_y);
+   std::vector < std::vector <double> >().swap(cells::atom_in_cell_coords_array_z);
+
    if(environment::enabled) environment::initialize(cs::system_dimensions[0],cs::system_dimensions[1],cs::system_dimensions[2]);
+
+   // Precalculate initial statistics and then reset averages if not continuing a previous simulation. Done after the
+   // dipole initialisation so that the initial magnetostatic energy includes the dipole field.
+   // RE technically this double counts the last data point in the statistics, need to implement a reset_counter to fix.
+   stats::update();
+   if(!load_checkpoint_continue_flag) stats::reset();
 
    // For MPI version, calculate initialisation time
    if(vmpi::my_rank==0){

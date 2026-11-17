@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 
 // C library headers
 #include <fenv.h>
@@ -21,7 +22,9 @@
 // Vampire headers
 #include "cells.hpp" // needed for cells::cell_id_array but to be removed
 #include "dipole.hpp"
+#include "micromagnetic.hpp"
 #include "vio.hpp"
+#include "vmpi.hpp"
 #include "vutil.hpp"
 #include "sim.hpp"
 #include "vutil.hpp"
@@ -42,24 +45,14 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
             std::vector <double>& m_spin_array, // atomic spin moment
             std::vector < bool >& magnetic){ // is magnetic
 
-   // inverse Bohr magneton
-   const double imuB = constants::i_muB;
-
    // update hierarchical magnetization in cells
    hierarchical::internal::calculate_hierarchical_magnetisation(x_spin_array, y_spin_array, z_spin_array, m_spin_array, magnetic);
-   cells::mag();
+
    // instantiate timer
    vutil::vtimer_t timer;
 
-   // start timer
+   // start timer for the field loop
    timer.start();
-
-   // initialise cell fields to a large negative number for MPI reduction
-   for (int i = 0 ; i < cells::num_cells; i ++){
-      dipole::cells_field_array_x[i] = -100000.0;
-      dipole::cells_field_array_y[i] = -100000.0;
-      dipole::cells_field_array_z[i] = -100000.0;
-   }
 
    // Compute dipole fields for all cells with atoms (local cells)
    for(int lc = 0; lc < dipole::cells_num_local_cells; lc++){
@@ -68,31 +61,11 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       int cell_i = cells::cell_id_array[lc];
 
       // Store range of hierarchical cells contributing to dipole field for lc cell
-      // interactions of this cell: stored, or computed now with dipole:on-the-fly-tensors
-      int slot = lc;
-      if(hierarchical::on_the_fly_tensors){
-         slot = 0;
-         ha::interaction_list.clear();
-         ha::add_cell_interactions(lc, slot);
-         const size_t n = ha::interaction_list.size();
-         ha::rij_tensor_xx.resize(n);
-         ha::rij_tensor_xy.resize(n);
-         ha::rij_tensor_xz.resize(n);
-         ha::rij_tensor_yy.resize(n);
-         ha::rij_tensor_yz.resize(n);
-         ha::rij_tensor_zz.resize(n);
-         ha::compute_cell_tensors(lc, slot);
-      }
-      const int start = ha::interaction_list_start_index[slot];
-      const int end = ha::interaction_list_end_index[slot];
+      const int start = ha::interaction_list_start_index[lc];
+      const int end = ha::interaction_list_end_index[lc];
 
-      // Self demagnetisation factor multiplying m(i). Only meaningful for a
-      // cell that actually has magnetic atoms: a non-magnetic-only probe
-      // cell (cells:probe-non-magnetic-cells) has V==0 and zero
-      // magnetisation, so skip this term entirely rather than divide by
-      // zero volume (which would otherwise silently produce
-      // 8pi/(3*0)*0 = NaN). Such a cell is still a valid *receiver* below
-      // via the ha::interaction_list loop -- it just has no self term.
+      // Self demagnetisation factor multiplying m(i); a cell with no magnetic atoms (probe cell) has
+      // zero volume and magnetisation, so it has no self term but still receives the field of the others
       const double V = dipole::cells_volume_array[cell_i];
       double self_demag = 0.0;
       double mx_i = 0.0;
@@ -102,10 +75,10 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
          const double eightPI_three_cell_volume = 8.0*M_PI/(3.0*V);
          self_demag = eightPI_three_cell_volume;
 
-         // Normalise cell magnetisation by the Bohr magneton
-         mx_i = cells::mag_array_x[cell_i]*imuB;
-         my_i = cells::mag_array_y[cell_i]*imuB;
-         mz_i = cells::mag_array_z[cell_i]*imuB;
+         // Cell magnetisation (Bohr magnetons) from level 0 of the hierarchical cells, whose ids are the cell ids
+         mx_i = ha::mag_array_x[cell_i];
+         my_i = ha::mag_array_y[cell_i];
+         mz_i = ha::mag_array_z[cell_i];
       }
       // std::cout << cell_i << '\t' << mx_i << '\t' << my_i << '\t' << mz_i << std::endl;
 
@@ -114,20 +87,15 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       dipole::cells_field_array_y[cell_i] = self_demag * my_i; //*0.0
       dipole::cells_field_array_z[cell_i] = self_demag * mz_i; //*0.0
 
-      // Add self demag to Hdemag --> To get only dipole-dipole contribution comment this and initialise to zero
-      dipole::cells_mu0Hd_field_array_x[cell_i] = -0.5*self_demag * mx_i;
-      dipole::cells_mu0Hd_field_array_y[cell_i] = -0.5*self_demag * my_i;
-      dipole::cells_mu0Hd_field_array_z[cell_i] = -0.5*self_demag * mz_i;
-
       // Loop over all cells
       for(int j = start; j<end;j++){
 
          // get cell ID of neighbouring cell
          int cell_j = ha::interaction_list[j];
 
-         const double mx = ha::mag_array_x[cell_j];//*imuB;
-         const double my = ha::mag_array_y[cell_j];//*imuB;
-         const double mz = ha::mag_array_z[cell_j];//*imuB;
+         const double mx = ha::mag_array_x[cell_j];
+         const double my = ha::mag_array_y[cell_j];
+         const double mz = ha::mag_array_z[cell_j];
 
          //    if (cell_i == 389)  std::cout << cell_j << '\t' << mx << '\t' << my << '\t' << mz<< "\t" << cell_i << '\t' << std::endl;
          //if (cell_i == 0)std::cout<< cell_i << '\t' << mx_i << '\t' << my_i << '\t' << mz_i << "\t" <<  cell_j << '\t' << mx << '\t' << my << '\t' << mz <<std::endl;
@@ -136,11 +104,6 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
          dipole::cells_field_array_x[cell_i]      +=(mx*ha::rij_tensor_xx[j] + my*ha::rij_tensor_xy[j] + mz*ha::rij_tensor_xz[j]);
          dipole::cells_field_array_y[cell_i]      +=(mx*ha::rij_tensor_xy[j] + my*ha::rij_tensor_yy[j] + mz*ha::rij_tensor_yz[j]);
          dipole::cells_field_array_z[cell_i]      +=(mx*ha::rij_tensor_xz[j] + my*ha::rij_tensor_yz[j] + mz*ha::rij_tensor_zz[j]);
-
-         // Demag field
-         dipole::cells_mu0Hd_field_array_x[cell_i] +=(mx*ha::rij_tensor_xx[j] + my*ha::rij_tensor_xy[j] + mz*ha::rij_tensor_xz[j]);
-         dipole::cells_mu0Hd_field_array_y[cell_i] +=(mx*ha::rij_tensor_xy[j] + my*ha::rij_tensor_yy[j] + mz*ha::rij_tensor_yz[j]);
-         dipole::cells_mu0Hd_field_array_z[cell_i] +=(mx*ha::rij_tensor_xz[j] + my*ha::rij_tensor_yz[j] + mz*ha::rij_tensor_zz[j]);
          // std::cout << rij_tensor_xx[j] << '\t' << rij_tensor_xy[j] << '\t' << rij_tensor_xz[j] << '\t' << rij_tensor_yy[j] << '\t' << rij_tensor_yz[j] << '\t' << rij_tensor_zz[j] << '\t' <<std::endl;
 
       }
@@ -152,31 +115,41 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
       dipole::cells_field_array_z[cell_i] = dipole::cells_field_array_z[cell_i] * constants::dipole_prefactor;
       //std::cout << sim::time << '\t' << cell_i << '\t' << dipole::cells_field_array_x[cell_i] << '\t' << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i] << '\t' << std::endl;
       //std::cout << "SP" << dipole::cells_field_array_x[cell_i] << "\t" << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i]<< std::endl;
-
-      // Multiply Hdemg by mu_0/4pi * 1e30 * mu_B to account for normalisation of magnetisation and volume in angstrom
-      dipole::cells_mu0Hd_field_array_x[cell_i] = dipole::cells_mu0Hd_field_array_x[cell_i] * constants::dipole_prefactor;
-      dipole::cells_mu0Hd_field_array_y[cell_i] = dipole::cells_mu0Hd_field_array_y[cell_i] * constants::dipole_prefactor;
-      dipole::cells_mu0Hd_field_array_z[cell_i] = dipole::cells_mu0Hd_field_array_z[cell_i] * constants::dipole_prefactor;
       //if (cell_i == 0) std::cout << sim::time << '\t' << cell_i << '\t' <<  dipole::cells_field_array_x[cell_i] << '\t' << dipole::cells_field_array_y[cell_i] << '\t' << dipole::cells_field_array_z[cell_i] << '\t' << std::endl;
 
    }
 
-   #ifdef MPICF
-      // Reduce fields on all processors so all have correct field values
-      MPI_Allreduce(MPI_IN_PLACE, &dipole::cells_field_array_x[0], dipole::cells_num_cells, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE, &dipole::cells_field_array_y[0], dipole::cells_num_cells, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-      MPI_Allreduce(MPI_IN_PLACE, &dipole::cells_field_array_z[0], dipole::cells_num_cells, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-   #endif
+   timer.stop();
+   ha::phase_time[ha::field_loop] = timer.elapsed_time();
+   timer.start();
 
-   // Check for cells with unrealistic fields from initialisation and zero
-   for (int i = 0 ; i < dipole::cells_num_cells; i ++){
-      if (dipole::cells_field_array_x[i] < -1000) dipole::cells_field_array_x[i] = 0.0;
-      if (dipole::cells_field_array_y[i] < -1000) dipole::cells_field_array_y[i] = 0.0;
-      if (dipole::cells_field_array_z[i] < -1000) dipole::cells_field_array_z[i] = 0.0;
-      //  std::cout << i << '\t' << dipole::cells_field_array_x[i] << '\t' << dipole::cells_field_array_y[i] << '\t' << dipole::cells_field_array_z[i] <<std::endl;
+   // Each process has the fields of the cells holding its atoms; micromagnetic cells need all cells
+   if(micromagnetic::discretisation_type > 0) dipole::gather_cell_fields();
+
+   // Copy B-field from macrocell to atomistic spins, and the demagnetising field
+   // mu_0 H = B - mu_0 M (self term -1/3 mu_0 M, as in the tensor solver) for the magnetostatic energy.
+   // With cells:probe-non-magnetic-cells non-magnetic atoms get the field of their cell too (mu_0 H = B)
+   for(int atom = 0; atom < vmpi::num_local_atoms; ++atom){
+      const int cell = cells::atom_cell_id_array[atom];
+      if( !magnetic[atom] ){
+         if( !cells::probe_non_magnetic_cells ) continue;
+         dipole::atom_dipolar_field_array_x[atom] = dipole::atom_mu0demag_field_array_x[atom] = dipole::cells_field_array_x[cell];
+         dipole::atom_dipolar_field_array_y[atom] = dipole::atom_mu0demag_field_array_y[atom] = dipole::cells_field_array_y[cell];
+         dipole::atom_dipolar_field_array_z[atom] = dipole::atom_mu0demag_field_array_z[atom] = dipole::cells_field_array_z[cell];
+      }
+      else{
+         dipole::atom_dipolar_field_array_x[atom] = dipole::cells_field_array_x[cell];
+         dipole::atom_dipolar_field_array_y[atom] = dipole::cells_field_array_y[cell];
+         dipole::atom_dipolar_field_array_z[atom] = dipole::cells_field_array_z[cell];
+         const double mu0_m = 4.0 * M_PI * constants::dipole_prefactor / dipole::cells_volume_array[cell];
+         dipole::atom_mu0demag_field_array_x[atom] = dipole::cells_field_array_x[cell] - mu0_m * ha::mag_array_x[cell];
+         dipole::atom_mu0demag_field_array_y[atom] = dipole::cells_field_array_y[cell] - mu0_m * ha::mag_array_y[cell];
+         dipole::atom_mu0demag_field_array_z[atom] = dipole::cells_field_array_z[cell] - mu0_m * ha::mag_array_z[cell];
+      }
    }
 
    timer.stop();
+   ha::phase_time[ha::field_distribution] = timer.elapsed_time();
 
    // Optionally output dipole update time to log file (commented due to call frequency of this function)
    //std::cout << "\tdone! [ " << timer.elapsed_time() << " s ]" << std::endl;
@@ -188,5 +161,44 @@ void update(std::vector <double>& x_spin_array, // atomic spin directions
    return;
 
 } // end of update function
+
+//------------------------------------------------------------------------------
+// Function returning the time of each phase of the last update (slowest process)
+//------------------------------------------------------------------------------
+std::string update_phase_times(){
+
+   // field loop time per interaction on this process (ns), to separate load imbalance from per-interaction cost
+   const double field_time = ha::phase_time[ha::field_loop];
+   const double num_interactions = ha::interaction_list.size();
+   const double ns_per_interaction = num_interactions > 0 ? 1.0e9 * field_time / num_interactions : 0.0;
+
+   // phases of the moment reduction: the min over ranks (over region leaders for the allreduce) is the cost
+   // without waiting, the max includes the wait for the slowest rank
+   const vmpi::shared_sum_t& red = ha::mag_reduction;
+   const bool leader = vmpi::my_shared_rank == 0;
+   const double not_leader = 1.0e30; // excluded from the minimum
+
+   std::ostringstream times;
+   times << " upward_s="     << vmpi::reduce_max(ha::phase_time[ha::upward_pass])
+         << " reduce_s="     << vmpi::reduce_max(ha::phase_time[ha::moment_reduction]);
+   if(ha::moment_exchange == ha::moment_exchange_t::point_to_point) times << ha::moment_exchange_phase_times(); // exchange.cpp
+   else times
+         << " reduce_gather_s="        << vmpi::reduce_max(red.phase_time[red.gather])
+         << " reduce_gather_min_s="    << vmpi::reduce_min(red.phase_time[red.gather])
+         << " reduce_add_s="           << vmpi::reduce_max(red.phase_time[red.add])
+         << " reduce_allreduce_s="     << vmpi::reduce_max(red.phase_time[red.allreduce])
+         << " reduce_allreduce_min_s=" << vmpi::reduce_min(leader ? red.phase_time[red.allreduce] : not_leader)
+         << " reduce_barrier_s="       << vmpi::reduce_max(red.phase_time[red.barrier])
+         << " reduce_barrier_min_s="   << vmpi::reduce_min(red.phase_time[red.barrier]);
+   times << " field_s="      << vmpi::reduce_max(field_time)
+         << " distribute_s=" << vmpi::reduce_max(ha::phase_time[ha::field_distribution])
+         << " field_min_s="  << vmpi::reduce_min(field_time)
+         << " field_mean_s=" << vmpi::reduce_sum(field_time) / double(vmpi::num_processors)
+         << " field_ns_per_interaction_min=" << vmpi::reduce_min(ns_per_interaction)
+         << " field_ns_per_interaction_max=" << vmpi::reduce_max(ns_per_interaction);
+
+   return times.str();
+
+}
 
 } // end of hierarchical namespace

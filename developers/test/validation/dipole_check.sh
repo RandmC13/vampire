@@ -9,8 +9,7 @@
 # (40 x 12 x 3 nm, 1 nm cells, longer than the range over which the
 # hierarchical solver sums cell by cell):
 #
-#   - dipole:on-the-fly-tensors gives fields identical to stored tensors, for
-#     the tensor and the hierarchical solver
+#   - dipole:on-the-fly-tensors gives fields identical to stored tensors
 #   - the hierarchical field agrees with the tensor field (largest difference
 #     below TOL tesla, default 1e-3)
 #
@@ -68,16 +67,13 @@ EOF
 run tensor tensor
 run tensor-otf tensor dipole:on-the-fly-tensors
 run hierarchical hierarchical
-run hierarchical-otf hierarchical dipole:on-the-fly-tensors
 
 fail=0
-for s in tensor hierarchical; do
-   if cmp -s "$work/$s/dipole-field.txt" "$work/$s-otf/dipole-field.txt"; then
-      echo "PASS $s: on-the-fly tensors give identical fields"
-   else
-      echo "FAIL $s: on-the-fly tensors give different fields"; fail=1
-   fi
-done
+if cmp -s "$work/tensor/dipole-field.txt" "$work/tensor-otf/dipole-field.txt"; then
+   echo "PASS tensor: on-the-fly tensors give identical fields"
+else
+   echo "FAIL tensor: on-the-fly tensors give different fields"; fail=1
+fi
 
 python3 - "$work" "$tol" << 'EOF' || fail=1
 import sys

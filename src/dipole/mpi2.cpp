@@ -77,9 +77,9 @@ namespace internal{
             const int cell_id = list_of_local_cells[lc];
 
             // load coordinates of local cell
-            const double cxi = cells_pos_and_mom_array[ 4*cell_id + 0 ];
-            const double cyi = cells_pos_and_mom_array[ 4*cell_id + 1 ];
-            const double czi = cells_pos_and_mom_array[ 4*cell_id + 2 ];
+            const double cxi = pos_and_mom_array[ 4*cell_id + 0 ];
+            const double cyi = pos_and_mom_array[ 4*cell_id + 1 ];
+            const double czi = pos_and_mom_array[ 4*cell_id + 2 ];
 
             // loop over all other cells in the system to determine if it is within
             // cutoff range for atomistic dipole tensor calculation
@@ -89,14 +89,16 @@ namespace internal{
                if( global_atoms_in_cell_count[cell] > 0 ){
 
                   // load coordinates of local cell
-                  const double cxj = cells_pos_and_mom_array[ 4*cell + 0 ];
-                  const double cyj = cells_pos_and_mom_array[ 4*cell + 1 ];
-                  const double czj = cells_pos_and_mom_array[ 4*cell + 2 ];
+                  const double cxj = pos_and_mom_array[ 4*cell + 0 ];
+                  const double cyj = pos_and_mom_array[ 4*cell + 1 ];
+                  const double czj = pos_and_mom_array[ 4*cell + 2 ];
 
-                  // compute displacement
-                  const double dx = cxi - cxj;
-                  const double dy = cyi - cyj;
+                  // compute displacement (to the nearest copy with periodic images)
+                  double dx = cxi - cxj;
+                  double dy = cyi - cyj;
                   const double dz = czi - czj;
+                  if(periodic_images && periodic[0]) dx -= period[0]*std::round(dx/period[0]);
+                  if(periodic_images && periodic[1]) dy -= period[1]*std::round(dy/period[1]);
 
                   // calculate distance between cells squared
                   const double rij2 = dx*dx + dy*dy + dz*dz;
@@ -136,7 +138,6 @@ namespace internal{
          for ( int cell = my_first_cell; cell < my_first_cell + my_num_cells; cell++ ) cell_location_list[ cell ] = vmpi::my_rank;
          vmpi::all_reduce_sum(cell_location_list);
 
-         vmpi::barrier();
          //std::cerr << "Rank " << vmpi::my_rank << " first cell " <<  my_first_cell << " my last cell " << my_first_cell + my_num_cells << " total cells " << num_cells << std::endl;
 
 
@@ -154,7 +155,6 @@ namespace internal{
          //textssa << "Rank: " << vmpi::my_rank << " cell atoms ";
          //for ( int cell = 0; cell < num_cells; cell++ ) textssa << cell << " " <<  global_atoms_in_cell_count[cell] << " ";
          //std::cerr << textssa.str() << std::endl;
-         vmpi::barrier();
          //std::cerr << "Rank " << vmpi::my_rank << " total num atoms to recv " <<  total_num_atoms << std::endl;
 
          // initialise temporary data structures (this is memory efficient since data is only created when atoms need to be sent)
@@ -309,7 +309,6 @@ namespace internal{
          std::vector<int> recv_cell_data( 2*total_num_cells,123 );
          //std::cerr << "Rank " << vmpi::my_rank << " num cells to recv " << total_num_cells << " offset counter " << recv_cell_offset_counter << "\n";
 
-         vmpi::barrier();
          //std::cerr << "Rank " << vmpi::my_rank << " swapping atom data " << std::endl;
 
          // send receive all data asynchronously
@@ -349,13 +348,6 @@ namespace internal{
                   recv_message_ID++;
                }
             }
-
-            MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
-            //int error;
-
-            // Ensure every rank has posted its receives (above) before any
-            // rank starts sending
-            vmpi::barrier();
 
             int send_message_ID = 0;
             // loop over all processors and dispatch only necessary sends and recieves
@@ -690,8 +682,6 @@ namespace internal{
 
          }
 
-         // wait for everyone before transferring data
-         vmpi::barrier();
          //std::cerr << vmpi::my_rank << " Transferring atom data " << std::endl;
 
          // print out list of cells I need to send here
@@ -840,7 +830,7 @@ namespace internal{
                const int num_atoms_in_cell = global_atoms_in_cell_count[cell];
 
                // reserve memory for atoms
-               atoms_in_cells_array[i].reserve( 4*num_atoms_in_cell );
+               atoms_in_cells_array[cell_index].reserve( 4*num_atoms_in_cell );
 
                // now unpack atoms into cell storage
                for( int atom = 0 ; atom < num_atoms_in_cell ; atom++ ){

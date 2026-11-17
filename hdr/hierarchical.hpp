@@ -24,10 +24,6 @@
 //--------------------------------------------------------------------------------
 namespace hierarchical{
 
-   // compute each cell's interaction list and tensors at every field update instead of storing them
-   // (set from dipole:on-the-fly-tensors)
-   extern bool on_the_fly_tensors;
-
    //-----------------------------------------------------------------------------
    // Function to initialise hierarchical module
    //-----------------------------------------------------------------------------
@@ -57,6 +53,13 @@ namespace hierarchical{
                std::vector <double>& z_spin_array,
                std::vector <double>& m_spin_array, // atomic spin moment
                std::vector < bool >& magnetic);    // is magnetic);
+
+   //---------------------------------------------------------------------------
+   // Function returning the time of each phase of the last update (slowest
+   // process) as " upward_s=... reduce_s=... field_s=... distribute_s=...".
+   // Collective: must be called on all processes.
+   //---------------------------------------------------------------------------
+   std::string update_phase_times();
 
 } // end of hierarchical namespace
 

@@ -24,6 +24,12 @@ Which check to run:
 | meant to leave every result unchanged (refactoring, optimisation with the same arithmetic, new options that are off by default) | `identity_compare.sh` against the last commit that passed the full checks; if every run is identical, the results of those checks carry over |
 | touches the multi-GPU version (`src/mgpu`, halo, decomposition) | `mgpu_check.sh` as well |
 | changes results (new physics, different arithmetic or random numbers) | `run_gpu_suite.sh`, `mgpu_check.sh`, and `ab_compare.sh` for statistically equivalent changes |
+| anything that could change what an ordinary user of the serial or MPI version sees (input, output files, checkpoints, vdc) | `compat_check.sh` against the reference version (CPU only, no GPU needed) |
+| any change to the CPU code | upstream's regression suite, `developers/tests.sh -r` and `-m 2` (about 30 s and 50 s); built with GCC 15 the serial cases `config/binary-continuous`, `integrate/constrained-monte-carlo`, `program/hamr-cool`, `vio/all-columns`, `vio/grain-columns` and the 2-process cases `config/binary-continuous`, `config/output-mode-mpi-io`, `program/hamr-cool`, `vio/grain-columns` fail for the reference version too (low order bits of their golden files), so only other failures point to a change |
+| the HAMR active window (`src/hamr/active_window.cpp`, window snapshots) | `hamr_window_check.sh` (below) |
+| the active window with continuous layers (cap, damping buffer) | `hamr_cap_window_check.sh` (below) |
+| `hamr:track-order`, `hamr:save-track-states`, checkpoint writing | `hamr_tracks_check.sh` (below) |
+| `sim:program = dipole-field`, `dipole:field-cells`, periodic images of the tensor solver | `dipole_field_check.sh` (below) |
 | new feature or validation case | all of the above once, before committing |
 
 The GPU scripts start several validation runs at a time on the GPU (`GPU_JOBS`, default 4 processes, so 2 runs on 2
@@ -126,10 +132,69 @@ pass/fail. Rows of a per-row case are correlated, so judge the pooled values rat
 ## Dipole solvers
 
 `developers/test/validation/dipole_check.sh [vampire binary] [MPI ranks]` (CPU, a few seconds) runs a uniformly
-magnetised Co film (40 x 12 x 3 nm, 1 nm cells) with the tensor and hierarchical solvers, with and without
-`dipole:on-the-fly-tensors`: on-the-fly tensors must give identical fields, and the hierarchical field must agree with the
+magnetised Co film (40 x 12 x 3 nm, 1 nm cells) with the tensor solver (with and without
+`dipole:on-the-fly-tensors`, which must give identical fields) and the hierarchical solver: and the hierarchical field must agree with the
 tensor field to `TOL` tesla (default 1e-3; the film is longer than the range the hierarchical solver sums cell by cell,
 so its far-field approximation is tested).
+
+## HAMR active window
+
+`developers/test/validation/hamr_window_check.sh [vampire binary]` checks `hamr:active-window` on small granular HAMR
+films: with every grain in the window the output is identical to the run without it; over `SEEDS` seeds (default 16)
+the magnetisation with and without the window agrees statistically (z-scores below `ZMAX`, default 4); window spin
+snapshots rebuilt into full ones equal the full snapshots, and `vdc` (`VDC`, default `vdc/vdc` next to the binary)
+writes identical files from both; and the run times. `FILM=small` runs every stage on a 30 x 8 nm film, small enough
+for one CPU; `RANKS=N` runs the MPI and multi-GPU versions on N processes, `JOBS` runs several seeds at a time.
+
+`developers/test/validation/hamr_cap_window_check.sh [vampire binary]` checks the window on a granular FePt film under
+a continuous cap: with every grain in the window the output is identical to the run without it (on a 12 x 40 nm film,
+which up to 6 processes divide across the track with and without the window); a damping buffer with the cap's own
+damping is identical to a wider margin without a buffer; at a constant 300 K a buffer over most of the cap keeps the
+cap's magnetisation within `DM` (default 0.01) of the run without the window; with `SEEDS=N` (at least 8) the write
+with and without the window agrees statistically. Stages 1-3 take minutes on a GPU; `RANKS` and `JOBS` as above.
+
+## HAMR tracks
+
+`developers/test/validation/hamr_tracks_check.sh [vampire binary]` writes three tracks in the order 2, 1, 3 at T = 0
+with `hamr:save-track-states`: the tracks are written in that order, the spin snapshot after each track agrees with the
+serial CPU version (`REF`, `TOL`), and the checkpoint files of a track reload into exactly its snapshot.
+
+## Dipole field program
+
+`developers/test/validation/dipole_field_check.sh [vampire binary]` (CPU, seconds) checks `sim:program = dipole-field`
+on a Co film with a non-magnetic probe layer: it gives the fields of the time-series program; on a periodic uniform
+film every cell of a layer has the same field and the probe layer none; the field of periodic stripes agrees with the
+analytic field; `dipole:field-cells = probe` gives the probe cells the same fields; with an MPI binary, `RANKS`
+processes agree with one.
+
+## Compatibility with a reference version
+
+`developers/test/validation/compat_check.sh [ref-commit]` (default `upstream/v8`) builds the serial and MPI versions and
+`vdc` of a reference commit and of the working tree, and checks on the CPU that the working tree behaves like the
+reference for an ordinary user: every output file must be identical byte for byte (comment lines starting with `#`,
+and the stdout and log files, are ignored). Its stages (`ONLY=stage,stage` selects some of them):
+
+- `samples`: every sample of `samples/` with both serial versions (a sample that needs a set-up step, such as the
+  unit cell generator, gets it; a run longer than 50000 steps is shortened for both versions)
+- `config`: a small system with two magnetic and one non-magnetic material, written with every combination of
+  `config:output-format` and `config:output-mode` (and one and two output nodes), serial and on `RANKS` MPI ranks
+  (default 2); combinations that both versions refuse are reported. Every file, and every product of each version's own
+  `vdc` (no option, `--xyz`, `--vtk`, `--povray`, `--text`, `--cells`, `--ssc`, `--grains`, `--povray-cells`,
+  `--povray-sticks`, `--cell-size`) must be identical; for legacy files, which `vdc` cannot read, both must give the
+  same error
+- `old-files`: `vdc` of the working tree on the files written by the reference version must give the products of the
+  reference `vdc`
+- `checkpoints`: a 300 K run writes a checkpoint half way; it is continued (`sim:load-checkpoint=continue`) and
+  restarted (`restart`) by every combination of writing and reading version, serial and parallel, and must give the
+  results of the reference version reading its own checkpoint
+- `window-snapshots` (working tree only): a granular HAMR write with `hamr:active-window` and spin configuration
+  files, with and without `hamr:active-window-full-snapshots`: output and the `vdc` products (`--xyz`, `--vtk`,
+  `--text`, `--povray`) must be identical
+- `warnings`: the compiler warnings of each target; fails if the working tree warns in a file the reference does not
+
+The binaries of a reference commit are cached in `results/compat-cache` (`CACHE`) and reused. Other variables: `JOBS`
+(build jobs), `MPIRUN`, `WORK` (scratch directory, kept; by default a temporary directory, kept with `KEEP=1`). The
+summary of PASS and FAIL lines and the times is written to `results/compat-<ref>-<date>/summary.txt`.
 
 ## Case format (`cases/<case>/case.json`)
 

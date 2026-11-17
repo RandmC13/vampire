@@ -104,8 +104,21 @@ namespace dipole{
       test="on-the-fly-tensors";
       if(word==test){
          // tensor solver: compute each cell's tensors when the field is updated instead of storing them all
-         dipole::internal::on_the_fly_tensors = true;
+         dipole::internal::on_the_fly_tensors = vin::check_for_valid_bool(value, word, line, prefix, "input");
          return true;
+      }
+      //-------------------------------------------------------------------
+      test="field-cells";
+      if(word==test){
+         // cells in which the field is calculated: all, or only those without magnetic atoms (probe cells)
+         if(value == "all"){ dipole::internal::probe_cells_only = false; return true; }
+         if(value == "probe"){ dipole::internal::probe_cells_only = true; return true; }
+         terminaltextcolor(RED);
+         std::cerr << "Error - value for \'dipole:" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"all\"" << std::endl;
+         std::cerr << "\t\"probe\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
       }
       //-------------------------------------------------------------------
       test="atomistic-tensor-enabled";

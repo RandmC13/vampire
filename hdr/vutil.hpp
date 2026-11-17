@@ -40,6 +40,23 @@ namespace vutil{
 
    }
 
+   // Current proportional set size of this process, in kB: resident memory with each shared page divided
+   // between the processes mapping it, so that MPI shared memory arrays are counted once per region (the
+   // resident set size counts them in full in every process). Linux only (/proc/self/smaps_rollup), -1
+   // elsewhere.
+   inline double proportional_memory_usage_kb(){
+
+      std::ifstream smaps("/proc/self/smaps_rollup");
+      std::string key;
+      double value;
+      while(smaps >> key){
+         if(key == "Pss:" && smaps >> value) return value;
+         smaps.ignore(256, '\n');
+      }
+      return -1.0;
+
+   }
+
    // Function to read memory entries from /proc/status (linux only) in kB
    // if /proc/self/status does not exist the function will return -1 and the logging code will fallback to platform independent logic
    inline double proc_status_kb(const std::string& entry){
@@ -50,6 +67,23 @@ namespace vutil{
          if(key == entry){
             double kb = -1.0;
             status >> kb;
+            return kb;
+         }
+      }
+      return -1.0;
+
+   }
+
+   // Function to read the memory available for new allocations on this node from /proc/meminfo
+   // (linux only) in kB; returns -1 if it cannot be read
+   inline double available_memory_kb(){
+
+      std::ifstream meminfo("/proc/meminfo");
+      std::string key;
+      while(meminfo >> key){
+         if(key == "MemAvailable:"){
+            double kb = -1.0;
+            meminfo >> kb;
             return kb;
          }
       }
@@ -88,6 +122,6 @@ namespace vutil{
 
 // Checkpoint load/save functions
 void load_checkpoint();
-void save_checkpoint();
+void save_checkpoint(const std::string& suffix = ""); // file vampire<rank><suffix>.chk
 
 #endif //VUTIL_H_

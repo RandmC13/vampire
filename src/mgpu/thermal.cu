@@ -9,13 +9,11 @@
 
 // C++ standard library headers
 #include <cstdint>
-#include <vector>
 
 // CUDA headers
 #include <curand_kernel.h>
 
 // Vampire headers
-#include "atoms.hpp"
 #include "hamr.hpp"
 #include "mgpu.hpp"
 #include "program.hpp"
@@ -35,14 +33,10 @@
 namespace cu = ::vcuda::internal;
 
 //------------------------------------------------------------------------------
-// Thermal and HAMR fields of the multi-GPU version. The physics is that of the
-// CUDA module (src/cuda/thermal_fields.cu and src/cuda/hamr_fields.cu, keep
-// both in step); only the random numbers differ. The CUDA module draws them
-// from a random number state per GPU thread, which would repeat the same
-// numbers on every GPU. Here they are computed from the integration seed, the
-// key of the atom and the number of the time step with the counter-based
-// Philox generator, so every atom receives the same thermal noise whatever the
-// decomposition, and no state is stored.
+// Thermal and HAMR fields as in src/cuda/thermal_fields.cu and hamr_fields.cu,
+// except that the random numbers come from the Philox generator seeded by the
+// integration seed, atom key and step number, so each atom has the same noise
+// on any number of GPUs.
 //------------------------------------------------------------------------------
 namespace mgpu{
 
@@ -74,7 +68,8 @@ namespace internal{
          const cu::material_parameters_t * material_params,
          const int * material,
          const int n_atoms,
-         const int * active){
+         const int * active,
+         const cu::cu_real_t * noise_scale){ // factor of the noise of each atom (nullptr: 1)
 
       for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
 
@@ -82,17 +77,8 @@ namespace internal{
 
          const cu::material_parameters_t mat = material_params[material[i]];
          if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
-         const cu::cu_real_t alpha = mat.temperature_rescaling_alpha;
-         const cu::cu_real_t sigma = mat.H_th_sigma;
-         const cu::cu_real_t tc = mat.temperature_rescaling_Tc;
-
-         #ifdef CUDA_DP
-            const double resc_temp = (temperature < tc) ? tc * pow(temperature / tc, alpha) : temperature;
-            const double rsigma = sigma*sqrt(resc_temp);
-         #else
-            const float resc_temp = (temperature < tc) ? tc * __powf(temperature / tc, alpha) : temperature;
-            const float rsigma = sigma*sqrtf(resc_temp);
-         #endif
+         cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temperature);
+         if(noise_scale) rsigma *= noise_scale[i];
 
          const float3 n = thermal_noise(atom_key[i], step, seed);
          x_field_array[i] = rsigma * n.x;
@@ -120,7 +106,8 @@ namespace internal{
          const cu::material_parameters_t * material_params,
          const int * material,
          const int n_atoms,
-         const int * active){
+         const int * active,
+         const cu::cu_real_t * noise_scale){ // factor of the noise of each atom (nullptr: 1)
 
       for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
 
@@ -129,31 +116,12 @@ namespace internal{
          const cu::material_parameters_t mat = material_params[material[i]];
          if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
 
-         // temperature of the Gaussian laser profile centred on the head
+         // temperature of the Gaussian laser profile and thermal field with the material's temperature rescaling
          const cu::cu_real_t cx = atoms_coord_x[i];
          const cu::cu_real_t cy = atoms_coord_y[i];
-         const cu::cu_real_t cx2 = (cx-px)*(cx-px);
-         const cu::cu_real_t cy2 = (cy-py)*(cy-py);
-         #ifdef CUDA_DP
-            const cu::cu_real_t exp_x = exp(-cx2*one_over_denx);
-            const cu::cu_real_t exp_y = exp(-cy2*one_over_deny);
-         #else
-            const cu::cu_real_t exp_x = __expf(-cx2*one_over_denx);
-            const cu::cu_real_t exp_y = __expf(-cy2*one_over_deny);
-         #endif
-         const cu::cu_real_t temp = Tmin + DeltaT * exp_x * exp_y;
-
-         // material dependent temperature rescaling
-         const cu::cu_real_t alpha = mat.temperature_rescaling_alpha;
-         const cu::cu_real_t Tc    = mat.temperature_rescaling_Tc;
-         const cu::cu_real_t sigma = mat.H_th_sigma;
-         #ifdef CUDA_DP
-            const double resc_temp = (temp < Tc) ? Tc * pow(temp / Tc, alpha) : temp;
-            const double rsigma = sigma*sqrt(resc_temp);
-         #else
-            const float resc_temp = (temp < Tc) ? Tc * __powf(temp / Tc, alpha) : temp;
-            const float rsigma = sigma*sqrtf(resc_temp);
-         #endif
+         const cu::cu_real_t temp = cu::laser_temperature(cx, cy, px, py, Tmin, DeltaT, one_over_denx, one_over_deny);
+         cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+         if(noise_scale) rsigma *= noise_scale[i];
 
          const float3 n = thermal_noise(atom_key[i], step, seed);
          cu::cu_real_t field_x = rsigma * n.x;
@@ -231,20 +199,20 @@ namespace internal{
                Tmin, DeltaT, one_over_denx, one_over_deny, px, py,
                Hx_app, Hy_app, Hz_app, Hloc_min_x, Hloc_max_x, Hloc_min_y, Hloc_max_y,
                d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
          }
          else{
             global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
                sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
          }
       }
       // otherwise the global thermal field and the applied fields
       else{
          global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
             cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
-            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms, nullptr);
+            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms, nullptr, nullptr);
          cu::update_applied_fields();
       }
       check_cuda_errors(__FILE__, __LINE__);

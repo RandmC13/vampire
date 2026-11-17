@@ -19,6 +19,7 @@ macrocell.o \
 memory.o \
 mpi.o \
 mpi2.o \
+periodic.o \
 output_atomistic_field.o \
 output_dipole_fields.o \
 tensor.o \

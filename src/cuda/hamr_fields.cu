@@ -10,9 +10,11 @@
 // C++ standard library headers
 
 // Vampire headers
+#include "atoms.hpp"
 #include "cuda.hpp"
 #include "errors.hpp"
 #include "hamr.hpp"
+#include "material.hpp"
 #include "random.hpp"
 #include "sim.hpp"
 #include "vio.hpp"
@@ -21,6 +23,7 @@
 #include "cuda_utils.hpp"
 #include "data.hpp"
 #include "internal.hpp"
+#include "llg_heun.hpp"
 #include "typedefs.hpp"
 
 // Conditional compilation of all cuda code
@@ -33,34 +36,6 @@ namespace vcuda{
 
    // module internal namespace
    namespace internal{
-
-      // Function to calculate temperature of atom depending on Gaussian profile
-      __device__ cu_real_t calculate_gaussian_profile(
-         const int atom, const cu_real_t cx, const cu_real_t cy,
-         const cu_real_t px, const cu_real_t py,
-         const cu_real_t Tmin, const cu_real_t DeltaT,
-         const cu_real_t one_over_denx, const cu_real_t one_over_deny
-         )
-      {
-
-         const cu_real_t cx2 = (cx-px)*(cx-px);
-         const cu_real_t cy2 = (cy-py)*(cy-py);
-
-         #ifdef CUDA_DP
-            cu_real_t exp_x =  exp(-cx2*one_over_denx);
-            cu_real_t exp_y =  exp(-cy2*one_over_deny);
-         #else
-            cu_real_t exp_x =  __expf(-cx2*one_over_denx);
-            cu_real_t exp_y =  __expf(-cy2*one_over_deny);
-         #endif
-         // if(i<5){printf("  %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf\n",
-         //                   i, cx, cy, px, py, DeltaT, denx, deny, one_over_denx, one_over_deny, exp_x, exp_y); }
-
-         cu_real_t temperature = Tmin + DeltaT * exp_x * exp_y;
-
-         return temperature;
-      } // end calculate_gaussian_profile
-
 
       // Kernel to apply thermal field with local temperature and the head field inside the field box
       __global__ void apply_local_temperature_and_field_kernel(
@@ -76,7 +51,8 @@ namespace vcuda{
             cu::material_parameters_t * material_params,
             int * material,
             const int n_atoms,
-            const int * active
+            const int * active,
+            const cu_real_t * noise_scale // factor of the noise of each atom (nullptr: 1)
             )
       {
          int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -109,41 +85,12 @@ namespace vcuda{
             cu_real_t field_y = 0.0;
             cu_real_t field_z = 0.0;
 
-            // Assign tempeerature to atoms according to Gaussian profile
-            // cu_real_t temp = calculate_gaussian_profile(i, atoms_coord_x[i], atoms_coord_y[i], px, py,
-            //                                     Tmin, DeltaT, one_over_denx, one_over_deny);
-            //-------------------------------------------//
+            // temperature of the Gaussian laser profile and thermal field with the material's temperature rescaling
             const cu_real_t cx = atoms_coord_x[i];
             const cu_real_t cy = atoms_coord_y[i];
-            const cu_real_t cx2 = (cx-px)*(cx-px);
-            const cu_real_t cy2 = (cy-py)*(cy-py);
-
-            #ifdef CUDA_DP
-               cu_real_t exp_x =  exp(-cx2*one_over_denx);
-               cu_real_t exp_y =  exp(-cy2*one_over_deny);
-            #else
-               cu_real_t exp_x =  __expf(-cx2*one_over_denx);
-               cu_real_t exp_y =  __expf(-cy2*one_over_deny);
-            #endif
-            const cu_real_t temp = Tmin + DeltaT * exp_x * exp_y;
-
-            //-------------------------------------------//
-
-            // material dependent temperature rescaling
-            const cu_real_t alpha = mat.temperature_rescaling_alpha;
-            const cu_real_t Tc    = mat.temperature_rescaling_Tc;
-            const cu_real_t sigma = mat.H_th_sigma;
-
-            // thermal field calculation
-
-            #ifdef CUDA_DP
-               double resc_temp = (temp < Tc) ? Tc * pow(temp / Tc, alpha) : temp;
-               double rsigma = sigma*sqrt(resc_temp);
-            #else
-               float resc_temp = (temp < Tc) ? Tc * __powf(temp / Tc, alpha) : temp;
-               float rsigma = sigma*sqrtf(resc_temp);
-            #endif
-            // if(fabs(cx-px)<10.0 && fabs(cy-py)<10.0){printf("  %d %lf %lf %lf %lf %lf %lf\n", i, cx, cy, Tmin, DeltaT+Tmin, temp, resc_temp);}
+            const cu_real_t temp = cu::laser_temperature(cx, cy, px, py, Tmin, DeltaT, one_over_denx, one_over_deny);
+            cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+            if(noise_scale) rsigma *= noise_scale[i];
 
             // Gaussian random numbers are generated in single precision in both builds, since double
             // precision generation is slow on GPUs with reduced double precision throughput
@@ -212,13 +159,41 @@ namespace vcuda{
             cu::d_rand_state,
             cu::mp::d_material_params,
             cu::atoms::d_materials,
-            cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+            cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
 
          check_cuda_errors (__FILE__, __LINE__);
 
          return;
       } // end apply_local_temperature_and_field
 
+
+      // Copies the per-atom damping and noise factor of the damping buffer of the active window (continuous
+      // layers) to the device when they change: the material's prefactors outside the buffer, and in it the
+      // same expressions with the atom's damping
+      static void update_window_damping(){
+         static uint64_t version = 0;
+         if(!::hamr::window_damping || version == ::hamr::window_damping_version) return;
+         version = ::hamr::window_damping_version;
+         const int num_atoms = ::atoms::num_atoms;
+         std::vector<cu::heun_parameters_t> params(num_atoms);
+         std::vector<cu_real_t> scale(num_atoms);
+         for(int atom = 0; atom < num_atoms; atom++){
+            const int mat = ::atoms::type_array[atom];
+            params[atom] = cu::llg::h_heun_params[mat];
+            if(::hamr::window_in_buffer[atom]){
+               const double alpha = ::hamr::window_alpha[atom];
+               const double gamma = ::mp::material[mat].gamma_rel;
+               params[atom].prefactor = -gamma / (1.0 + alpha * alpha);
+               params[atom].lambda_times_prefactor = -gamma * alpha / (1.0 + alpha * alpha);
+            }
+            scale[atom] = ::hamr::window_noise_scale[atom];
+         }
+         if(cu::llg::d_window_heun_params == nullptr) cudaMalloc((void**)&cu::llg::d_window_heun_params, num_atoms * sizeof(cu::heun_parameters_t));
+         if(cu::d_window_noise_scale == nullptr) cudaMalloc((void**)&cu::d_window_noise_scale, num_atoms * sizeof(cu_real_t));
+         cudaMemcpy(cu::llg::d_window_heun_params, params.data(), num_atoms * sizeof(cu::heun_parameters_t), cudaMemcpyHostToDevice);
+         cudaMemcpy(cu::d_window_noise_scale, scale.data(), num_atoms * sizeof(cu_real_t), cudaMemcpyHostToDevice);
+         check_cuda_errors (__FILE__, __LINE__);
+      }
 
       // Copies the atoms of the HAMR active window to the device when the window changes
       std::vector<int> active_ranges;
@@ -228,6 +203,7 @@ namespace vcuda{
          if(!::hamr::active_window_enabled()) return;
 
          const std::vector<int>& ranges = ::hamr::update_active_window();
+         update_window_damping();
          if(cu::d_active_atoms != nullptr && ranges == active_ranges) return;
          active_ranges = ranges;
          active_window_version++;
@@ -272,7 +248,7 @@ namespace vcuda{
                cu::d_rand_state,
                cu::mp::d_material_params,
                cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
 
             check_cuda_errors (__FILE__, __LINE__);
          }

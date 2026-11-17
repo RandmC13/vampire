@@ -13,11 +13,10 @@
 #include <vector>
 
 // Vampire headers
-#include "environment.hpp"
+#include "create.hpp"
 #include "errors.hpp"
 #include "gpu.hpp"
 #include "mgpu.hpp"
-#include "micromagnetic.hpp"
 #include "program.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
@@ -28,16 +27,15 @@
 namespace mgpu{
 
 namespace internal{
-   int device_count(); // kernels.cu
-   void device_pci_id(int device, char* id, int size);
-} // end of internal namespace
 
-//------------------------------------------------------------------------------
-// Function to stop with an error message for unsupported simulations
-//------------------------------------------------------------------------------
-void unsupported(const std::string& feature){
-   err::fatal("Error: " + feature + " is not supported by the multi-GPU version (vampire-cuda-multigpu)");
-}
+   //---------------------------------------------------------------------------
+   // Function to stop with an error message for unsupported simulations
+   //---------------------------------------------------------------------------
+   void unsupported(const std::string& feature){
+      err::fatal("Error: " + feature + " is not supported by the multi-GPU version (vampire-cuda-multigpu)");
+   }
+
+} // end of internal namespace
 
 //------------------------------------------------------------------------------
 // Function to select the GPU of this rank and to check that the simulation is
@@ -45,28 +43,22 @@ void unsupported(const std::string& feature){
 //------------------------------------------------------------------------------
 void initialize(){
 
-   // simulation features not yet distributed over several GPUs (features the GPU
-   // version does not support at all are checked in gpu::initialize). Remove an
-   // entry once the multi-GPU version supports it and a test confirms it.
-   if(vmpi::mpi_mode != 0) unsupported("MPI modes other than geometric decomposition");
-   if(micromagnetic::discretisation_type > 0) unsupported("Micromagnetic discretisation");
-   if(environment::enabled) unsupported("The environment module");
+   if(err::check==true) std::cout << "mgpu::initialize has been called" << std::endl;
 
-   // refuses programs that are not confirmed to work on several GPUs
-   if(vmpi::num_processors > 1){
-      switch(program::program){
-         case program::program_t::time_series:
-         case program::program_t::hysteresis_loop:
-         case program::program_t::curie_temperature:
-         case program::program_t::field_cool:
-         case program::program_t::laser_pulse:
-         case program::program_t::hamr_simulation:
-         case program::program_t::partial_hysteresis_loop:
-         case program::program_t::fmr:
-            break;
-         default:
-            unsupported("Program " + std::to_string(static_cast<int>(program::program)) + " (sim:program) on more than one GPU");
-      }
+   // simulation features not yet distributed over several GPUs (those the GPU
+   // version does not support at all are checked in gpu::initialize)
+   if(vmpi::mpi_mode != 0) internal::unsupported("MPI modes other than geometric decomposition");
+
+   // every local atom needs its own key (create::set_atom_keys)
+   if(!create::atom_keys_valid){
+      err::fatal("Error: atoms on rank " + std::to_string(vmpi::my_rank) + " cannot be identified by their unit cell (at most " +
+                 std::to_string(1 << 16) + " unit cells along each axis and atoms per unit cell), which the multi-GPU version requires");
+   }
+
+   // on several GPUs the host has no up to date spins while the simulation runs, so only
+   // programs that use just statistics of the spins are supported
+   if(vmpi::num_processors > 1 && gpu::program_reads_host_spins()){
+      internal::unsupported("Program " + std::to_string(static_cast<int>(program::program)) + " (sim:program) on more than one GPU");
    }
 
    // rank within this node
@@ -100,8 +92,6 @@ void initialize(){
       if(vmpi::my_rank == 0) std::cout << "Warning: rank 0 shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
       zlog << zTs() << "Warning: this rank shares its GPU with " << sharing - 1 << " other rank(s)" << std::endl;
    }
-
-   return;
 
 }
 

@@ -52,15 +52,15 @@ namespace cells{
    extern std::vector<double> mag_array_x; /// arrays to store cells magnetisation
    extern std::vector<double> mag_array_y;
    extern std::vector<double> mag_array_z;
-   extern std::vector<double> field_array_x; /// arrays to store cells field
-   extern std::vector<double> field_array_y;
-   extern std::vector<double> field_array_z;
 
    extern std::vector<double> pos_and_mom_array;
    extern std::vector<double> pos_array;
 
    extern std::vector < double > num_macro_cells_fft; /// lateral size of local macro-cells (A)
-   extern std::vector<double> fft_cell_id_array;
+
+   // cells:probe-non-magnetic-cells: cells holding only non-magnetic atoms are kept as points where the dipole
+   // field is evaluated, and non-magnetic atoms are given the dipole field of their cell
+   extern bool probe_non_magnetic_cells;
 
    //---------------------------------------------------------------------------
    // Function to calculate magnetisation in cells

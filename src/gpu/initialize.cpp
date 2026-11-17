@@ -20,9 +20,11 @@
 #include "integrate.hpp"
 #include "cuda.hpp"
 #include "dipole.hpp"
+#include "environment.hpp"
 #include "errors.hpp"
 #include "exchange.hpp"
 #include "material.hpp"
+#include "micromagnetic.hpp"
 #include "mgpu.hpp"
 #include "program.hpp"
 #include "sim.hpp"
@@ -36,14 +38,11 @@ namespace gpu{
 
    //-------------------------------------------------------------------------------
    // Function to stop with an error message if the simulation needs features the
-   // GPU version does not calculate. Without this check such simulations run to
-   // the end with these terms silently missing from the dynamics or the output.
-   //
-   // NOTE: this list is temporary. Remove each entry as soon as the GPU version
-   // implements the feature and a validation case shows that it agrees with the
-   // CPU version.
+   // GPU version does not calculate, which would otherwise be silently missing
    //-------------------------------------------------------------------------------
    void check_supported_features(){
+
+      if(err::check==true) std::cout << "gpu::check_supported_features has been called" << std::endl;
 
       std::vector<std::string> unsupported;
 
@@ -78,6 +77,9 @@ namespace gpu{
       if(sim::local_applied_field)        unsupported.push_back("material specific applied fields");
       if(sim::ext_demag)                  unsupported.push_back("the thin film demagnetising field (sim:demagnetisation-factor)");
       if(sim::local_temperature)          unsupported.push_back("material specific temperatures");
+      if(::environment::enabled)          unsupported.push_back("the environment module");
+      if(::micromagnetic::discretisation_type > 0) unsupported.push_back("micromagnetic and multiscale simulations");
+      if(::micromagnetic::bias_magnets_enabled()) unsupported.push_back("micromagnetic bias magnets");
       if(program::program == program::program_t::localised_temperature_pulse) unsupported.push_back("the localised-temperature-pulse program");
       if(::dipole::activated)             unsupported.push_back("dipole fields");
       if(sim::spin_torque_fields_enabled()) unsupported.push_back("spin transfer and spin orbit torque fields");
@@ -104,18 +106,18 @@ namespace gpu{
       if(gpu::skip_non_magnetic_atoms){
          if(::stats::calculate_system_energy || ::stats::calculate_grain_energy || ::stats::calculate_material_energy)
             unsupported.push_back("energy statistics with gpu:skip-non-magnetic-atoms (they include the atoms that are not integrated)");
+         if(integrate::integrator == integrate::integrator_t::monte_carlo)
+            unsupported.push_back("gpu:skip-non-magnetic-atoms with the monte-carlo integrator");
          if(::exchange::get_exchange_type() != 0){
             unsupported.push_back("gpu:skip-non-magnetic-atoms with vectorial or tensorial exchange");
          }
          else{
-            // same tolerance as the device neighbour list, which leaves out smaller interactions
-            const double tol = 1e-10;
             bool coupled = false;
             for(int atom = 0; atom < atoms::num_atoms && !coupled; atom++){
-               const bool keep_i = mp::material[atoms::type_array[atom]].non_magnetic == 2;
+               const bool keep_i = gpu::skipped_material(atoms::type_array[atom]);
                for(int nn = atoms::neighbour_list_start_index[atom]; nn <= atoms::neighbour_list_end_index[atom]; nn++){
-                  const bool keep_j = mp::material[atoms::type_array[atoms::neighbour_list_array[nn]]].non_magnetic == 2;
-                  if((keep_i || keep_j) && std::fabs(atoms::i_exchange_list[atoms::neighbour_interaction_type_array[nn]].Jij) > tol){
+                  const bool keep_j = gpu::skipped_material(atoms::type_array[atoms::neighbour_list_array[nn]]);
+                  if((keep_i || keep_j) && std::fabs(atoms::i_exchange_list[atoms::neighbour_interaction_type_array[nn]].Jij) > gpu::exchange_tolerance){
                      coupled = true;
                      break;
                   }
@@ -135,6 +137,14 @@ namespace gpu{
    }
 
    //-------------------------------------------------------------------------------
+   // Function to return true for a material whose atoms are not integrated
+   // (non-magnetic = keep with gpu:skip-non-magnetic-atoms)
+   //-------------------------------------------------------------------------------
+   bool skipped_material(const int material){
+      return gpu::skip_non_magnetic_atoms && mp::material[material].non_magnetic == 2;
+   }
+
+   //-------------------------------------------------------------------------------
    // Function to call correct initialization function depending on the backend (cuda)
    //-------------------------------------------------------------------------------
    void initialize(){
@@ -144,7 +154,7 @@ namespace gpu{
 
       if(gpu::skip_non_magnetic_atoms){
          int skipped = 0;
-         for(int atom = 0; atom < atoms::num_atoms; atom++) skipped += mp::material[atoms::type_array[atom]].non_magnetic == 2;
+         for(int atom = 0; atom < atoms::num_atoms; atom++) skipped += gpu::skipped_material(atoms::type_array[atom]);
          zlog << zTs() << "Not integrating " << skipped << " of " << atoms::num_atoms << " atoms of non-magnetic (keep) materials on rank " << vmpi::my_rank << " (gpu:skip-non-magnetic-atoms)" << std::endl;
       }
 

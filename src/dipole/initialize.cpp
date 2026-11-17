@@ -19,6 +19,8 @@
 #include "dipole.hpp"
 #include "errors.hpp"
 #include "gpu.hpp"
+#include "material.hpp"
+#include "program.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
 #include "vutil.hpp"
@@ -83,7 +85,9 @@ namespace dipole{
       dipole::internal::cells_num_atoms_in_cell    = cells_num_atoms_in_cell;
       dipole::internal::cells_volume_array         = cells_volume_array;
 
-      dipole::internal::cells_pos_and_mom_array    = cells_pos_and_mom_array;
+      // the macrocell solver reorders the cell positions and moments in parallel, so it needs its own copy;
+      // the other solvers read the caller's array
+      if(dipole::internal::solver == dipole::internal::macrocell) dipole::internal::cells_pos_and_mom_array = cells_pos_and_mom_array;
 
       //----------------------------------------------------------
       // initialise dipole solver
@@ -99,8 +103,21 @@ namespace dipole{
       vutil::vtimer_t dipole_scaling_build_timer;
       dipole_scaling_build_timer.start();
 
-      if(dipole::internal::on_the_fly_tensors && dipole::internal::solver != dipole::internal::tensor && dipole::internal::solver != dipole::internal::hierarchical){
-         err::fatal("Error - dipole:on-the-fly-tensors is only available with dipole:solver = tensor or hierarchical.");
+      // sim:program = dipole-field evaluates the field once, so the tensor solver computes the tensors when needed
+      if(program::program == program::program_t::dipole_field && dipole::internal::solver == dipole::internal::tensor){
+         dipole::internal::on_the_fly_tensors = true;
+      }
+      if(dipole::internal::probe_cells_only){
+         if(dipole::internal::solver != dipole::internal::tensor){
+            err::fatal("Error - dipole:field-cells = probe is only available with dipole:solver = tensor.");
+         }
+         if(!cells::probe_non_magnetic_cells){
+            err::fatal("Error - dipole:field-cells = probe needs cells:probe-non-magnetic-cells, which keeps the cells without magnetic atoms.");
+         }
+      }
+
+      if(dipole::internal::on_the_fly_tensors && dipole::internal::solver != dipole::internal::tensor){
+         err::fatal("Error - dipole:on-the-fly-tensors is only available with dipole:solver = tensor.");
       }
 
       switch (dipole::internal::solver){
@@ -126,10 +143,11 @@ namespace dipole{
             }
             else{
                internal::output_dipole_solver_mem_info(dipole::internal::cells_num_cells, dipole::internal::cells_num_local_cells);
+               internal::check_tensor_solver_memory(dipole::internal::cells_num_cells, dipole::internal::cells_num_local_cells);
                dipole::internal::allocate_memory(cells_num_local_cells, cells_num_cells);
             }
             dipole::internal::initialize_tensor_solver(cells_num_atoms_in_unit_cell, dipole::internal::cells_num_cells, dipole::internal::cells_num_local_cells, cells_macro_cell_size, dipole::internal::cells_local_cell_array,
-                                                       dipole::internal::cells_num_atoms_in_cell, cells_num_atoms_in_cell_global, cells_index_atoms_array, dipole::internal::cells_volume_array, dipole::internal::cells_pos_and_mom_array,
+                                                       dipole::internal::cells_num_atoms_in_cell, cells_num_atoms_in_cell_global, cells_index_atoms_array, dipole::internal::cells_volume_array, cells_pos_and_mom_array,
                                                        cells_atom_in_cell_coords_array_x, cells_atom_in_cell_coords_array_y, cells_atom_in_cell_coords_array_z,
                                                        dipole::internal::atom_type_array, dipole::internal::atom_cell_id_array, atom_coords_x, atom_coords_y, atom_coords_z, dipole::internal::num_atoms);
             break;
@@ -143,7 +161,6 @@ namespace dipole{
          case dipole::internal::hierarchical:
             std::cout     << "Initialising dipole field calculation using hierarchical solver" << std::endl;
             zlog << zTs() << "Initialising dipole field calculation using hierarchical solver" << std::endl;
-            hierarchical::on_the_fly_tensors = dipole::internal::on_the_fly_tensors;
             hierarchical::initialize(cs::system_dimensions[0], cs::system_dimensions[1], cs::system_dimensions[2], atom_coords_x, atom_coords_y, atom_coords_z, dipole::internal::num_atoms);
             break;
 
@@ -170,6 +187,10 @@ namespace dipole{
       const double dipole_scaling_mem_local_kb = vutil::peak_memory_usage_kb() - dipole_scaling_mem_before_kb;
       const double dipole_scaling_mem_total_kb = vmpi::reduce_sum(dipole_scaling_mem_local_kb);
       const double dipole_scaling_mem_max_kb = vmpi::reduce_max(dipole_scaling_mem_local_kb);
+      // memory held after initialisation counting shared memory once per region (Linux only, -1 elsewhere)
+      const double dipole_scaling_pss_local_kb = vutil::proportional_memory_usage_kb();
+      const double dipole_scaling_pss_total_kb = vmpi::reduce_sum(dipole_scaling_pss_local_kb);
+      const double dipole_scaling_pss_max_kb = vmpi::reduce_max(dipole_scaling_pss_local_kb);
       // dipole::internal::num_atoms is this rank's local (core + boundary
       // halo) atom count under MPI domain decomposition, so summing it
       // slightly over-counts shared boundary atoms rather than giving the
@@ -184,14 +205,30 @@ namespace dipole{
                     << " atoms=" << dipole_scaling_total_atoms
                     << " build_time_s=" << dipole_scaling_build_time
                     << " mem_total_kb=" << dipole_scaling_mem_total_kb
-                    << " mem_max_rank_kb=" << dipole_scaling_mem_max_kb << std::endl;
+                    << " mem_max_rank_kb=" << dipole_scaling_mem_max_kb
+                    << " pss_total_kb=" << dipole_scaling_pss_total_kb
+                    << " pss_max_rank_kb=" << dipole_scaling_pss_max_kb << std::endl;
          zlog << zTs() << "DIPOLE_SCALING BUILD solver=" << dipole::internal::dipole_solver_name()
               << " nprocs=" << vmpi::num_processors
               << " cells=" << dipole::internal::cells_num_cells
               << " atoms=" << dipole::internal::num_atoms
               << " build_time_s=" << dipole_scaling_build_time
               << " mem_total_kb=" << dipole_scaling_mem_total_kb
-              << " mem_max_rank_kb=" << dipole_scaling_mem_max_kb << std::endl;
+              << " mem_max_rank_kb=" << dipole_scaling_mem_max_kb
+              << " pss_total_kb=" << dipole_scaling_pss_total_kb
+              << " pss_max_rank_kb=" << dipole_scaling_pss_max_kb << std::endl;
+      }
+
+      // If enabled, output atomic coordinates and moments for the atomistic dipole field output (any solver
+      // except atomistic fft, which has its own output)
+      if(dipole::internal::output_atomistic_dipole_field && dipole::internal::solver != dipole::internal::atomisticfft){
+         // Zero all moments for non-magnetic materials by using copy of moments array
+         std::vector<double> moments_array_copy = atom_moments;
+         const int num_local_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
+         for(int atom = 0; atom < num_local_atoms; atom++){
+            if(mp::material[atom_type_array[atom]].non_magnetic != 0) moments_array_copy[atom] = 0.0;
+         }
+         dipole::internal::output_atomistic_coordinates(num_atoms, atom_coords_x, atom_coords_y, atom_coords_z, moments_array_copy);
       }
 
       // Set initialised flag
@@ -201,18 +238,6 @@ namespace dipole{
       #ifdef CUDA
          gpu::initialize_dipole();
       #endif
-
-      // dipole:output-atomistic-dipole-field: the atomistic/atomisticfft
-      // solvers write their own one-time atom position/moment file inside
-      // initialize_atomistic_solver()/the fft init path above. Every other
-      // solver (macrocell, tensor, hierarchical) shares this generic
-      // one-time coordinate output instead, paired with the per-update
-      // field output added to broadcast_cell_field_to_atoms() in field.cpp.
-      if(dipole::internal::output_atomistic_dipole_field &&
-         dipole::internal::solver != dipole::internal::atomistic &&
-         dipole::internal::solver != dipole::internal::atomisticfft){
-         dipole::internal::output_atomistic_coordinates(num_atoms, atom_coords_x, atom_coords_y, atom_coords_z, atom_moments);
-      }
 
       //------------------------------------------------------------------------
       // Precalculate dipole field and time for performance

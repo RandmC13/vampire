@@ -9,6 +9,7 @@
 
 // System headers
 #include <algorithm>
+#include <cstdio>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -166,9 +167,10 @@ namespace{
 }
 
 //-----------------------------------------------------------------------------
-// Function to save checkpoint file
+// Function to save checkpoint file vampire<rank><suffix>.chk (the file loaded by
+// sim:load-checkpoint has no suffix)
 //-----------------------------------------------------------------------------
-void save_checkpoint(){
+void save_checkpoint(const std::string& suffix){
 
    // For gpu acceleration get statistics from device
    if(gpu::acceleration) gpu::stats::get();
@@ -190,17 +192,21 @@ void save_checkpoint(){
 
    // determine checkpoint file name
    std::stringstream chkfilenamess;
-   chkfilenamess << "vampire" << vmpi::my_rank << ".chk";
+   chkfilenamess << "vampire" << vmpi::my_rank << suffix << ".chk";
    std::string chkfilename = chkfilenamess.str();
+
+   // the file is written under a temporary name and renamed once every process has written its file, so that a
+   // simulation stopped while writing (e.g. at the time limit of a job) keeps the previous complete checkpoint
+   const std::string tmpfilename = chkfilename + ".tmp";
 
    // open checkpoint file
    std::ofstream chkfile;
-   chkfile.open(chkfilename.c_str(),std::ios::binary);
+   chkfile.open(tmpfilename.c_str(),std::ios::binary);
 
    // check for open file
    if(!chkfile.is_open()){
       std::ostringstream message;
-      message << "Error: Unable to open checkpoint file " << chkfilename << " for writing. Exiting.";
+      message << "Error: Unable to open checkpoint file " << tmpfilename << " for writing. Exiting.";
       err::fatal(message.str());
    }
 
@@ -264,8 +270,8 @@ void save_checkpoint(){
    stats::grain_susceptibility.save_checkpoint(chkfile);
    stats::material_susceptibility.save_checkpoint(chkfile);
 
-   // write the decomposition (number of processes and region of this process): spins are
-   // stored in local atom order, so they can only be loaded into the same decomposition
+   // write the decomposition (number of processes and region of this process); the spins are
+   // stored in local atom order, so loading into another decomposition uses the atom keys written below
    const int64_t num_processors64 = vmpi::num_processors;
    chkfile.write(reinterpret_cast<const char*>(&num_processors64),sizeof(int64_t));
    chkfile.write(reinterpret_cast<const char*>(&vmpi::min_dimensions[0]),sizeof(double)*3);
@@ -292,6 +298,19 @@ void save_checkpoint(){
 
    // close checkpoint file
    chkfile.close();
+   if(chkfile.fail()){
+      std::ostringstream message;
+      message << "Error: Unable to write checkpoint file " << tmpfilename << ". Exiting.";
+      err::fatal(message.str());
+   }
+
+   // every process has written its file before any replaces the previous checkpoint
+   vmpi::barrier();
+   if(std::rename(tmpfilename.c_str(), chkfilename.c_str()) != 0){
+      std::ostringstream message;
+      message << "Error: Unable to rename checkpoint file " << tmpfilename << " to " << chkfilename << ". Exiting.";
+      err::fatal(message.str());
+   }
 
    // log writing checkpoint file (only for non-continuous checkpoint files)
    if(!sim::save_checkpoint_continuous_flag) zlog << zTs() << "Checkpoint file written to disk." << std::endl;

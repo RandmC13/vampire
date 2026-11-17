@@ -6,12 +6,13 @@
 hierarchical_objects =\
 corners.o \
 data.o \
+exchange.o \
 initialize.o \
 intra.o \
 inter.o \
-interactions.o \
 interface.o \
 mag.o \
+p2p_diagnostic.o \
 update.o
 # Append module objects to global tree
 OBJECTS+=$(addprefix obj/hierarchical/,$(hierarchical_objects))

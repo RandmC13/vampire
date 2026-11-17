@@ -34,27 +34,39 @@ namespace hierarchical{
       int num_levels; // number of levels for hierarchical expansion
 
       //create arrays for data storage
-      std::vector < double > cell_positions;             // positions of hierarchical cells 3N
-      std::vector < double > cell_positions_mom;         // positions and magnetic moments of hierarchical cells 4N
-      std::vector < double > cell_dimensions;            // shape and size of each cell
+      vmpi::shared_array_t < double > cell_positions;     // positions of hierarchical cells 3N
+      vmpi::shared_array_t < double > cell_positions_mom; // positions and magnetic moments of hierarchical cells 4N
+      vmpi::shared_array_t < double > cell_dimensions;    // shape and size of each cell
       std::vector < int > cells_level_start_index;       // first cell in Level
       std::vector < int > cells_level_end_index;         // last cell in Level
-      std::vector < int > cells_in_cells;                // 1D list of which cells in level L are contained within level L+1
+      vmpi::shared_array_t < int > cells_in_cells;       // 1D list of which cells in level L are contained within level L+1
       std::vector < int > interaction_range;             // a list of interaction ranges for each hierarchical level
-      std::vector < int > cells_in_cells_start_index;    // index of first cell in level L-1
-      std::vector < int > cells_in_cells_end_index;      // index of last  cell in level L-1
+      vmpi::shared_array_t < int > cells_in_cells_start_index; // index of first cell in level L-1
+      vmpi::shared_array_t < int > cells_in_cells_end_index;   // index of last  cell in level L-1
       std::vector <int> interaction_list;                // list of interacting hierarchical cells
       std::vector < int > interaction_list_start_index;  // index of first neighbour in interactions list
       std::vector < int > interaction_list_end_index;    // index of last  neighbour in interactions list
-      std::vector < int > num_atoms_in_cell;             // list of number of atoms within each cell
+      std::vector < int > upward_pass_cells;          // coarse cells (level >= 1, by level) holding this process's cells
       std::vector < int > proc_cell_index_array1D;       //
       std::vector < int > cells_num_atoms_in_cell;       //
 
+      bool output_p2p_diagnostic = false;                // log the cost of a point-to-point exchange of cell moments
+      moment_exchange_t moment_exchange = moment_exchange_t::all_reduce; // how cell moments are summed between regions
+      int moment_exchange_level = 1;                     // highest level exchanged point to point
+
       double av_cell_size;                               // weighted average of cell_size_x, cell_size_y, cell_size_z
 
-      std::vector<double> mag_array_x;       // arrays to store cell magnetisation
-      std::vector<double> mag_array_y;
-      std::vector<double> mag_array_z;
+      std::vector<double> phase_time(num_phases, 0.0);   // time (s) of each phase of the last update on this process
+
+      vmpi::shared_array_t<double> mag_array_x; // cell magnetisations (all processes), one copy per region
+      vmpi::shared_array_t<double> mag_array_y;
+      vmpi::shared_array_t<double> mag_array_z;
+      std::vector<double> partial_mag_array_x;  // this process's contribution to the cell magnetisations
+      std::vector<double> partial_mag_array_y;
+      std::vector<double> partial_mag_array_z;
+      std::vector<int> contributing_cells;      // cells (all levels, in order) with a contribution from this process
+      std::vector<double> mag_reduction_values; // contributions of this process, x then y then z
+      vmpi::shared_sum_t mag_reduction;         // sum of the contributions over processes
 
       int total_num_cells;
       int num_zero_level_cells;              // number of zero level cells
@@ -70,15 +82,6 @@ namespace hierarchical{
       std::vector<double> ha_cells_pos_and_mom_array;    //
       std::vector < int > ha_proc_cell_index_array1D;    //
 
-      // data for computing the interaction tensors of a cell, kept from initialisation
-      double tensor_cutoff = 0.0;                                 // cutoff for atomistic inter-cell tensors (Angstroms)
-      std::vector<int> tensor_atoms_in_cell_global;               // magnetic atoms in each zero-level cell (all CPUs)
-      std::vector<double> tensor_cells_pos_and_mom;               // positions and moments of zero-level cells
-      std::vector<int> tensor_list_of_cells_with_atoms;           // cells with atomistic data on this CPU
-      std::vector< std::vector<double> > tensor_atoms_in_cells;   // atom positions and moments of those cells
-
    } // end of internal namespace
-
-   bool on_the_fly_tensors = false;
 
 } // end of hierarchical namespace

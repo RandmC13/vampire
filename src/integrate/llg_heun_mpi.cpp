@@ -100,8 +100,8 @@ int LLG_Heun_mpi(){
       for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = std::max(ranges[r], pre_comm_si); atom < std::min(ranges[r+1], pre_comm_ei); atom++){
 
          const int imaterial=atoms::type_array[atom];
-         const double one_oneplusalpha_sq = mp::material[imaterial].one_oneplusalpha_sq;
-         const double alpha_oneplusalpha_sq = mp::material[imaterial].alpha_oneplusalpha_sq;
+         const double one_oneplusalpha_sq = hamr::window_damping ? hamr::window_one_oneplusalpha_sq[atom] : mp::material[imaterial].one_oneplusalpha_sq;
+         const double alpha_oneplusalpha_sq = hamr::window_damping ? hamr::window_alpha_oneplusalpha_sq[atom] : mp::material[imaterial].alpha_oneplusalpha_sq;
 
          // Store local spin in Sand local field in H
          const double S[3] = {atoms::x_spin_array[atom],atoms::y_spin_array[atom],atoms::z_spin_array[atom]};
@@ -156,8 +156,8 @@ int LLG_Heun_mpi(){
       for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = std::max(ranges[r], post_comm_si); atom < std::min(ranges[r+1], post_comm_ei); atom++){
 
          const int imaterial=atoms::type_array[atom];
-         const double one_oneplusalpha_sq = mp::material[imaterial].one_oneplusalpha_sq;
-         const double alpha_oneplusalpha_sq = mp::material[imaterial].alpha_oneplusalpha_sq;
+         const double one_oneplusalpha_sq = hamr::window_damping ? hamr::window_one_oneplusalpha_sq[atom] : mp::material[imaterial].one_oneplusalpha_sq;
+         const double alpha_oneplusalpha_sq = hamr::window_damping ? hamr::window_alpha_oneplusalpha_sq[atom] : mp::material[imaterial].alpha_oneplusalpha_sq;
 
          // Store local spin in Sand local field in H
          const double S[3] = {atoms::x_spin_array[atom],atoms::y_spin_array[atom],atoms::z_spin_array[atom]};
@@ -220,8 +220,8 @@ int LLG_Heun_mpi(){
       for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = std::max(ranges[r], pre_comm_si); atom < std::min(ranges[r+1], pre_comm_ei); atom++){
 
          const int imaterial=atoms::type_array[atom];;
-         const double one_oneplusalpha_sq = mp::material[imaterial].one_oneplusalpha_sq;
-         const double alpha_oneplusalpha_sq = mp::material[imaterial].alpha_oneplusalpha_sq;
+         const double one_oneplusalpha_sq = hamr::window_damping ? hamr::window_one_oneplusalpha_sq[atom] : mp::material[imaterial].one_oneplusalpha_sq;
+         const double alpha_oneplusalpha_sq = hamr::window_damping ? hamr::window_alpha_oneplusalpha_sq[atom] : mp::material[imaterial].alpha_oneplusalpha_sq;
 
          // Store local spin in Sand local field in H
          const double S[3] = {atoms::x_spin_array[atom],atoms::y_spin_array[atom],atoms::z_spin_array[atom]};
@@ -258,8 +258,8 @@ int LLG_Heun_mpi(){
       for(size_t r = 0; r < ranges.size(); r += 2) for(int atom = std::max(ranges[r], post_comm_si); atom < std::min(ranges[r+1], post_comm_ei); atom++){
 
          const int imaterial=atoms::type_array[atom];;
-         const double one_oneplusalpha_sq = mp::material[imaterial].one_oneplusalpha_sq;
-         const double alpha_oneplusalpha_sq = mp::material[imaterial].alpha_oneplusalpha_sq;
+         const double one_oneplusalpha_sq = hamr::window_damping ? hamr::window_one_oneplusalpha_sq[atom] : mp::material[imaterial].one_oneplusalpha_sq;
+         const double alpha_oneplusalpha_sq = hamr::window_damping ? hamr::window_alpha_oneplusalpha_sq[atom] : mp::material[imaterial].alpha_oneplusalpha_sq;
 
          // Store local spin in Sand local field in H
          const double S[3] = {atoms::x_spin_array[atom],atoms::y_spin_array[atom],atoms::z_spin_array[atom]};

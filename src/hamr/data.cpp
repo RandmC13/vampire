@@ -22,6 +22,14 @@ namespace hamr{
    // Externally visible variables
    //-----------------------------------------------------------------------------------------------
    bool head_laser_on   = false;
+   // per-atom damping of the active window's buffer in continuous layers (empty while unused)
+   bool window_damping = false;
+   uint64_t window_damping_version = 0;
+   std::vector<char> window_in_buffer;
+   std::vector<double> window_alpha;
+   std::vector<double> window_one_oneplusalpha_sq;
+   std::vector<double> window_alpha_oneplusalpha_sq;
+   std::vector<double> window_noise_scale;
 
    namespace internal{
 
@@ -51,6 +59,8 @@ namespace hamr{
       double H_fall_time = 1.0e-12;
       double NPS = 0.0; // NFT to pole spacing
       double track_padding = 0.0;
+      std::vector<int> track_order; // tracks (counted from 0) in the order they are written; empty: in order of position
+      bool save_track_states = false;
       std::vector<int> bit_sequence;
 
       int num_local_atoms;
@@ -72,6 +82,16 @@ namespace hamr{
       bool active_window = false;
       double active_window_dT = 1.0; // K
       bool active_window_full_snapshots = false;
+      bool active_window_options_set = false; // a window sub-option is set in the input file
+      double active_window_margin = 50.0;  // A: continuous layers integrated with their own damping this far from integrated grains
+      double active_window_buffer = 150.0; // A: then a buffer of this width with the damping rising to the buffer damping
+      double active_window_buffer_damping = 1.0;
+
+      // state for continuing from a checkpoint (checkpoint.cpp)
+      bool resume_state_loaded = false;
+      double resume_head_position_x = 0.0;
+      double resume_H_applied = 0.0;
+      uint64_t resume_steps = 0;
 
    } // end of internal namespace
 } // end of hamr namespace

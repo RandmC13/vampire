@@ -40,59 +40,54 @@ namespace dipole{
                               const std::vector<int>& list_of_atoms_with_cells,
                               const std::vector< std::vector<double> >& atoms_in_cells_array){
 
-            // celli is guaranteed present in cells_local_cell_array only when
-            // it is a valid receiver: either a magnetic cell (the only case
-            // possible with cells:probe-non-magnetic-cells off, so this is
-            // behaviour-preserving by construction) or -- when that flag is
-            // enabled -- a non-magnetic-only probe cell. Either way it
-            // should get a tensor row built; compute_inter_tensor/
-            // compute_intra_tensor guard the case where celli itself has no
-            // magnetic atoms to avoid dividing by zero.
-            {
+            // a cell with no magnetic atoms (probe cell) still gets a row; the tensor functions guard the empty cell
             //std::cout << i << '\t' << "interaction" << "\t"  << cells_num_cells << "\t" << cells_num_atoms_in_cell[i] <<  std::endl;
 
-               // Loop over all other cells to calculate contribution to local cell
-               for( int cellj = 0; cellj < cells_num_cells; cellj++ ){
+            // Loop over all other cells to calculate contribution to local cell
+            for( int cellj = 0; cellj < cells_num_cells; cellj++ ){
+
+               //--------------------------------------------------------------
+               // Calculation of inter part of dipolar tensor
+               //--------------------------------------------------------------
+               if ( cells_num_atoms_in_cell_global[cellj] > 0 ){ // only calculate interaction if there are atoms in remote cell
+
+                  // check if cell is not the same
+                  if( celli != cellj ){
+                     // calculate inter term of dipolar tensor
+                     compute_inter_tensor(celli,
+                                          cellj,
+                                          row,
+                                          real_cutoff,
+                                          cells_num_atoms_in_cell_global,
+                                          cells_pos_and_mom_array,
+                                          list_of_atoms_with_cells,
+                                          atoms_in_cells_array);
+
+                  } // End of Inter part
 
                   //--------------------------------------------------------------
-                  // Calculation of inter part of dipolar tensor
+                  // Calculation of intra part of dipolar tensor
                   //--------------------------------------------------------------
-                  if ( cells_num_atoms_in_cell_global[cellj] > 0 ){ // only calculate interaction if there are atoms in remote cell
+                  else if( celli == cellj ){
 
-                     // check if cell is not the same
-                     if( celli != cellj ){
-                        // calculate inter term of dipolar tensor
-                        compute_inter_tensor(celli,
-                                             cellj,
-                                             row,
-                                             real_cutoff,
-                                             cells_num_atoms_in_cell_global,
-                                             cells_pos_and_mom_array,
-                                             list_of_atoms_with_cells,
-                                             atoms_in_cells_array);
+                     //Compute inter component of dipolar tensor
+                     compute_intra_tensor(celli,
+                                          cellj,
+                                          row,
+                                          cells_num_atoms_in_cell_global,
+                                          list_of_atoms_with_cells,
+                                          atoms_in_cells_array);
 
-                     } // End of Inter part
-
-                     //--------------------------------------------------------------
-                     // Calculation of intra part of dipolar tensor
-                     //--------------------------------------------------------------
-                     else if( celli == cellj ){
-
-                        //Compute inter component of dipolar tensor
-                        compute_intra_tensor(celli,
-                                             cellj,
-                                             row,
-                                             cells_num_atoms_in_cell_global,
-                                             list_of_atoms_with_cells,
-                                             atoms_in_cells_array);
-
-                     }
-                     // End of Intra part
-
+                  }
+                  // End of Intra part
                //   std::cout << i<< '\t' <<j << '\t' <<   dipole::internal::rij_tensor_xx[row][j]<< '\t' <<  dipole::internal::rij_tensor_xy[row][j]<< '\t' <<  dipole::internal::rij_tensor_xz[row][j]<< '\t' <<  dipole::internal::rij_tensor_yy[row][j] << '\t' <<  dipole::internal::rij_tensor_yz[row][j] << '\t' <<  dipole::internal::rij_tensor_zz[row][j] << std::endl;
-               }
+
                }
             }
+
+            // copies of the system (periodic images)
+            if(periodic_images) add_image_tensors(celli, row, real_cutoff, cells_num_atoms_in_cell_global, cells_pos_and_mom_array,
+                                                  list_of_atoms_with_cells, atoms_in_cells_array);
 
          return;
 
@@ -132,8 +127,15 @@ namespace dipole{
             // all processors wait here before starting the timer
             vmpi::barrier();
 
-            // get realspace cutoff distance
-            const double real_cutoff = dipole::cutoff * cells::macro_cell_size;
+            // get realspace cutoff distance. On a regular cell grid many cell pairs lie
+            // exactly at the cutoff, and rounding of the cell centres (which depends on
+            // the number of processors) would put each on either side of it; the
+            // relative tolerance of 1e-6 treats them all atomistically
+            const double real_cutoff = dipole::cutoff * cells::macro_cell_size * (1.0 + 1.0e-6);
+
+            // periodic images of a periodic system (before the atomistic data, which then include the cells near the
+            // local cells across the periodic boundaries)
+            initialize_periodic_images(cells_num_atoms_in_cell_global);
 
             std::vector< std::vector<double> > atoms_in_cells_array; // 2D list of [cell][atom] for local cells needed for computing dipole tensor
             std::vector<int> list_of_atoms_with_cells; // list of cell IDs to enable parsing of atomistic data
@@ -154,9 +156,6 @@ namespace dipole{
                                            list_of_atoms_with_cells,        // 2D list of [cell][atom] for local cells needed for computing dipole tensor (output)
                                            atoms_in_cells_array             // list of cell IDs to enable parsing of atomistic data (output)
                                           );
-
-         // Assign updated value of cells_num_atoms_in_cell to dipole::dipole_cells_num_atoms_in_cell. It is needed to print the config file. The actual value cells::num_atoms_in_cell is not changed instead
-         dipole::dipole_cells_num_atoms_in_cell = cells_num_atoms_in_cell;
 
          // After transferring the data across cores, assign value cells_num_atoms_in_cell[] from cells_num_atoms_in_cell_global[]
          for(unsigned int i=0; i<cells_num_atoms_in_cell_global.size(); i++){
@@ -189,11 +188,14 @@ namespace dipole{
             dipole::internal::otf_atoms_in_cells_array.swap(atoms_in_cells_array);
          }
          else{
-            // loop over local cells
-            for( int lc = 0; lc < cells_num_local_cells; lc++){
+         // loop over local cells
+         for( int lc = 0; lc < cells_num_local_cells; lc++){
 
-               // print out progress to screen
-               if(fmod(ceil(lc),ceil(cells_num_local_cells)/10) == 0) std::cout << "." << std::flush;
+            // print out progress to screen
+            if(fmod(ceil(lc),ceil(cells_num_local_cells)/10) == 0) std::cout << "." << std::flush;
+
+            // dipole:field-cells = probe: no row for cells whose field is not calculated
+            if(!field_in_cell(cells_local_cell_array[lc])) continue;
 
                // get global cell ID of source cell and compute its tensor row
                compute_tensor_row(cells_local_cell_array[lc], lc, real_cutoff, cells_num_atoms_in_cell_global,
@@ -201,6 +203,9 @@ namespace dipole{
 
             }
          }
+
+         // tensors of the mean moment of each layer (periodic images)
+         initialize_uniform_tensors(cells_num_atoms_in_cell_global, cells_pos_and_mom_array);
 
          // hold parallel calculation until all processors have completed the dipole calculation
          vmpi::barrier();

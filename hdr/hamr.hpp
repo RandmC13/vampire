@@ -87,13 +87,11 @@ namespace hamr{
    void load_checkpoint(std::istream& chkfile);
 
    //-----------------------------------------------------------------------------
-   // Active window (hamr:active-window): true once the write has started with it
-   // update for the current head position, returning the [first, last+1) pairs of
-   // the atoms to integrate
+   // Active window (hamr:active-window)
    //-----------------------------------------------------------------------------
-   bool active_window_requested(); // hamr:active-window set in the input (for the decomposition)
-   bool active_window_enabled();
-   const std::vector<int>& update_active_window();
+   bool active_window_requested(); // hamr:active-window set for the HAMR program (for the decomposition)
+   bool active_window_enabled(); // true once the write has started with the window
+   const std::vector<int>& update_active_window(); // update for the current head position; returns the [first, last+1) pairs of atoms to integrate
    bool atom_in_window(const int atom); // the atom (local or halo) belongs to a grain of the window
    uint64_t window_changes();           // number of times the grains of the window have changed (same on every process)
 
@@ -110,6 +108,23 @@ namespace hamr{
    // Externally visible variables used for HAMR calculation
    //-----------------------------------------------------------------------------------------------
    extern bool head_laser_on;
+
+   //---------------------------------------------------------------------------
+   // Damping buffer of the active window in continuous layers: while
+   // window_damping is set, the integrators take the LLG prefactors (as
+   // mp::material one_oneplusalpha_sq, alpha_oneplusalpha_sq) and the factor
+   // of the thermal noise of every atom (local and halo) from these arrays
+   // (window_alpha: the damping of buffer atoms, for other formulations),
+   // which hold the values of the atom's material outside the buffer;
+   // window_damping_version changes whenever they change
+   //---------------------------------------------------------------------------
+   extern bool window_damping;
+   extern uint64_t window_damping_version;
+   extern std::vector<char> window_in_buffer;
+   extern std::vector<double> window_alpha;
+   extern std::vector<double> window_one_oneplusalpha_sq;
+   extern std::vector<double> window_alpha_oneplusalpha_sq;
+   extern std::vector<double> window_noise_scale;
 
 
 } // end of hamr namespace

@@ -48,7 +48,6 @@ namespace dipole{
    std::vector<int> atomistic_dd_neighbourlist_start;
    std::vector<int> atomistic_dd_neighbourlist_end;
 
-   std::vector <int> dipole_cells_num_atoms_in_cell;
 
    double cutoff = 2.0;  /// cutoff distance between cells over which bare macro cell model can be applied
                          /// N.B.: after 12 cells inter-intra method is equivalent to bare macrocell method.
@@ -97,6 +96,17 @@ namespace dipole{
       std::vector<double> otf_cells_pos_and_mom_array;
       std::vector<int> otf_list_of_cells_with_atoms;
       std::vector< std::vector<double> > otf_atoms_in_cells_array;
+
+      // dipole:field-cells = probe: the field only in cells without magnetic atoms
+      bool probe_cells_only = false;
+      // periodic images of a periodic system with the tensor solver
+      bool periodic_images = false;
+      bool periodic[2] = {false, false};
+      double period[2] = {0.0, 0.0};
+      int grid_n[3] = {0, 0, 0};
+      int period_n[2] = {0, 0};
+      std::vector<int> magnetic_layers;
+      std::vector<double> uniform_tensor;
 
       int num_atoms;
       std::vector < int > atom_type_array;

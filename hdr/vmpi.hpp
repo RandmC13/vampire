@@ -46,6 +46,153 @@ namespace vmpi{
    extern MPI_Comm io_comm;         ///< MPI Communicator for IO
 #endif
 
+   // ranks sharing a region of memory (NUMA region, or node), see src/mpi/shmem.cpp
+#ifdef MPICF
+   extern MPI_Comm shared_comm;     // ranks sharing a NUMA region (or node) of memory
+   extern MPI_Comm leader_comm;     // rank 0 of each shared_comm (MPI_COMM_NULL on other ranks)
+#endif
+   extern int my_shared_rank;       // rank within shared_comm (0 in serial)
+   extern int num_shared_ranks;     // number of ranks in shared_comm (1 in serial)
+   extern int numa_regions_per_node; // shared memory regions per node set by the user (0 = detect NUMA regions)
+
+   //---------------------------------------------------------------------------
+   // Contiguous array held once per shared memory region (NUMA region or node)
+   // and read and written directly by every rank in shared_comm. Usage:
+   //
+   //    vmpi::shared_array_t<double> table;
+   //    table.allocate(n);                       // collective, set to zero
+   //    if(table.is_writer()) table[i] = value;  // or each rank writes its own part
+   //    table.synchronise();                     // collective, writes now visible
+   //    double x = table[i];                     // read on any rank
+   //    table.free();                            // collective, before vmpi::finalise
+   //
+   // Implemented for double, int and uint64_t in src/mpi/shmem.cpp. In the serial
+   // build the array is ordinary memory.
+   //---------------------------------------------------------------------------
+   template <typename T>
+   class shared_array_t{
+
+      public:
+         shared_array_t() = default;
+         shared_array_t(const shared_array_t&) = delete;            // copies would share the MPI window
+         shared_array_t& operator=(const shared_array_t&) = delete;
+
+         void allocate(uint64_t num_elements);
+         void synchronise();
+         void free();
+
+         T& operator[](uint64_t i){ return ptr[i]; }
+         const T& operator[](uint64_t i) const { return ptr[i]; }
+         T* data(){ return ptr; }
+         uint64_t size() const { return num_elements; }
+         bool is_writer() const { return my_shared_rank == 0; } // one rank per region, for filling the array
+         void memory_barrier();           // order this rank's loads and stores (no synchronisation)
+
+      private:
+         T* ptr = nullptr;                // start of the array, valid on every rank in shared_comm
+         uint64_t num_elements = 0;
+         #ifdef MPICF
+            MPI_Win window = MPI_WIN_NULL;
+         #endif
+         std::vector<T> serial_data;      // storage for the serial build
+
+   };
+
+   //---------------------------------------------------------------------------
+   // Sum over all ranks of values that each rank holds for a fixed list of
+   // indices, into shared arrays (one copy per region). The values are gathered
+   // to the first rank of each region, added there, and summed between regions
+   // over leader_comm only. Usage:
+   //
+   //    vmpi::shared_sum_t sum;
+   //    sum.initialise(indices, 3);          // collective, indices unique on each rank
+   //    sum.sum(values, {&x, &y, &z});       // collective, values[c*n + i] for indices[i]
+   //
+   // After sum() every element of each total is the sum over ranks (zero where no
+   // rank has a value), readable by every rank in the region. The totals must not
+   // be read between the start of the next sum() on any rank of the region and its
+   // end. In the serial build the totals are the values.
+   //---------------------------------------------------------------------------
+   class shared_sum_t{
+
+      public:
+         void initialise(const std::vector<int>& indices, int num_components);
+         void sum(const std::vector<double>& values, const std::vector< shared_array_t<double>* >& totals);
+
+         // time (s) of each phase of the last sum on this rank (add and allreduce: first rank of the region only)
+         enum phase_t { gather = 0, add = 1, allreduce = 2, barrier = 3, num_phases = 4 };
+         double phase_time[num_phases] = {0.0, 0.0, 0.0, 0.0};
+
+      private:
+         std::vector<int> local_indices;       // this rank's indices
+         int num_components = 0;               // values per index
+         std::vector<int> region_indices;      // first rank of the region: indices of every rank, rank by rank
+         std::vector<int> index_counts;        // first rank of the region: number of indices of each rank
+         std::vector<int> index_displacements;
+         std::vector<int> value_counts;        // first rank of the region: number of values of each rank
+         std::vector<int> value_displacements;
+         std::vector<double> region_values;    // first rank of the region: gathered values
+
+   };
+
+#ifdef MPICF
+   //---------------------------------------------------------------------------
+   // Exchange of values at fixed lists of indices between the ranks of a
+   // communicator, point to point. Each rank names, for each other rank, either
+   // the indices it sends to it (lists_t::sent) or the indices it receives from
+   // it (lists_t::received); the other side learns the same lists at initialise.
+   // Usage:
+   //
+   //    vmpi::sparse_exchange_t serve;
+   //    serve.initialise(comm, indices, vmpi::sparse_exchange_t::lists_t::received, 3); // collective over comm
+   //    serve.exchange({x, y, z}, vmpi::sparse_exchange_t::combine_t::assign);          // collective over comm
+   //    serve.free();                             // collective over comm, before vmpi::finalise
+   //
+   // indices[p] is the list for rank p of comm (empty for no message, and empty
+   // for this rank).
+   //
+   // exchange() sends arrays[c][i] for every index i sent, then writes (assign)
+   // or adds (add) each value received into arrays[c] at its index. Values are
+   // packed before any are received, and are combined in order of source rank,
+   // so the result is the same from run to run. Implemented in
+   // src/mpi/sparse_exchange.cpp; MPI build only.
+   //---------------------------------------------------------------------------
+   class sparse_exchange_t{
+
+      public:
+         enum class lists_t { sent, received };   // which side of the exchange the lists given describe
+         enum class combine_t { assign, add };      // what to do with each value received
+
+         sparse_exchange_t() = default;
+         sparse_exchange_t(const sparse_exchange_t&) = delete;            // persistent requests hold buffer addresses
+         sparse_exchange_t& operator=(const sparse_exchange_t&) = delete;
+         ~sparse_exchange_t(){ free(); }
+
+         void initialise(MPI_Comm comm, const std::vector< std::vector<int> >& indices, lists_t lists, int num_components);
+         void exchange(const std::vector<double*>& arrays, combine_t combine);
+         void free();
+
+         // size of the exchange on this rank, for the log
+         int num_send_peers() const { return send_peers.size(); }
+         int num_recv_peers() const { return recv_peers.size(); }
+         uint64_t num_send_indices() const { return send_list.size(); }
+         uint64_t num_recv_indices() const { return recv_list.size(); }
+
+      private:
+         MPI_Comm comm = MPI_COMM_NULL;       // duplicate of the user's communicator, so messages cannot mix
+         int num_components = 0;              // values per index
+         std::vector<int> send_peers;         // ranks sent to, ascending
+         std::vector<int> send_offsets;       // send_list[send_offsets[p] .. send_offsets[p+1]) go to send_peers[p]
+         std::vector<int> send_list;
+         std::vector<int> recv_peers;         // ranks received from, ascending
+         std::vector<int> recv_offsets;
+         std::vector<int> recv_list;
+         std::vector<double> send_buffer;     // num_components values per index, index by index
+         std::vector<double> recv_buffer;
+         std::vector<MPI_Request> requests;   // persistent: receives, then sends
+
+   };
+#endif
 
    extern bool replicated_data_staged; ///< Flag for staged system generation
 
@@ -105,6 +252,7 @@ namespace vmpi{
    extern std::uint64_t reduce_sum(std::uint64_t local);
    extern double reduce_sum(double local);
    extern double reduce_max(double local);
+   extern double reduce_min(double local);
    extern std::uint64_t all_reduce_sum(std::uint64_t local);
    extern double all_reduce_sum(double local);
    extern void all_reduce_sum(std::vector<double>& array);
@@ -114,6 +262,10 @@ namespace vmpi{
    extern void counts_and_displacements(std::vector<double>& input, std::vector<double>& output, std::vector<int>& counts, std::vector<int>& displacements);
    extern void fast_collate(std::vector<double>& input, std::vector<double>& output, std::vector<int>& counts, std::vector<int>& displacements);
    extern void broadcast(std::vector<char>& message, int source_rank);
+
+   // functions to create and free the shared memory communicators (initialise is called by shared_array_t::allocate)
+   extern void initialise_shared_memory();
+   extern void finalise_shared_memory();
 
    // function to seed random numbers in parallel
    uint32_t parallel_rng_seed(int seed);

@@ -145,6 +145,25 @@ namespace hamr{
          return true;
       }
       //--------------------------------------------------------------------
+      test="track-order";
+      if(word==test){
+         // tracks numbered from 1 in the input, stored from 0; checked against the number of tracks in initialize()
+         const std::vector<int> order = vin::integers_from_string(value);
+         hamr::internal::track_order.clear();
+         for(int track : order){
+            vin::check_for_valid_int(track, word, line, prefix, 1, 1000, "input", "1 - 1000");
+            hamr::internal::track_order.push_back(track - 1);
+         }
+         hamr::internal::enabled = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="save-track-states";
+      if(word==test){
+         hamr::internal::save_track_states = vin::check_for_valid_bool(value, word, line, prefix, "input");
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="bit-sequence-type";
       if(word==test){
          // single-tone sequence automatically defined given bit_size, track_size and system dimensions
@@ -202,38 +221,42 @@ namespace hamr{
       //--------------------------------------------------------------------
       test="active-window";
       if(word==test){
-         if(value=="" || value=="true"){
-            hamr::internal::active_window = true;
-            return true;
-         }
-         if(value=="false"){
-            hamr::internal::active_window = false;
-            return true;
-         }
-         terminaltextcolor(RED);
-         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
-         std::cerr << "\t\"true\"" << std::endl;
-         std::cerr << "\t\"false\"" << std::endl;
-         terminaltextcolor(WHITE);
-         err::vexit();
+         hamr::internal::active_window = vin::check_for_valid_bool(value, word, line, prefix, "input");
+         return true;
       }
       //--------------------------------------------------------------------
       test="active-window-full-snapshots";
       if(word==test){
-         if(value=="" || value=="true"){
-            hamr::internal::active_window_full_snapshots = true;
-            return true;
-         }
-         if(value=="false"){
-            hamr::internal::active_window_full_snapshots = false;
-            return true;
-         }
-         terminaltextcolor(RED);
-         std::cerr << "Error: Value for \'" << prefix << ":" << word << "\' must be one of:" << std::endl;
-         std::cerr << "\t\"true\"" << std::endl;
-         std::cerr << "\t\"false\"" << std::endl;
-         terminaltextcolor(WHITE);
-         err::vexit();
+         hamr::internal::active_window_full_snapshots = vin::check_for_valid_bool(value, word, line, prefix, "input");
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-margin";
+      if(word==test){
+         double d = atof(value.c_str());
+         vin::check_for_valid_value(d, word, line, prefix, unit, "length", 0.0, 1.0e5,"input","0.0 - 10 micrometres");
+         hamr::internal::active_window_margin = d;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-buffer";
+      if(word==test){
+         double d = atof(value.c_str());
+         vin::check_for_valid_value(d, word, line, prefix, unit, "length", 0.0, 1.0e5,"input","0.0 - 10 micrometres");
+         hamr::internal::active_window_buffer = d;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-buffer-damping";
+      if(word==test){
+         double a = atof(value.c_str());
+         vin::check_for_valid_value(a, word, line, prefix, unit, "none", 0.0, 1.0e3,"input","0.0 - 1000");
+         hamr::internal::active_window_buffer_damping = a;
+         hamr::internal::active_window_options_set = true;
+         return true;
       }
       //--------------------------------------------------------------------
       test="active-window-temperature";
@@ -242,6 +265,7 @@ namespace hamr{
          // 0 integrates every grain
          vin::check_for_valid_value(T, word, line, prefix, unit, "none", 0.0, 1.0e6,"input","0.0 - 1,000,000 K");
          hamr::internal::active_window_dT = T;
+         hamr::internal::active_window_options_set = true;
          return true;
       }
       //--------------------------------------------------------------------

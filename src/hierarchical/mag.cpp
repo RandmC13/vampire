@@ -17,6 +17,7 @@
 // Vampire headers
 #include "cells.hpp" // needed for dp::cell_id_array but to be removed
 #include "vmpi.hpp"
+#include "vutil.hpp"
 #include "atoms.hpp"
 
 // hierarchical module headers
@@ -35,7 +36,8 @@ namespace internal{
 //-----------------------------------------------------------------------------
 // As cells are duplicated on all processors, but local cells are not unique,
 // the accumulation of moments must be done directly from the atomic positions.
-// The total moments are then reduced and broadcast to all processors.
+// Each process accumulates its contribution (partial moments), and the
+// contributions are summed into the cell moments shared by each region.
 //-----------------------------------------------------------------------------
 void calculate_hierarchical_magnetisation(std::vector <double>& x_spin_array, // atomic spin directions
                                           std::vector <double>& y_spin_array,
@@ -43,12 +45,16 @@ void calculate_hierarchical_magnetisation(std::vector <double>& x_spin_array, //
                                           std::vector <double>& m_spin_array, // atomic spin moment
                                           std::vector < bool >& magnetic){ // is magnetic
 
-   // initialise all cells to zero on all processors
-   for(size_t cell_index = 0; cell_index < ha::mag_array_x.size() ; ++cell_index ) {
+   // time the local accumulation and upward pass, then the reduction
+   vutil::vtimer_t timer;
+   timer.start();
 
-      ha::mag_array_x[cell_index] = 0.0;
-      ha::mag_array_y[cell_index] = 0.0;
-      ha::mag_array_z[cell_index] = 0.0;
+   // initialise the cells this process contributes to (the partial moments of all other cells stay zero)
+   for(const int cell : ha::contributing_cells){
+
+      ha::partial_mag_array_x[cell] = 0.0;
+      ha::partial_mag_array_y[cell] = 0.0;
+      ha::partial_mag_array_z[cell] = 0.0;
 
    }
 
@@ -66,9 +72,9 @@ void calculate_hierarchical_magnetisation(std::vector <double>& x_spin_array, //
 
          // Consider only magnetic elements
          if( magnetic[atom] ){
-            ha::mag_array_x[cell] += x_spin_array[atom] * mus;
-            ha::mag_array_y[cell] += y_spin_array[atom] * mus;
-            ha::mag_array_z[cell] += z_spin_array[atom] * mus;
+            ha::partial_mag_array_x[cell] += x_spin_array[atom] * mus;
+            ha::partial_mag_array_y[cell] += y_spin_array[atom] * mus;
+            ha::partial_mag_array_z[cell] += z_spin_array[atom] * mus;
          }
 
       } // End of atom loop
@@ -85,52 +91,57 @@ void calculate_hierarchical_magnetisation(std::vector <double>& x_spin_array, //
 
          const int cell = micromagnetic::list_of_micromagnetic_cells[lc];
 
-         ha::mag_array_x[cell] = cells::mag_array_x[cell]*imuB;
-         ha::mag_array_y[cell] = cells::mag_array_y[cell]*imuB;
-         ha::mag_array_z[cell] = cells::mag_array_z[cell]*imuB;
+         ha::partial_mag_array_x[cell] = cells::mag_array_x[cell]*imuB;
+         ha::partial_mag_array_y[cell] = cells::mag_array_y[cell]*imuB;
+         ha::partial_mag_array_z[cell] = cells::mag_array_z[cell]*imuB;
 
       }
 
    }
 
    //--------------------------------------------------------------------------------------
-   // loop over all hierarchical levels, computing partial cell magnetizations at level L
+   // loop over the hierarchical levels in order, computing partial cell magnetizations at
+   // level L for the cells holding local cells (partial sums in other cells are zero)
    //--------------------------------------------------------------------------------------
-   for (int level = 1; level < ha::num_levels; level++ ){
+   for (const int cell : ha::upward_pass_cells){
 
-      // determine starting and end indices for level in 1D hierarchical cell array
-      int start = ha::cells_level_start_index[level];
-      int end   = ha::cells_level_end_index[level];
+      // determine which lower level cells L-1 are in each higher level cell
+      int start_cell_in_cell = ha::cells_in_cells_start_index[cell];
+      int end_cell_in_cell = ha::cells_in_cells_end_index[cell];
 
-      // loop over all cells in level L
-      for (int cell = start; cell < end; cell++){
+      // loop over all L-1 level cells and accumulate magnetization
+      for (int cell_in_cell = start_cell_in_cell; cell_in_cell < end_cell_in_cell; cell_in_cell++){
 
-         // determine which lower level cells L-1 are in each higher level cell
-         int start_cell_in_cell = ha::cells_in_cells_start_index[cell];
-         int end_cell_in_cell = ha::cells_in_cells_end_index[cell];
+         // get local cell ID of subcell
+         int subcell = ha::cells_in_cells[cell_in_cell];
 
-         // loop over all L-1 level cells and accumulate magnetization
-         for (int cell_in_cell = start_cell_in_cell; cell_in_cell < end_cell_in_cell; cell_in_cell++){
+         // accumulate cell magnetizations up the hierarchical tree
+         ha::partial_mag_array_x[cell] += ha::partial_mag_array_x[subcell];
+         ha::partial_mag_array_y[cell] += ha::partial_mag_array_y[subcell];
+         ha::partial_mag_array_z[cell] += ha::partial_mag_array_z[subcell];
+      //   std::cout << ha::partial_mag_array_z[cell] <<std::endl;
+      }
+      //  std::cout << ha::partial_mag_array_x[cell] << '\t' << ha::partial_mag_array_y[cell] << '\t' << ha::partial_mag_array_z[cell] << '\t' << std::endl;
 
-            // get local cell ID of subcell
-            int subcell = ha::cells_in_cells[cell_in_cell];
+   } // end of cell loop
 
-            // accumulate cell magnetizations up the hierarchical tree
-            ha::mag_array_x[cell] += ha::mag_array_x[subcell];
-            ha::mag_array_y[cell] += ha::mag_array_y[subcell];
-            ha::mag_array_z[cell] += ha::mag_array_z[subcell];
-         //   std::cout << ha::mag_array_z[cell] <<std::endl;
-         }
-         //  std::cout << ha::mag_array_x[cell] << '\t' << ha::mag_array_y[cell] << '\t' << ha::mag_array_z[cell] << '\t' << std::endl;
+   timer.stop();
+   ha::phase_time[ha::upward_pass] = timer.elapsed_time();
+   timer.start();
 
-      } // end of cell loop
+   // Finally sum the contributions of all processors into the shared cell moments
+   const size_t num_contributing_cells = ha::contributing_cells.size();
+   for(size_t i = 0; i < num_contributing_cells; i++){
+      const int cell = ha::contributing_cells[i];
+      ha::mag_reduction_values[i]                              = ha::partial_mag_array_x[cell];
+      ha::mag_reduction_values[i +     num_contributing_cells] = ha::partial_mag_array_y[cell];
+      ha::mag_reduction_values[i + 2 * num_contributing_cells] = ha::partial_mag_array_z[cell];
+   }
+   if(ha::moment_exchange == ha::moment_exchange_t::point_to_point) ha::exchange_moments(); // exchange.cpp
+   else ha::mag_reduction.sum(ha::mag_reduction_values, {&ha::mag_array_x, &ha::mag_array_y, &ha::mag_array_z});
 
-   } // end of hierarchical cell loop
-
-   // Finally accumulate and sum moments for all cells on all processors
-   vmpi::all_reduce_sum(ha::mag_array_x);
-   vmpi::all_reduce_sum(ha::mag_array_y);
-   vmpi::all_reduce_sum(ha::mag_array_z);
+   timer.stop();
+   ha::phase_time[ha::moment_reduction] = timer.elapsed_time();
 
    return;
 

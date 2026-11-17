@@ -68,6 +68,8 @@ namespace vcuda{
          // array for storing heun integration prefactors
          //thrust::device_vector<heun_parameters_t> heun_parameters_device(0UL);
          heun_parameters_t *d_heun_params;
+         std::vector<heun_parameters_t> h_heun_params;
+         heun_parameters_t *d_window_heun_params = nullptr;
 
          cu_real_t *d_x_spin_buffer;
          cu_real_t *d_y_spin_buffer;
@@ -107,7 +109,8 @@ namespace vcuda{
             // Initialize host array for heun parameters
             size_t num_mats = ::mp::num_materials;
             //thrust::host_vector<heun_parameters_t> heun_parameters_host(num_mats);
-            std::vector<heun_parameters_t> h_heun_params(num_mats);
+            std::vector<heun_parameters_t>& h_heun_params = cu::llg::h_heun_params;
+            h_heun_params.assign(num_mats, heun_parameters_t());
 
             // loop over all materials and determine prefactor constants
             for (size_t i = 0; i < num_mats; i++){
@@ -119,7 +122,7 @@ namespace vcuda{
                // save derived variables to host array
                h_heun_params.at(i).prefactor = -gamma / (1.0 + alpha * alpha);
                h_heun_params.at(i).lambda_times_prefactor = -gamma * alpha / (1.0 + alpha * alpha);
-               h_heun_params.at(i).skip = gpu::skip_non_magnetic_atoms && ::mp::material[i].non_magnetic == 2;
+               h_heun_params.at(i).skip = gpu::skipped_material(i);
 
                #ifdef CUDA_SPIN_DEBUG
                   // output variables to screen for debugging
@@ -159,6 +162,10 @@ namespace vcuda{
             cudaFree(cu::llg::d_ds_y);
             cudaFree(cu::llg::d_ds_z);
             cudaFree(cu::llg::d_heun_params);
+            cudaFree(cu::llg::d_window_heun_params);
+            cu::llg::d_window_heun_params = nullptr;
+            cudaFree(cu::d_window_noise_scale);
+            cu::d_window_noise_scale = nullptr;
             cudaFree(cu::d_active_atoms);
             cu::d_active_atoms = nullptr;
 
@@ -229,7 +236,7 @@ namespace vcuda{
 
             // Invoke kernel for heun predictor step
             cu::llg::llg_heun_predictor_step <<< cu::grid_size, cu::block_size >>> (
-               cu::atoms::d_materials, cu::llg::d_heun_params,
+               cu::atoms::d_materials, cu::llg::d_heun_params, cu::llg::d_window_heun_params,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
                cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
@@ -254,7 +261,7 @@ namespace vcuda{
 
             // Invoke kernel for heun corrector step
             cu::llg::llg_heun_corrector_step <<< cu::grid_size, cu::block_size >>> (
-               cu::atoms::d_materials, cu::llg::d_heun_params,
+               cu::atoms::d_materials, cu::llg::d_heun_params, cu::llg::d_window_heun_params,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin,
                cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
@@ -275,6 +282,7 @@ namespace vcuda{
          __global__ void llg_heun_predictor_step (
                int * material_id,
                cu::heun_parameters_t * heun_parameters,
+               const cu::heun_parameters_t * atom_heun_parameters,
                cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin, // contains initial spin
                cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,
@@ -290,11 +298,13 @@ namespace vcuda{
 
                // Determine material id for atom
                size_t mid = material_id[atom];
-               if(heun_parameters[mid].skip) continue;
+               // the material's prefactors, or the atom's in the damping buffer of the HAMR active window
+               const cu::heun_parameters_t& params = atom_heun_parameters ? atom_heun_parameters[atom] : heun_parameters[mid];
+               if(params.skip) continue;
 
                // prestore prefactors into registers
-               const cu_real_t prefactor = heun_parameters[mid].prefactor;
-               const cu_real_t lambdatpr = heun_parameters[mid].lambda_times_prefactor;
+               const cu_real_t prefactor = params.prefactor;
+               const cu_real_t lambdatpr = params.lambda_times_prefactor;
 
                // load spin direction to registers for later multiple reuse
                cu_real_t sx = x_spin[atom];
@@ -354,6 +364,7 @@ namespace vcuda{
          __global__ void llg_heun_corrector_step (
                int * material_id,
                cu::heun_parameters_t * heun_parameters,
+               const cu::heun_parameters_t * atom_heun_parameters,
                cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin, // spin from predictor step
                cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,
@@ -370,10 +381,11 @@ namespace vcuda{
                const size_t atom = active ? active[k] : k;
 
                size_t mid = material_id[atom];
-               if(heun_parameters[mid].skip) continue;
+               const cu::heun_parameters_t& params = atom_heun_parameters ? atom_heun_parameters[atom] : heun_parameters[mid];
+               if(params.skip) continue;
 
-               cu_real_t prefactor = heun_parameters[mid].prefactor;
-               cu_real_t lambdatpr = heun_parameters[mid].lambda_times_prefactor;
+               cu_real_t prefactor = params.prefactor;
+               cu_real_t lambdatpr = params.lambda_times_prefactor;
 
                // copy the predictor spins to registers
                cu_real_t spin_x = x_spin[atom];

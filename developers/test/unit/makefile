@@ -28,7 +28,11 @@ obj/grains/grain_packing_test.o \
 obj/grains/grain_seeds_test.o \
 obj/grains/grain_shape_test.o \
 obj/integrate/integrate_tests.o \
-obj/integrate/rotations_test.o
+obj/integrate/rotations_test.o \
+obj/mpi/mpi_tests.o \
+obj/mpi/shmem_test.o \
+obj/spininitialize/spininitialize_tests.o \
+obj/spininitialize/domain_wall_test.o
 
 
 VAMPIRE_OBJECTS= \
@@ -50,7 +54,9 @@ VAMPIRE_OBJECTS= \
 ../../../obj/grains/grain_packing.o\
 ../../../obj/grains/grain_seeds.o\
 ../../../obj/grains/grain_shape.o\
-../../../obj/grains/grain_tessellation.o
+../../../obj/grains/grain_tessellation.o\
+../../../obj/mpi/shmem.o\
+../../../obj/spininitialize/domain_wall.o
 
 
 EXECUTABLE=unit_tests
