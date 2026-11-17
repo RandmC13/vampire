@@ -16,14 +16,15 @@
 # A write segment that starts after the write has finished does nothing. With
 # --dry-run the same jobs run on a 40 nm long film with a fast head on the
 # gpu_short (one A40) and test partitions, to check the chain first. With
-# --test they write two tracks on a 100 x 98 nm film with the physics of the
-# run (one write job of at most 4 hours, about 2.5 hours expected), on one
-# node of 2 H100 (gpuplus), or of 6 A40 on 2 nodes with TEST_GPUS=a40.
+# --test they write two tracks on a 98 nm wide film, TEST_LENGTH nm long
+# (default 100), with the physics of the run (one write job of at most 4
+# hours; about 2.5 hours at 100 nm on 2 H100), on TEST_GPUS: h100:N (default
+# h100:2) or a40:N on one node, or a40:6 on two nodes.
 #
 # Usage (from the vampire checkout on a Viking login node):
 #   test/viking/capped-submit.sh [--dry-run | --test] [commit]      (default: HEAD)
 # Environment: WORK (default ~/scratch/vampire-benchmarks; not on the file
-# system of the home directory), SEGMENTS, TEST_GPUS, MODULES.
+# system of the home directory), SEGMENTS, TEST_GPUS, TEST_LENGTH, MODULES.
 #------------------------------------------------------------------------------
 set -eu
 cd "$(dirname "$0")"
@@ -52,17 +53,20 @@ echo "$commit" > $cap/commit.txt
 echo "$mode" > $cap/mode.txt
 git -C $REPO archive $commit | (mkdir -p $cap/src && tar -x -C $cap/src)
 echo "commit $commit, results in $cap"
-opts="--parsable --export=ALL,REPO=$REPO,WORK=$WORK,CAP_MODE=$mode --output=$cap/logs/%x-%j.log"
+opts="--parsable --export=ALL,REPO=$REPO,WORK=$WORK,CAP_MODE=$mode,TEST_LENGTH=${TEST_LENGTH:-100} --output=$cap/logs/%x-%j.log"
 if [ $mode = dry-run ]; then
    write="--partition=gpu_short --nodes=1 --ntasks-per-node=1 --gres=gpu:1 --time=00:30:00"
    read="--partition=test --nodes=1 --ntasks-per-node=8 --time=00:30:00"
    segments=${SEGMENTS:-2}
 elif [ $mode = test ]; then
-   if [ "${TEST_GPUS:-h100}" = a40 ]; then
-      write="--partition=gpu --nodes=2 --ntasks-per-node=3 --gres=gpu:3 --time=04:00:00"
-   else
-      write="--partition=gpuplus --nodes=1 --ntasks-per-node=2 --gres=gpu:2 --time=04:00:00"
-   fi
+   gpus=${TEST_GPUS:-h100:2}
+   case $gpus in
+      a40:6)   write="--partition=gpu --nodes=2 --ntasks-per-node=3 --gres=gpu:3" ;;
+      a40:[1-3]) write="--partition=gpu --nodes=1 --ntasks-per-node=${gpus#*:} --gres=gpu:${gpus#*:}" ;;
+      h100:[12]) write="--partition=gpuplus --nodes=1 --ntasks-per-node=${gpus#*:} --gres=gpu:${gpus#*:}" ;;
+      *) echo "Error: TEST_GPUS must be h100:1, h100:2, a40:1 to a40:3 or a40:6"; exit 1 ;;
+   esac
+   write+=" --time=04:00:00"
    read="--partition=nodes --nodes=1 --ntasks-per-node=96 --time=01:00:00"
    segments=${SEGMENTS:-1}
 else

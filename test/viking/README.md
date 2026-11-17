@@ -138,7 +138,7 @@ tracks of 71 bits written in the order 2, 1, 3 at 22 m/s with the active
 window, and the read-back field in the sensor layer after each track.
 
     test/viking/capped-submit.sh --dry-run    # 40 nm film, fast head, gpu_short and test partitions
-    test/viking/capped-submit.sh --test       # two tracks on a 100 x 98 nm film, physics of the run, 2 H100 (TEST_GPUS=a40: 6 A40), ~2.5 h
+    test/viking/capped-submit.sh --test       # two tracks on a 98 nm wide film (TEST_LENGTH nm, default 100), physics of the run, TEST_GPUS (default h100:2)
     test/viking/capped-submit.sh              # the run
 
 - `capped-write.job`: the write on 2 A40 nodes (6 GPUs), multi-GPU version in
