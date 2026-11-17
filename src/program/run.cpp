@@ -94,6 +94,14 @@ namespace program{
             program::hamr();
             break;
 
+         case program::program_t::dipole_field:
+            if(vmpi::my_rank==0){
+               std::cout << "Dipole-Field..." << std::endl;
+               zlog << "Dipole-Field..." << std::endl;
+            }
+            program::dipole_field();
+            break;
+
          case program::program_t::cmc_anisotropy:
             if(vmpi::my_rank==0){
                std::cout << "CMC-Anisotropy..." << std::endl;

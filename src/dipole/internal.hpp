@@ -81,6 +81,19 @@ namespace dipole{
       extern std::vector<int> otf_list_of_cells_with_atoms;
       extern std::vector< std::vector<double> > otf_atoms_in_cells_array;
 
+      // tensor solver: cells in which the field is calculated (dipole:field-cells), and the periodic images of
+      // a periodic system (set by initialize_periodic_images): the period, the cell grid, the layers (cell
+      // grid planes along z) holding magnetic atoms, and for each local cell the tensors of the uniform part
+      // of each such layer (periodic.cpp)
+      extern bool probe_cells_only;
+      extern bool periodic_images;
+      extern bool periodic[2];
+      extern double period[2];
+      extern int grid_n[3];
+      extern int period_n[2];
+      extern std::vector<int> magnetic_layers;
+      extern std::vector<double> uniform_tensor;
+
       extern int num_atoms;
       extern std::vector < int > atom_type_array;
       extern std::vector < int > atom_cell_id_array;
@@ -220,6 +233,22 @@ namespace dipole{
                               const std::vector<double>& cells_pos_and_mom_array,
                               const std::vector<int>& list_of_cells_with_atoms,
                               const std::vector< std::vector<double> >& atoms_in_cells_array);
+
+      // periodic images of the tensor solver (periodic.cpp)
+      void initialize_periodic_images(const std::vector<int>& global_atoms_in_cell_count);
+      void add_image_tensors(const int celli,
+                             const int row,
+                             const double cutoff,
+                             const std::vector<int>& global_atoms_in_cell_count,
+                             const std::vector<double>& cells_pos_and_mom_array,
+                             const std::vector<int>& list_of_cells_with_atoms,
+                             const std::vector< std::vector<double> >& atoms_in_cells_array);
+      void initialize_uniform_tensors(const std::vector<int>& global_atoms_in_cell_count,
+                                      const std::vector<double>& cells_pos_and_mom_array);
+      void layer_mean_moments(std::vector<double>& mean);
+      void add_uniform_field(const int lc, const int celli, const std::vector<double>& mean,
+                             double& bx, double& by, double& bz, double& hx, double& hy, double& hz);
+      bool field_in_cell(const int cell);
 
       // new version of inter tensor method
       void compute_inter_tensor(const int celli,                                                // global ID of cell i

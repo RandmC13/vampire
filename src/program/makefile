@@ -9,6 +9,7 @@ cmc_anisotropy.o \
 curie_temperature.o \
 data.o \
 diagnostics.o \
+dipole_field.o \
 disk_tracks.o \
 domain_wall.o \
 effective_damping.o \

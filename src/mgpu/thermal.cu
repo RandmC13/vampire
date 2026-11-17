@@ -68,7 +68,8 @@ namespace internal{
          const cu::material_parameters_t * material_params,
          const int * material,
          const int n_atoms,
-         const int * active){
+         const int * active,
+         const cu::cu_real_t * noise_scale){ // factor of the noise of each atom (nullptr: 1)
 
       for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
 
@@ -76,7 +77,8 @@ namespace internal{
 
          const cu::material_parameters_t mat = material_params[material[i]];
          if(mat.skip) continue; // atoms that are not integrated need no field (their noise depends on no other atom)
-         const cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temperature);
+         cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temperature);
+         if(noise_scale) rsigma *= noise_scale[i];
 
          const float3 n = thermal_noise(atom_key[i], step, seed);
          x_field_array[i] = rsigma * n.x;
@@ -104,7 +106,8 @@ namespace internal{
          const cu::material_parameters_t * material_params,
          const int * material,
          const int n_atoms,
-         const int * active){
+         const int * active,
+         const cu::cu_real_t * noise_scale){ // factor of the noise of each atom (nullptr: 1)
 
       for(int k = blockIdx.x * blockDim.x + threadIdx.x; k < n_atoms; k += blockDim.x * gridDim.x){
 
@@ -117,7 +120,8 @@ namespace internal{
          const cu::cu_real_t cx = atoms_coord_x[i];
          const cu::cu_real_t cy = atoms_coord_y[i];
          const cu::cu_real_t temp = cu::laser_temperature(cx, cy, px, py, Tmin, DeltaT, one_over_denx, one_over_deny);
-         const cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+         cu::cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+         if(noise_scale) rsigma *= noise_scale[i];
 
          const float3 n = thermal_noise(atom_key[i], step, seed);
          cu::cu_real_t field_x = rsigma * n.x;
@@ -195,20 +199,20 @@ namespace internal{
                Tmin, DeltaT, one_over_denx, one_over_deny, px, py,
                Hx_app, Hy_app, Hz_app, Hloc_min_x, Hloc_max_x, Hloc_min_y, Hloc_max_y,
                d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
          }
          else{
             global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
                sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
          }
       }
       // otherwise the global thermal field and the applied fields
       else{
          global_temperature_kernel <<< cu::grid_size, cu::block_size >>> (
             cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
-            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms, nullptr);
+            sim::temperature, d_atom_key, step, seed, cu::mp::d_material_params, cu::atoms::d_materials, num_atoms, nullptr, nullptr);
          cu::update_applied_fields();
       }
       check_cuda_errors(__FILE__, __LINE__);

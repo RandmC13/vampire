@@ -10,9 +10,11 @@
 // C++ standard library headers
 
 // Vampire headers
+#include "atoms.hpp"
 #include "cuda.hpp"
 #include "errors.hpp"
 #include "hamr.hpp"
+#include "material.hpp"
 #include "random.hpp"
 #include "sim.hpp"
 #include "vio.hpp"
@@ -21,6 +23,7 @@
 #include "cuda_utils.hpp"
 #include "data.hpp"
 #include "internal.hpp"
+#include "llg_heun.hpp"
 #include "typedefs.hpp"
 
 // Conditional compilation of all cuda code
@@ -48,7 +51,8 @@ namespace vcuda{
             cu::material_parameters_t * material_params,
             int * material,
             const int n_atoms,
-            const int * active
+            const int * active,
+            const cu_real_t * noise_scale // factor of the noise of each atom (nullptr: 1)
             )
       {
          int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -85,7 +89,8 @@ namespace vcuda{
             const cu_real_t cx = atoms_coord_x[i];
             const cu_real_t cy = atoms_coord_y[i];
             const cu_real_t temp = cu::laser_temperature(cx, cy, px, py, Tmin, DeltaT, one_over_denx, one_over_deny);
-            const cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+            cu_real_t rsigma = cu::thermal_field_sigma(mat, temp);
+            if(noise_scale) rsigma *= noise_scale[i];
 
             // Gaussian random numbers are generated in single precision in both builds, since double
             // precision generation is slow on GPUs with reduced double precision throughput
@@ -154,13 +159,41 @@ namespace vcuda{
             cu::d_rand_state,
             cu::mp::d_material_params,
             cu::atoms::d_materials,
-            cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+            cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
 
          check_cuda_errors (__FILE__, __LINE__);
 
          return;
       } // end apply_local_temperature_and_field
 
+
+      // Copies the per-atom damping and noise factor of the damping buffer of the active window (continuous
+      // layers) to the device when they change: the material's prefactors outside the buffer, and in it the
+      // same expressions with the atom's damping
+      static void update_window_damping(){
+         static uint64_t version = 0;
+         if(!::hamr::window_damping || version == ::hamr::window_damping_version) return;
+         version = ::hamr::window_damping_version;
+         const int num_atoms = ::atoms::num_atoms;
+         std::vector<cu::heun_parameters_t> params(num_atoms);
+         std::vector<cu_real_t> scale(num_atoms);
+         for(int atom = 0; atom < num_atoms; atom++){
+            const int mat = ::atoms::type_array[atom];
+            params[atom] = cu::llg::h_heun_params[mat];
+            if(::hamr::window_in_buffer[atom]){
+               const double alpha = ::hamr::window_alpha[atom];
+               const double gamma = ::mp::material[mat].gamma_rel;
+               params[atom].prefactor = -gamma / (1.0 + alpha * alpha);
+               params[atom].lambda_times_prefactor = -gamma * alpha / (1.0 + alpha * alpha);
+            }
+            scale[atom] = ::hamr::window_noise_scale[atom];
+         }
+         if(cu::llg::d_window_heun_params == nullptr) cudaMalloc((void**)&cu::llg::d_window_heun_params, num_atoms * sizeof(cu::heun_parameters_t));
+         if(cu::d_window_noise_scale == nullptr) cudaMalloc((void**)&cu::d_window_noise_scale, num_atoms * sizeof(cu_real_t));
+         cudaMemcpy(cu::llg::d_window_heun_params, params.data(), num_atoms * sizeof(cu::heun_parameters_t), cudaMemcpyHostToDevice);
+         cudaMemcpy(cu::d_window_noise_scale, scale.data(), num_atoms * sizeof(cu_real_t), cudaMemcpyHostToDevice);
+         check_cuda_errors (__FILE__, __LINE__);
+      }
 
       // Copies the atoms of the HAMR active window to the device when the window changes
       std::vector<int> active_ranges;
@@ -170,6 +203,7 @@ namespace vcuda{
          if(!::hamr::active_window_enabled()) return;
 
          const std::vector<int>& ranges = ::hamr::update_active_window();
+         update_window_damping();
          if(cu::d_active_atoms != nullptr && ranges == active_ranges) return;
          active_ranges = ranges;
          active_window_version++;
@@ -214,7 +248,7 @@ namespace vcuda{
                cu::d_rand_state,
                cu::mp::d_material_params,
                cu::atoms::d_materials,
-               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms);
+               cu::num_integrated_atoms(num_atoms), cu::d_active_atoms, cu::d_window_noise_scale);
 
             check_cuda_errors (__FILE__, __LINE__);
          }

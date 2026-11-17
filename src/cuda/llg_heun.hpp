@@ -47,6 +47,9 @@ namespace vcuda
           */
          extern bool initialized;
          extern heun_parameters_t * d_heun_params;
+         extern std::vector<heun_parameters_t> h_heun_params; // host copy, per material
+         // per atom, for the damping buffer of the HAMR active window (nullptr: the material's)
+         extern heun_parameters_t * d_window_heun_params;
          extern cu_real_t * d_x_spin_buffer;
          extern cu_real_t * d_y_spin_buffer;
          extern cu_real_t * d_z_spin_buffer;
@@ -67,6 +70,7 @@ namespace vcuda
          __global__ void llg_heun_predictor_step (
                int * material_id,
                heun_parameters_t * heun_parameters,
+               const heun_parameters_t * atom_heun_parameters,
                cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin,
                cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,
@@ -77,6 +81,7 @@ namespace vcuda
          __global__ void llg_heun_corrector_step (
                int * material_id,
                heun_parameters_t * heun_parameters,
+               const heun_parameters_t * atom_heun_parameters,
                cu_real_t * x_spin, cu_real_t * y_spin, cu_real_t * z_spin,
                cu_real_t * x_sp_field, cu_real_t * y_sp_field, cu_real_t * z_sp_field,
                cu_real_t * x_ext_field, cu_real_t * y_ext_field, cu_real_t * z_ext_field,

@@ -20,6 +20,7 @@
 #include "errors.hpp"
 #include "gpu.hpp"
 #include "material.hpp"
+#include "program.hpp"
 #include "vio.hpp"
 #include "vmpi.hpp"
 #include "vutil.hpp"
@@ -101,6 +102,19 @@ namespace dipole{
       const double dipole_scaling_mem_before_kb = vutil::peak_memory_usage_kb();
       vutil::vtimer_t dipole_scaling_build_timer;
       dipole_scaling_build_timer.start();
+
+      // sim:program = dipole-field evaluates the field once, so the tensor solver computes the tensors when needed
+      if(program::program == program::program_t::dipole_field && dipole::internal::solver == dipole::internal::tensor){
+         dipole::internal::on_the_fly_tensors = true;
+      }
+      if(dipole::internal::probe_cells_only){
+         if(dipole::internal::solver != dipole::internal::tensor){
+            err::fatal("Error - dipole:field-cells = probe is only available with dipole:solver = tensor.");
+         }
+         if(!cells::probe_non_magnetic_cells){
+            err::fatal("Error - dipole:field-cells = probe needs cells:probe-non-magnetic-cells, which keeps the cells without magnetic atoms.");
+         }
+      }
 
       if(dipole::internal::on_the_fly_tensors && dipole::internal::solver != dipole::internal::tensor){
          err::fatal("Error - dipole:on-the-fly-tensors is only available with dipole:solver = tensor.");

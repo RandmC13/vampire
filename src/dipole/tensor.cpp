@@ -85,6 +85,10 @@ namespace dipole{
                }
             }
 
+            // copies of the system (periodic images)
+            if(periodic_images) add_image_tensors(celli, row, real_cutoff, cells_num_atoms_in_cell_global, cells_pos_and_mom_array,
+                                                  list_of_atoms_with_cells, atoms_in_cells_array);
+
          return;
 
       }
@@ -128,6 +132,10 @@ namespace dipole{
             // the number of processors) would put each on either side of it; the
             // relative tolerance of 1e-6 treats them all atomistically
             const double real_cutoff = dipole::cutoff * cells::macro_cell_size * (1.0 + 1.0e-6);
+
+            // periodic images of a periodic system (before the atomistic data, which then include the cells near the
+            // local cells across the periodic boundaries)
+            initialize_periodic_images(cells_num_atoms_in_cell_global);
 
             std::vector< std::vector<double> > atoms_in_cells_array; // 2D list of [cell][atom] for local cells needed for computing dipole tensor
             std::vector<int> list_of_atoms_with_cells; // list of cell IDs to enable parsing of atomistic data
@@ -186,12 +194,18 @@ namespace dipole{
             // print out progress to screen
             if(fmod(ceil(lc),ceil(cells_num_local_cells)/10) == 0) std::cout << "." << std::flush;
 
+            // dipole:field-cells = probe: no row for cells whose field is not calculated
+            if(!field_in_cell(cells_local_cell_array[lc])) continue;
+
                // get global cell ID of source cell and compute its tensor row
                compute_tensor_row(cells_local_cell_array[lc], lc, real_cutoff, cells_num_atoms_in_cell_global,
                                   cells_pos_and_mom_array, list_of_atoms_with_cells, atoms_in_cells_array);
 
             }
          }
+
+         // tensors of the mean moment of each layer (periodic images)
+         initialize_uniform_tensors(cells_num_atoms_in_cell_global, cells_pos_and_mom_array);
 
          // hold parallel calculation until all processors have completed the dipole calculation
          vmpi::barrier();

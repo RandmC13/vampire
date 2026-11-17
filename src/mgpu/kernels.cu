@@ -466,7 +466,7 @@ void llg_heun() {
    internal::update_fields(true);
 
    cu::llg::llg_heun_predictor_step<<<cu::grid_size, cu::block_size>>>(
-         cu::atoms::d_materials, cu::llg::d_heun_params, cu::atoms::d_x_spin,
+         cu::atoms::d_materials, cu::llg::d_heun_params, cu::llg::d_window_heun_params, cu::atoms::d_x_spin,
          cu::atoms::d_y_spin, cu::atoms::d_z_spin, cu::d_x_spin_field,
          cu::d_y_spin_field, cu::d_z_spin_field, cu::d_x_external_field,
          cu::d_y_external_field, cu::d_z_external_field, cu::llg::d_ds_x,
@@ -478,7 +478,7 @@ void llg_heun() {
    internal::update_fields(false);
 
    cu::llg::llg_heun_corrector_step<<<cu::grid_size, cu::block_size>>>(
-         cu::atoms::d_materials, cu::llg::d_heun_params, cu::atoms::d_x_spin,
+         cu::atoms::d_materials, cu::llg::d_heun_params, cu::llg::d_window_heun_params, cu::atoms::d_x_spin,
          cu::atoms::d_y_spin, cu::atoms::d_z_spin, cu::d_x_spin_field,
          cu::d_y_spin_field, cu::d_z_spin_field, cu::d_x_external_field,
          cu::d_y_external_field, cu::d_z_external_field, cu::llg::d_x_spin_buffer,

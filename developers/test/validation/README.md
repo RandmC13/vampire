@@ -27,6 +27,9 @@ Which check to run:
 | anything that could change what an ordinary user of the serial or MPI version sees (input, output files, checkpoints, vdc) | `compat_check.sh` against the reference version (CPU only, no GPU needed) |
 | any change to the CPU code | upstream's regression suite, `developers/tests.sh -r` and `-m 2` (about 30 s and 50 s); built with GCC 15 the serial cases `config/binary-continuous`, `integrate/constrained-monte-carlo`, `program/hamr-cool`, `vio/all-columns`, `vio/grain-columns` and the 2-process cases `config/binary-continuous`, `config/output-mode-mpi-io`, `program/hamr-cool`, `vio/grain-columns` fail for the reference version too (low order bits of their golden files), so only other failures point to a change |
 | the HAMR active window (`src/hamr/active_window.cpp`, window snapshots) | `hamr_window_check.sh` (below) |
+| the active window with continuous layers (cap, damping buffer) | `hamr_cap_window_check.sh` (below) |
+| `hamr:track-order`, `hamr:save-track-states`, checkpoint writing | `hamr_tracks_check.sh` (below) |
+| `sim:program = dipole-field`, `dipole:field-cells`, periodic images of the tensor solver | `dipole_field_check.sh` (below) |
 | new feature or validation case | all of the above once, before committing |
 
 The GPU scripts start several validation runs at a time on the GPU (`GPU_JOBS`, default 4 processes, so 2 runs on 2
@@ -142,6 +145,27 @@ the magnetisation with and without the window agrees statistically (z-scores bel
 snapshots rebuilt into full ones equal the full snapshots, and `vdc` (`VDC`, default `vdc/vdc` next to the binary)
 writes identical files from both; and the run times. `FILM=small` runs every stage on a 30 x 8 nm film, small enough
 for one CPU; `RANKS=N` runs the MPI and multi-GPU versions on N processes, `JOBS` runs several seeds at a time.
+
+`developers/test/validation/hamr_cap_window_check.sh [vampire binary]` checks the window on a granular FePt film under
+a continuous cap: with every grain in the window the output is identical to the run without it (on a 12 x 40 nm film,
+which up to 6 processes divide across the track with and without the window); a damping buffer with the cap's own
+damping is identical to a wider margin without a buffer; at a constant 300 K a buffer over most of the cap keeps the
+cap's magnetisation within `DM` (default 0.01) of the run without the window; with `SEEDS=N` (at least 8) the write
+with and without the window agrees statistically. Stages 1-3 take minutes on a GPU; `RANKS` and `JOBS` as above.
+
+## HAMR tracks
+
+`developers/test/validation/hamr_tracks_check.sh [vampire binary]` writes three tracks in the order 2, 1, 3 at T = 0
+with `hamr:save-track-states`: the tracks are written in that order, the spin snapshot after each track agrees with the
+serial CPU version (`REF`, `TOL`), and the checkpoint files of a track reload into exactly its snapshot.
+
+## Dipole field program
+
+`developers/test/validation/dipole_field_check.sh [vampire binary]` (CPU, seconds) checks `sim:program = dipole-field`
+on a Co film with a non-magnetic probe layer: it gives the fields of the time-series program; on a periodic uniform
+film every cell of a layer has the same field and the probe layer none; the field of periodic stripes agrees with the
+analytic field; `dipole:field-cells = probe` gives the probe cells the same fields; with an MPI binary, `RANKS`
+processes agree with one.
 
 ## Compatibility with a reference version
 

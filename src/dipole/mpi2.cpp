@@ -93,10 +93,12 @@ namespace internal{
                   const double cyj = pos_and_mom_array[ 4*cell + 1 ];
                   const double czj = pos_and_mom_array[ 4*cell + 2 ];
 
-                  // compute displacement
-                  const double dx = cxi - cxj;
-                  const double dy = cyi - cyj;
+                  // compute displacement (to the nearest copy with periodic images)
+                  double dx = cxi - cxj;
+                  double dy = cyi - cyj;
                   const double dz = czi - czj;
+                  if(periodic_images && periodic[0]) dx -= period[0]*std::round(dx/period[0]);
+                  if(periodic_images && periodic[1]) dy -= period[1]*std::round(dy/period[1]);
 
                   // calculate distance between cells squared
                   const double rij2 = dx*dx + dy*dy + dz*dz;

@@ -81,7 +81,8 @@ namespace hamr{
          for(int atom=start_index;atom<end_index;atom++){
 
             const int imaterial=hamr::internal::atom_type_array[atom];
-            const double H_th_sigma = sigma_prefactor[imaterial];
+            // in the damping buffer of the active window the noise follows the atom's damping
+            const double H_th_sigma = hamr::window_damping ? sigma_prefactor[imaterial]*hamr::window_noise_scale[atom] : sigma_prefactor[imaterial];
 
             x_total_external_field_array[atom] = hamr::internal::x_field_array[atom] * H_th_sigma;
             y_total_external_field_array[atom] = hamr::internal::y_field_array[atom] * H_th_sigma;

@@ -50,6 +50,10 @@ namespace dipole{
       // Define constant imuB = 1/muB to normalise to unitarian values the cell magnetisation
       const double imuB = constants::i_muB;
 
+      // periodic images: mean moment of each layer
+      std::vector<double> layer_mean;
+      internal::layer_mean_moments(layer_mean);
+
       // loop over local cells
       for(int lc=0;lc<dipole::internal::cells_num_local_cells;lc++){
 
@@ -58,6 +62,17 @@ namespace dipole{
          if(dipole::internal::cells_num_atoms_in_cell[i]>0 || cells::probe_non_magnetic_cells){
 
             const bool magnetic = dipole::internal::cells_num_atoms_in_cell[i]>0;
+
+            // dipole:field-cells = probe: the field of cells with magnetic atoms is not calculated
+            if(!internal::field_in_cell(i)){
+               dipole::cells_field_array_x[i] = 0.0;
+               dipole::cells_field_array_y[i] = 0.0;
+               dipole::cells_field_array_z[i] = 0.0;
+               dipole::cells_mu0Hd_field_array_x[i] = 0.0;
+               dipole::cells_mu0Hd_field_array_y[i] = 0.0;
+               dipole::cells_mu0Hd_field_array_z[i] = 0.0;
+               continue;
+            }
 
             // Self demagnetisation factor multiplying m(i)
             const double eightPI_three_cell_volume = magnetic ? 8.0*M_PI/(3.0*dipole::internal::cells_volume_array[i]) : 0.0;
@@ -105,6 +120,11 @@ namespace dipole{
                   dipole::cells_mu0Hd_field_array_z[i] +=(mx*internal::rij_tensor_xz[row][j] + my*internal::rij_tensor_yz[row][j] + mz*internal::rij_tensor_zz[row][j]);
                }
             }
+            // periodic images: the mean part of the layers as infinite uniform layers
+            internal::add_uniform_field(lc, i, layer_mean,
+                                        dipole::cells_field_array_x[i], dipole::cells_field_array_y[i], dipole::cells_field_array_z[i],
+                                        dipole::cells_mu0Hd_field_array_x[i], dipole::cells_mu0Hd_field_array_y[i], dipole::cells_mu0Hd_field_array_z[i]);
+
             // Multiply the cells B-field by mu_B * mu_0/(4*pi) /1e-30  <-- (constants::muB * 1e-7 / 1e30)
             // where the last term accounts for the fact that the volume was calculated in Angstrom
             dipole::cells_field_array_x[i] = dipole::cells_field_array_x[i] * constants::dipole_prefactor;

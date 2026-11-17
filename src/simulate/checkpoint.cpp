@@ -9,6 +9,7 @@
 
 // System headers
 #include <algorithm>
+#include <cstdio>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -194,14 +195,18 @@ void save_checkpoint(const std::string& suffix){
    chkfilenamess << "vampire" << vmpi::my_rank << suffix << ".chk";
    std::string chkfilename = chkfilenamess.str();
 
+   // the file is written under a temporary name and renamed once every process has written its file, so that a
+   // simulation stopped while writing (e.g. at the time limit of a job) keeps the previous complete checkpoint
+   const std::string tmpfilename = chkfilename + ".tmp";
+
    // open checkpoint file
    std::ofstream chkfile;
-   chkfile.open(chkfilename.c_str(),std::ios::binary);
+   chkfile.open(tmpfilename.c_str(),std::ios::binary);
 
    // check for open file
    if(!chkfile.is_open()){
       std::ostringstream message;
-      message << "Error: Unable to open checkpoint file " << chkfilename << " for writing. Exiting.";
+      message << "Error: Unable to open checkpoint file " << tmpfilename << " for writing. Exiting.";
       err::fatal(message.str());
    }
 
@@ -293,6 +298,19 @@ void save_checkpoint(const std::string& suffix){
 
    // close checkpoint file
    chkfile.close();
+   if(chkfile.fail()){
+      std::ostringstream message;
+      message << "Error: Unable to write checkpoint file " << tmpfilename << ". Exiting.";
+      err::fatal(message.str());
+   }
+
+   // every process has written its file before any replaces the previous checkpoint
+   vmpi::barrier();
+   if(std::rename(tmpfilename.c_str(), chkfilename.c_str()) != 0){
+      std::ostringstream message;
+      message << "Error: Unable to rename checkpoint file " << tmpfilename << " to " << chkfilename << ". Exiting.";
+      err::fatal(message.str());
+   }
 
    // log writing checkpoint file (only for non-continuous checkpoint files)
    if(!sim::save_checkpoint_continuous_flag) zlog << zTs() << "Checkpoint file written to disk." << std::endl;

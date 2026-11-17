@@ -93,7 +93,9 @@ namespace hamr{
             double rescaled_temperature = temp < Tc ? Tc*pow(temp/Tc,alpha) : temp;
             const double sqrt_T=sqrt(rescaled_temperature);
 
-            const double H_th_sigma = sqrt_T*mp::material[imaterial].H_th_sigma;
+            // in the damping buffer of the active window the noise follows the atom's damping
+            const double H_th_sigma = hamr::window_damping ? sqrt_T*mp::material[imaterial].H_th_sigma*hamr::window_noise_scale[atom]
+                                                           : sqrt_T*mp::material[imaterial].H_th_sigma;
 
             hamr::internal::x_field_array[atom] *= H_th_sigma;
             hamr::internal::y_field_array[atom] *= H_th_sigma;

@@ -129,6 +129,9 @@ namespace hamr{
       extern double active_window_dT; /// laser temperature rise (K) from which a grain is integrated
       extern bool active_window_full_snapshots; /// write every spin snapshot in full with the window
       extern bool active_window_options_set;    /// a window sub-option is set in the input file
+      extern double active_window_margin;       /// continuous layers: integrated with their own damping within this distance (A) of integrated grains
+      extern double active_window_buffer;       /// continuous layers: width (A) of the damped buffer beyond the margin
+      extern double active_window_buffer_damping; /// continuous layers: damping at the outer edge of the buffer
       void initialize_active_window();
       void save_window_state(std::ostream& chkfile);
       void load_window_state(std::istream& chkfile);

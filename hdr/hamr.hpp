@@ -109,6 +109,23 @@ namespace hamr{
    //-----------------------------------------------------------------------------------------------
    extern bool head_laser_on;
 
+   //---------------------------------------------------------------------------
+   // Damping buffer of the active window in continuous layers: while
+   // window_damping is set, the integrators take the LLG prefactors (as
+   // mp::material one_oneplusalpha_sq, alpha_oneplusalpha_sq) and the factor
+   // of the thermal noise of every atom (local and halo) from these arrays
+   // (window_alpha: the damping of buffer atoms, for other formulations),
+   // which hold the values of the atom's material outside the buffer;
+   // window_damping_version changes whenever they change
+   //---------------------------------------------------------------------------
+   extern bool window_damping;
+   extern uint64_t window_damping_version;
+   extern std::vector<char> window_in_buffer;
+   extern std::vector<double> window_alpha;
+   extern std::vector<double> window_one_oneplusalpha_sq;
+   extern std::vector<double> window_alpha_oneplusalpha_sq;
+   extern std::vector<double> window_noise_scale;
+
 
 } // end of hamr namespace
 

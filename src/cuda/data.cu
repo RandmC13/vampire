@@ -26,6 +26,7 @@ namespace vcuda{
       cu_real_t *h_z_spin_transfer_buffer;
 
       int *d_active_atoms = nullptr;
+      cu_real_t *d_window_noise_scale = nullptr;
       std::vector<int> h_active_atoms;
 
       namespace atoms

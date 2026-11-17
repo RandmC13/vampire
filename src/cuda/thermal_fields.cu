@@ -72,7 +72,8 @@ namespace vcuda{
             cu::material_parameters_t * material_params,
             int * material,
             int n_atoms,
-            const int * active
+            const int * active,
+            const cu_real_t * noise_scale // factor of the noise of each atom (nullptr: 1)
             )
       {
          int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -104,7 +105,8 @@ namespace vcuda{
             cu_real_t field_z = 0.0;
 
             // thermal field calculation
-            const cu_real_t rsigma = cu::thermal_field_sigma(mat, temperature);
+            cu_real_t rsigma = cu::thermal_field_sigma(mat, temperature);
+            if(noise_scale) rsigma *= noise_scale[i];
 
             // Gaussian random numbers are generated in single precision in both builds, since double
             // precision generation is slow on GPUs with reduced double precision throughput
@@ -142,7 +144,7 @@ namespace vcuda{
             cu::d_rand_state,
             cu::mp::d_material_params,
             cu::atoms::d_materials,
-            num_atoms, nullptr);
+            num_atoms, nullptr, nullptr);
 
          check_cuda_errors (__FILE__, __LINE__);
 

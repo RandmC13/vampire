@@ -76,6 +76,11 @@ namespace program{
             program::program = program_t::hamr_simulation;
             return true;
          }
+         test="dipole-field";
+         if(value==test){
+            program::program = program_t::dipole_field;
+            return true;
+         }
          test="cmc-anisotropy";
          if(value==test){
             program::program = program_t::cmc_anisotropy;

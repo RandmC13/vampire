@@ -86,6 +86,8 @@ namespace vcuda{
       // atoms integrated with the HAMR active window (hamr:active-window), in increasing order; nullptr: all atoms
       extern int *d_active_atoms;
       extern std::vector<int> h_active_atoms; // host copy
+      // factor of the thermal noise of every atom in the damping buffer of the active window (nullptr: 1)
+      extern cu_real_t *d_window_noise_scale;
       void update_active_atoms(); // copies the window's atoms to d_active_atoms when it changes
       extern std::vector<int> active_ranges; // the window's atoms as [first, last+1) pairs
       extern int active_window_version;      // incremented when the window changes
@@ -220,7 +222,8 @@ namespace vcuda{
             material_parameters_t * material_params,
             int * material,
             int n_atoms,
-            const int * active);
+            const int * active,
+            const cu_real_t * noise_scale);
 
       __global__ void update_applied_fields_kernel(
             cu_real_t * x_field_array, cu_real_t * y_field_array, cu_real_t * z_field_array,

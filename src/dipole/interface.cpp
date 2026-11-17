@@ -108,6 +108,19 @@ namespace dipole{
          return true;
       }
       //-------------------------------------------------------------------
+      test="field-cells";
+      if(word==test){
+         // cells in which the field is calculated: all, or only those without magnetic atoms (probe cells)
+         if(value == "all"){ dipole::internal::probe_cells_only = false; return true; }
+         if(value == "probe"){ dipole::internal::probe_cells_only = true; return true; }
+         terminaltextcolor(RED);
+         std::cerr << "Error - value for \'dipole:" << word << "\' must be one of:" << std::endl;
+         std::cerr << "\t\"all\"" << std::endl;
+         std::cerr << "\t\"probe\"" << std::endl;
+         terminaltextcolor(WHITE);
+         err::vexit();
+      }
+      //-------------------------------------------------------------------
       test="atomistic-tensor-enabled";
       if(word==test){
          dipole::atomsitic_tensor_enabled=true;

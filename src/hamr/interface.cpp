@@ -232,6 +232,33 @@ namespace hamr{
          return true;
       }
       //--------------------------------------------------------------------
+      test="active-window-margin";
+      if(word==test){
+         double d = atof(value.c_str());
+         vin::check_for_valid_value(d, word, line, prefix, unit, "length", 0.0, 1.0e5,"input","0.0 - 10 micrometres");
+         hamr::internal::active_window_margin = d;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-buffer";
+      if(word==test){
+         double d = atof(value.c_str());
+         vin::check_for_valid_value(d, word, line, prefix, unit, "length", 0.0, 1.0e5,"input","0.0 - 10 micrometres");
+         hamr::internal::active_window_buffer = d;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="active-window-buffer-damping";
+      if(word==test){
+         double a = atof(value.c_str());
+         vin::check_for_valid_value(a, word, line, prefix, unit, "none", 0.0, 1.0e3,"input","0.0 - 1000");
+         hamr::internal::active_window_buffer_damping = a;
+         hamr::internal::active_window_options_set = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="active-window-temperature";
       if(word==test){
          double T = atof(value.c_str());

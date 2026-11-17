@@ -50,6 +50,7 @@ namespace program
       electrical_pulse = 17,
       field_pulse = 18,
       laser_electrical_pulse = 19,
+      dipole_field = 20,
 
       // diagnostics
       diagnostic_boltzmann = 50,
@@ -174,6 +175,7 @@ namespace program
    extern void local_field_cool();
    extern void temperature_pulse();
    extern void hamr();
+   extern void dipole_field();
    extern void cmc_anisotropy();
    extern void hybrid_cmc();
    extern void reverse_hybrid_cmc();
