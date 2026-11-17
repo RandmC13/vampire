@@ -1,0 +1,136 @@
+#===================================================
+# Capped granular FePt HAMR medium (three-track interference study)
+#
+# FePt grains (three sublattice materials of the rocksalt supercell, which
+# bonds category 3 to categories 1 and 2): exchange 6.8e-21 J per bond as in
+# the published simple cubic FePt model (Tc about 715 K on this lattice; the
+# earlier value 5.6e-21 J gives about 590 K), moment 2.02 muB (1.2 MA/m),
+# anisotropy 1.5e-22 J per atom.
+# Co3Pt-like continuous cap, 2 nm: exchange 1.05e-20 J (Tc about 1110 K),
+# moment 2.07 muB (1.1 MA/m at 300 K), anisotropy 1.43e-23 J per atom
+# (Hk 1.2 T at 300 K), coupled to the grains with 20 % of the FePt exchange.
+# Non-magnetic fill between the grains, and a non-magnetic sensor layer
+# 4 nm above the cap for the read-back field.
+# Starting state: magnetised along +z (DC erased).
+#===================================================
+material:num-materials=8
+#---------------------------------------------------
+# Material 1 FePt sublattice 1
+#---------------------------------------------------
+material[1]:material-name=FePt1
+material[1]:damping-constant=0.1
+material[1]:exchange-matrix-1st-nn[3] = 6.8e-21
+material[1]:exchange-matrix-1st-nn[8] = 1.36e-21
+material[1]:atomic-spin-moment=2.02178132413 !muB
+material[1]:uniaxial-anisotropy-constant=15.0e-23
+material[1]:material-element=Fe
+material[1]:minimum-height=0.0
+material[1]:maximum-height=0.588235
+material[1]:unit-cell-category = 1
+material[1]:initial-spin-direction = 0,0,1
+material[1]:core-shell-size = 1.0
+#---------------------------------------------------
+# Material 2 FePt sublattice 2
+#---------------------------------------------------
+material[2]:material-name=FePt2
+material[2]:damping-constant=0.1
+material[2]:exchange-matrix-1st-nn[3] = 6.8e-21
+material[2]:exchange-matrix-1st-nn[8] = 1.36e-21
+material[2]:atomic-spin-moment=2.02178132413 !muB
+material[2]:uniaxial-anisotropy-constant=15.0e-23
+material[2]:material-element=Fe
+material[2]:minimum-height=0.0
+material[2]:maximum-height=0.588235
+material[2]:unit-cell-category = 2
+material[2]:initial-spin-direction = 0,0,1
+material[2]:core-shell-size = 1.0
+#---------------------------------------------------
+# Material 3 FePt sublattice 3
+#---------------------------------------------------
+material[3]:material-name=FePt3
+material[3]:damping-constant=0.1
+material[3]:exchange-matrix-1st-nn[1] = 6.8e-21
+material[3]:exchange-matrix-1st-nn[2] = 6.8e-21
+material[3]:exchange-matrix-1st-nn[6] = 1.36e-21
+material[3]:exchange-matrix-1st-nn[7] = 1.36e-21
+material[3]:atomic-spin-moment=2.02178132413 !muB
+material[3]:uniaxial-anisotropy-constant=15.0e-23
+material[3]:material-element=Fe
+material[3]:minimum-height=0.0
+material[3]:maximum-height=0.588235
+material[3]:unit-cell-category = 3
+material[3]:initial-spin-direction = 0,0,1
+material[3]:core-shell-size = 1.0
+#---------------------------------------------------
+# Material 4 intergranular fill (FePt layer only)
+#---------------------------------------------------
+material[4]:material-name="fill"
+material[4]:non-magnetic=keep
+material[4]:fill-space
+material[4]:density = 0.01
+material[4]:minimum-height=0.0
+material[4]:maximum-height=0.588235
+material[4]:material-element="H"
+material[4]:initial-spin-direction = 0,0,1
+material[4]:unit-cell-category = 1
+#---------------------------------------------------
+# Material 5 sensor (read-back) layer, non-magnetic, 16-17 nm
+#---------------------------------------------------
+material[5]:material-name="sensor"
+material[5]:non-magnetic=keep
+material[5]:damping-constant=1.0
+material[5]:atomic-spin-moment=2.02178132413 !muB
+material[5]:uniaxial-anisotropy-constant=0.0
+material[5]:material-element=Ag
+material[5]:minimum-height=0.941176
+material[5]:maximum-height=1.0
+material[5]:unit-cell-category = 3
+material[5]:initial-spin-direction = 0,0,1
+material[5]:continuous = true
+#---------------------------------------------------
+# Material 6 cap sublattice 1
+#---------------------------------------------------
+material[6]:material-name=Co3Pt1
+material[6]:damping-constant=0.1
+material[6]:exchange-matrix-1st-nn[3] = 1.36e-21
+material[6]:exchange-matrix-1st-nn[8] = 1.05e-20
+material[6]:atomic-spin-moment=2.07 !muB
+material[6]:uniaxial-anisotropy-constant=1.43e-23
+material[6]:material-element=Co
+material[6]:minimum-height=0.588235
+material[6]:maximum-height=0.705882
+material[6]:unit-cell-category = 1
+material[6]:initial-spin-direction = 0,0,1
+material[6]:continuous = true
+#---------------------------------------------------
+# Material 7 cap sublattice 2
+#---------------------------------------------------
+material[7]:material-name=Co3Pt2
+material[7]:damping-constant=0.1
+material[7]:exchange-matrix-1st-nn[3] = 1.36e-21
+material[7]:exchange-matrix-1st-nn[8] = 1.05e-20
+material[7]:atomic-spin-moment=2.07 !muB
+material[7]:uniaxial-anisotropy-constant=1.43e-23
+material[7]:material-element=Co
+material[7]:minimum-height=0.588235
+material[7]:maximum-height=0.705882
+material[7]:unit-cell-category = 2
+material[7]:initial-spin-direction = 0,0,1
+material[7]:continuous = true
+#---------------------------------------------------
+# Material 8 cap sublattice 3
+#---------------------------------------------------
+material[8]:material-name=Co3Pt3
+material[8]:damping-constant=0.1
+material[8]:exchange-matrix-1st-nn[1] = 1.36e-21
+material[8]:exchange-matrix-1st-nn[2] = 1.36e-21
+material[8]:exchange-matrix-1st-nn[6] = 1.05e-20
+material[8]:exchange-matrix-1st-nn[7] = 1.05e-20
+material[8]:atomic-spin-moment=2.07 !muB
+material[8]:uniaxial-anisotropy-constant=1.43e-23
+material[8]:material-element=Co
+material[8]:minimum-height=0.588235
+material[8]:maximum-height=0.705882
+material[8]:unit-cell-category = 3
+material[8]:initial-spin-direction = 0,0,1
+material[8]:continuous = true

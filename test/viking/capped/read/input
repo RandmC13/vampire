@@ -1,0 +1,62 @@
+#------------------------------------------------------------------------------
+# Capped three-track HAMR read-back: the dipole field in the sensor layer 4 nm
+# above the cap, for the state after one track (its checkpoint files renamed to
+# vampire<rank>.chk by capped-read.job), with the tensor solver on 1 nm cells
+# and the periodic images of the film (periodic along x and y).
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# Creation attributes
+#------------------------------------------------------------------------------
+create:crystal-structure = rocksalt-supercell
+create:granular-film
+create:grain-tessellation = voronoi
+create:grain-periodic-boundaries
+create:grain-shape-output
+create:grain-statistics-output
+create:grain-size = 6.0 !nm
+create:grain-size-distribution = normal
+create:grain-size-sd = 0.15
+create:grain-spacing = 1.0 !nm
+create:grain-structure-random-seed = 243831
+create:grain-height = 10 !nm
+create:voronoi-elliptical-rounding = 0.5
+create:voronoi-elliptical-rounding-height = 0.6
+create:periodic-boundaries = xy
+# fill atoms independent of the number of processes, so that the read can load the checkpoints on any number
+create:decomposition-independent-random
+
+exchange:interaction-range = 1.0
+exchange:function = shell
+
+#------------------------------------------------------------------------------
+# System dimensions: x down-track (1000 nm), y cross-track (3 tracks of 32 nm
+# and a 16 nm guard band on each side), z 10 nm grains + 2 nm cap + 4 nm gap +
+# 1 nm sensor
+#------------------------------------------------------------------------------
+dimensions:unit-cell-size = 10.0 !A
+dimensions:system-size-x = 1000 !nm
+dimensions:system-size-y = 130 !nm
+dimensions:system-size-z = 17 !nm
+
+material:file = capped.mat
+
+#------------------------------------------------------------------------------
+# Program: the dipole field of the loaded state, once
+#------------------------------------------------------------------------------
+sim:program = dipole-field
+sim:integrator = llg-heun
+sim:temperature = 300.0
+sim:time-step = 1.0 !fs
+sim:load-checkpoint = restart
+
+cells:macro-cell-size = 1.0 !nm
+cells:probe-non-magnetic-cells
+dipole:solver = tensor
+dipole:field-cells = probe
+dipole:output-dipole-field
+
+output:column-headers
+output:real-time
+output:magnetisation
+output:material-magnetisation

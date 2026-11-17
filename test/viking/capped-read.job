@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-capped-read
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=1
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Capped three-track HAMR read-back (inputs in test/viking/capped/read): for the
+# state after each track, the dipole field in the sensor layer (program
+# dipole-field, tensor solver with periodic images, probe cells only) with the
+# CPU MPI version on all ranks of the job, from that track's checkpoint files
+# of the write. Submitted by capped-submit.sh after the write. Results in
+# $WORK/capped/read-track<n>/dipole-field.txt.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/capped-common.sh
+
+if [ ! -f $CAP/write/done ]; then echo "Error: the write is not complete (no $CAP/write/done)"; exit 1; fi
+bin=$CAP/bin/vampire-parallel
+[ -x $bin ] || build parallel vampire-parallel $bin
+
+n=$(cat $CAP/write/ranks.txt)
+for track in 1 2 3; do
+   [ -f $CAP/write/vampire0-track$track.chk ] || continue   # the test writes two tracks
+   dir=$CAP/read-track$track
+   stage_dir read $dir
+   for ((r = 0; r < n; r++)); do cp $CAP/write/vampire$r-track$track.chk $dir/vampire$r.chk; done
+   cd $dir
+   start=$(date +%s)
+   mpirun --bind-to core -np $SLURM_NTASKS $SAMPLE $bin > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+   echo "read after track $track: $(( $(date +%s) - start )) s on $SLURM_NTASKS ranks" | tee time.txt
+   rm -f vampire*.chk   # copies of the write's checkpoint files
+done

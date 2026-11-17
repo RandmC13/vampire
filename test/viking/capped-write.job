@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=vampire-capped-write
+#SBATCH --account=VIKING_ACCOUNT
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=96G
+#------------------------------------------------------------------------------
+#
+#   This file is part of the VAMPIRE open source package under the
+#   Free BSD licence (see licence file for details).
+#
+#------------------------------------------------------------------------------
+# Capped three-track HAMR write (inputs in test/viking/capped/write), one
+# segment: the multi-GPU version in single precision with the active window,
+# one rank per GPU of the job. The first segment starts the write; each later
+# one continues it from the last checkpoint (every 250,000 steps), so the write
+# runs over as many jobs of the time limit as it needs. A segment started after
+# the write has finished does nothing. Submitted by capped-submit.sh. Results
+# in $WORK/capped/write: the time series of each segment (output.segment<n>,
+# grain.txt.segment<n>; the running segment's without the suffix), spin
+# snapshots, and the checkpoint files of the state after each track
+# (vampire<rank>-track<n>.chk) for capped-read.job.
+#------------------------------------------------------------------------------
+source $REPO/test/viking/capped-common.sh
+export MPIRUN=$REPO/test/viking/mgpu-launch.sh
+
+dir=$CAP/write
+if [ -f $dir/done ]; then echo "The write is complete; nothing to do."; exit 0; fi
+
+bin=$CAP/bin/vampire-mgpu-sp
+[ -x $bin ] || build cuda-multigpu vampire-cuda-multigpu $bin CUDA_ARCH=-arch=native CUDA_PR=-DCUDA_SP
+
+if [ ! -f $dir/segment.txt ]; then
+   stage_dir write $dir
+   echo "gpu:skip-non-magnetic-atoms" >> $dir/input
+   [ $SLURM_JOB_NUM_NODES -gt 1 ] && echo "sim:mpi-ppn = $SLURM_NTASKS_PER_NODE" >> $dir/input
+   echo $SLURM_NTASKS > $dir/ranks.txt
+   segment=1
+else
+   n=$(cat $dir/ranks.txt)
+   if [ "$n" != "$SLURM_NTASKS" ]; then echo "Error: the write runs on $n processes, this job has $SLURM_NTASKS"; exit 1; fi
+   rm -f $dir/vampire*.chk.tmp   # a checkpoint the previous segment did not finish writing
+   checkpoints_consistent $dir $n || exit 1
+   grep -q '^sim:load-checkpoint = continue' $dir/input || echo "sim:load-checkpoint = continue" >> $dir/input
+   segment=$(( $(cat $dir/segment.txt) + 1 ))
+   # the continued simulation writes new time series and logs: keep those of the previous segment
+   for f in output grain.txt log stdout; do [ -f $dir/$f ] && mv $dir/$f $dir/$f.segment$(( segment - 1 )); done
+fi
+echo $segment > $dir/segment.txt
+
+cd $dir
+start=$(date +%s)
+MPI_OPTS="--map-by ppr:$SLURM_NTASKS_PER_NODE:node" $MPIRUN -np $SLURM_NTASKS $SAMPLE $bin > stdout 2>&1 || { tail -n 30 stdout; exit 1; }
+echo "segment $segment: $(( $(date +%s) - start )) s on $SLURM_NTASKS GPUs ($(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1))" | tee -a time.txt
+if grep -q "Simulation ended gracefully" stdout; then
+   touch done
+   mv output output.segment$segment; mv grain.txt grain.txt.segment$segment
+   echo "The write is complete."
+fi

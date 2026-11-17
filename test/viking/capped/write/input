@@ -1,0 +1,110 @@
+#------------------------------------------------------------------------------
+# Capped three-track HAMR write: 1000 x 130 x 17 nm granular FePt film (10 nm
+# grains, 2 nm Co3Pt-like cap, sensor layer 4 nm above the cap for the read),
+# three tracks of 71 bits written in the order 2, 1, 3 at 22 m/s, the state
+# after each track saved for the read-back (capped-read.job).
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# Creation attributes
+#------------------------------------------------------------------------------
+create:crystal-structure = rocksalt-supercell
+create:granular-film
+create:grain-tessellation = voronoi
+create:grain-periodic-boundaries
+create:grain-shape-output
+create:grain-statistics-output
+create:grain-size = 6.0 !nm
+create:grain-size-distribution = normal
+create:grain-size-sd = 0.15
+create:grain-spacing = 1.0 !nm
+create:grain-structure-random-seed = 243831
+create:grain-height = 10 !nm
+create:voronoi-elliptical-rounding = 0.5
+create:voronoi-elliptical-rounding-height = 0.6
+create:periodic-boundaries = xy
+# fill atoms independent of the number of processes, so that the read can load the checkpoints on any number
+create:decomposition-independent-random
+
+exchange:interaction-range = 1.0
+exchange:function = shell
+
+#------------------------------------------------------------------------------
+# System dimensions: x down-track (1000 nm), y cross-track (3 tracks of 32 nm
+# and a 16 nm guard band on each side), z 10 nm grains + 2 nm cap + 4 nm gap +
+# 1 nm sensor
+#------------------------------------------------------------------------------
+dimensions:unit-cell-size = 10.0 !A
+dimensions:system-size-x = 1000 !nm
+dimensions:system-size-y = 130 !nm
+dimensions:system-size-z = 17 !nm
+
+material:file = capped.mat
+
+#------------------------------------------------------------------------------
+# Simulation attributes: 300 K base, laser peak 800 K (about 85 K above the
+# FePt Tc), head field 0.8 T switched between -0.8 and +0.8 T with the bits
+# (both limits given, so that the ramp is between 0 and 0.8 T), 1 fs steps,
+# 50 ps equilibration at 300 K from the DC erased state
+#------------------------------------------------------------------------------
+sim:equilibration-temperature = 300.0
+sim:equilibration-time-steps = 50000
+sim:minimum-temperature = 300.0
+sim:maximum-temperature = 800.0
+sim:minimum-applied-field-strength = 0.0 !T
+sim:maximum-applied-field-strength = 0.8 !T
+sim:applied-field-unit-vector = 0,0,1
+sim:time-step = 1.0 !fs
+sim:time-steps-increment = 1
+sim:program = hamr-simulation
+sim:integrator = llg-heun
+
+# checkpoints every 250,000 steps for the continuation in the next job (and a complete one at the end)
+sim:save-checkpoint = continuous
+sim:save-checkpoint-rate = 250000
+
+#------------------------------------------------------------------------------
+# HAMR head: thermal spot 28 nm FWHM, field box 4 x the bit (56 x 128 nm) 10 nm
+# behind the spot, field rise and fall 0.1 ns, bits of 14 nm (2 grain pitches)
+# on tracks of 32 nm (4.6 grain pitches); tracks 1 and 3 single tone with two
+# bits per transition, track 2 one bit per transition
+#------------------------------------------------------------------------------
+hamr:head-speed = 22 !m/s
+hamr:laser-FWHM-x = 28 !nm
+hamr:laser-FWHM-y = 28 !nm
+hamr:head-field-x = 56 !nm
+hamr:head-field-y = 128 !nm
+hamr:NPS = 10 !nm
+hamr:field-rise-time = 1.0e-10 !s
+hamr:field-fall-time = 1.0e-10 !s
+hamr:bit-size = 14 !nm
+hamr:track-size = 32 !nm
+hamr:track-padding = 16 !nm
+hamr:number-of-bits = 213
+hamr:bit-sequence-type = user-defined
+hamr:bit-sequence = 1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1
+hamr:track-order = 2,1,3
+hamr:save-track-states
+hamr:active-window
+
+#------------------------------------------------------------------------------
+# Data output: every 10 ps; spin snapshots every 1 ns (window snapshots) and
+# after each track
+#------------------------------------------------------------------------------
+output:column-headers
+output:real-time
+output:temperature
+output:applied-field-strength
+output:magnetisation
+output:material-magnetisation
+output:output-rate = 10000
+
+grain:real-time
+grain:temperature
+grain:magnetisation
+grain:output-rate = 10000
+
+config:atoms
+config:output-format = binary
+config:output-mode = file-per-process
+config:atoms-output-rate = 1000000

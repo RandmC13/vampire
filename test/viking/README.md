@@ -129,3 +129,30 @@ partitions allow too few jobs per user for the chain. `scale-collect.sh` packs t
 home, where hamrvis's viewer tests pick them up from `bundles/h3-scale-window` and
 `bundles/h3-scale-full`.
 
+
+## Capped three-track HAMR run
+
+A 1000 x 130 x 17 nm granular FePt film with a 2 nm continuous Co3Pt-like cap
+and a non-magnetic sensor layer 4 nm above it (inputs in `capped/`): three
+tracks of 71 bits written in the order 2, 1, 3 at 22 m/s with the active
+window, and the read-back field in the sensor layer after each track.
+
+    test/viking/capped-submit.sh --dry-run    # 40 nm film, fast head, gpu_short and test partitions
+    test/viking/capped-submit.sh --test       # two tracks on a 100 x 98 nm film, physics of the run, 2 H100 (TEST_GPUS=a40: 6 A40), ~2.5 h
+    test/viking/capped-submit.sh              # the run
+
+- `capped-write.job`: the write on 2 A40 nodes (6 GPUs), multi-GPU version in
+  single precision. It is submitted as `SEGMENTS` jobs of 3 days (default 4),
+  each depending on the previous one (`afterany`); every segment after the
+  first checks that all processes' checkpoints are at the same step and
+  continues from them (checkpoints every 250,000 steps). A segment that starts
+  after the write has finished does nothing. The time series of each segment
+  are kept as `output.segment<n>` and `grain.txt.segment<n>`; the state after
+  each track is kept as `vampire<rank>-track<n>.chk` and a spin snapshot.
+- `capped-read.job`: for each track, the program `dipole-field` with the
+  tensor solver (periodic images, probe cells only) on 10 CPU nodes, from that
+  track's checkpoint files. Results in `read-track<n>/dipole-field.txt`.
+- `capped-collect.sh`: packs logs, time series, grain files, snapshot meta
+  files and the read-back fields (not the checkpoints or spin data).
+
+Results in `$WORK/capped`; about 150 GB of scratch at the end.
