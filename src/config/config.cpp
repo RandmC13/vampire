@@ -26,6 +26,27 @@ namespace config
 {
 
 //------------------------------------------------------------------------------
+// Function to write a spin snapshot now, independent of the output rate (for
+// programs that need the state at a chosen point, e.g. the end of a HAMR track)
+//------------------------------------------------------------------------------
+void output_snapshot(){
+
+   if(config::internal::output_atoms_config == false) return;
+   if(!config::internal::initialised) config::internal::initialize();
+
+   // If using GPU acceleration then synchonise spins from device
+   gpu::config::synchronise();
+   //Always output coordinates the first time (re-)started, otherwise the spins coordinates won't be printed
+   if(config::internal::output_rate_counter_coords == 0){
+      config::internal::atoms_coords();
+      if(atoms::num_non_magnetic_atoms > 0) config::internal::atoms_non_magnetic();
+   }
+   config::internal::atoms(true); // a window snapshot if possible
+   config::internal::output_rate_counter_coords++;
+
+}
+
+//------------------------------------------------------------------------------
 // Function to output atomic and cell coordinates to disk
 //------------------------------------------------------------------------------
 void output(){ // should include variables for data to be outputted, eg spins, cells etc

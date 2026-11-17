@@ -9,6 +9,7 @@
 
 // C++ standard library headers
 #include <iostream>
+#include <sstream>
 
 // Vampire headers
 #include "errors.hpp"
@@ -111,6 +112,30 @@ namespace hamr{
 
       // Check that provided bit sequence is consistent with input data and system dimensions
       hamr::internal::check_sequence_length();
+
+      // Order in which the tracks are written (hamr:track-order): by default in order of their position across the
+      // film, otherwise every track exactly once
+      if(hamr::internal::track_order.empty()){
+         for(int track = 0; track < hamr::internal::num_tracks; track++) hamr::internal::track_order.push_back(track);
+      }
+      else{
+         std::vector<int> times_listed(hamr::internal::num_tracks, 0);
+         bool valid = int(hamr::internal::track_order.size()) == hamr::internal::num_tracks;
+         for(const int track : hamr::internal::track_order){
+            if(track >= hamr::internal::num_tracks) valid = false;
+            else times_listed[track]++;
+         }
+         for(const int n : times_listed) if(n != 1) valid = false;
+         if(!valid){
+            std::ostringstream message;
+            message << "Error - hamr:track-order must list each of the " << hamr::internal::num_tracks << " tracks of this system (1 to "
+                    << hamr::internal::num_tracks << ") exactly once.";
+            err::fatal(message.str());
+         }
+      }
+      zlog << zTs() << "Tracks written in the order:";
+      for(const int track : hamr::internal::track_order) zlog << " " << track + 1;
+      zlog << std::endl;
 
       // Set initialised flag
       hamr::internal::initialised = true;

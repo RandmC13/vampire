@@ -122,6 +122,6 @@ namespace vutil{
 
 // Checkpoint load/save functions
 void load_checkpoint();
-void save_checkpoint();
+void save_checkpoint(const std::string& suffix = ""); // file vampire<rank><suffix>.chk
 
 #endif //VUTIL_H_

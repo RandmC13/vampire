@@ -51,6 +51,8 @@ namespace hamr{
       double H_fall_time = 1.0e-12;
       double NPS = 0.0; // NFT to pole spacing
       double track_padding = 0.0;
+      std::vector<int> track_order; // tracks (counted from 0) in the order they are written; empty: in order of position
+      bool save_track_states = false;
       std::vector<int> bit_sequence;
 
       int num_local_atoms;

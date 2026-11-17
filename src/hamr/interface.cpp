@@ -145,6 +145,25 @@ namespace hamr{
          return true;
       }
       //--------------------------------------------------------------------
+      test="track-order";
+      if(word==test){
+         // tracks numbered from 1 in the input, stored from 0; checked against the number of tracks in initialize()
+         const std::vector<int> order = vin::integers_from_string(value);
+         hamr::internal::track_order.clear();
+         for(int track : order){
+            vin::check_for_valid_int(track, word, line, prefix, 1, 1000, "input", "1 - 1000");
+            hamr::internal::track_order.push_back(track - 1);
+         }
+         hamr::internal::enabled = true;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="save-track-states";
+      if(word==test){
+         hamr::internal::save_track_states = vin::check_for_valid_bool(value, word, line, prefix, "input");
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="bit-sequence-type";
       if(word==test){
          // single-tone sequence automatically defined given bit_size, track_size and system dimensions

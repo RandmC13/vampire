@@ -90,6 +90,8 @@ namespace hamr{
       extern double H_fall_time;  /// Fall time in trapezoidal time profile of external field
       extern double NPS;  /// NFT to pole spacing
       extern double track_padding;  ///spacing between edges of the system in y-direction and track(s)
+      extern std::vector<int> track_order; /// tracks (counted from 0) in the order they are written
+      extern bool save_track_states; /// spin snapshot and checkpoint copy at the end of each track
       extern std::vector<int> bit_sequence;  /// vector to store bits
 
       extern int num_local_atoms;
@@ -118,6 +120,7 @@ namespace hamr{
       extern double resume_H_applied;
       extern uint64_t resume_steps;
       void skip_simulated_step();
+      void save_track_state(const int track);
 
       //-----------------------------------------------------------------------------
       // Active window (active_window.cpp)

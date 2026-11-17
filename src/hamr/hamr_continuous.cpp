@@ -104,7 +104,11 @@ namespace hamr{
       sim::total_time = total_final_time - sim::equilibration_time; // update global value of total time, needed for output of atomic configurations
       while(sim::time < total_sim_time){ // loop over whole time
 
-         track = int(round(bit_tot/n_bits_per_track));
+         // tracks are written in the order of hamr:track-order; written_tracks of them are complete
+         const int written_tracks = bit_tot/n_bits_per_track;
+         track = hamr::internal::track_order[written_tracks];
+         // at least one step of this track is simulated by this run (not skipped when continuing from a checkpoint)
+         bool track_simulated = false;
          // Set head position at beginning of track
          hamr::internal::head_position_x +=Deltax; //= head_position_initial + BL*bit;
          hamr::internal::head_position_y = TW*(0.5 + track) + padding;
@@ -121,6 +125,7 @@ namespace hamr{
             // step already simulated before the checkpoint this simulation continues from
             if(hamr::internal::resume_steps > 0) hamr::internal::skip_simulated_step();
             else{
+               track_simulated = true;
 
                // Switch off external field
                sim::H_applied = 0.0;
@@ -153,12 +158,15 @@ namespace hamr{
                // step already simulated before the checkpoint this simulation continues from
                if(hamr::internal::resume_steps > 0) hamr::internal::skip_simulated_step();
                else{
+                  track_simulated = true;
 
                   // Move head along downtrack
                   hamr::internal::head_position_x += Deltax;
 
                   // Determine field polarisation within bit
-                  const double H_app_dir = static_cast<double>(hamr::internal::bit_sequence[bit_tot]);
+                  // the bits of each track are listed in hamr:bit-sequence in order of track position
+                  const int bit_index = track*n_bits_per_track + bit_tot - written_tracks*n_bits_per_track;
+                  const double H_app_dir = static_cast<double>(hamr::internal::bit_sequence[bit_index]);
                   // Update applied field value depending on trapezoidal time profile
                   const double H_app_abs = fabs(sim::H_applied) + hamr::internal::update_field_time_trapz_profile(tmp_bit_time, rise_time, fall_time, bit_time);
                   // Determine sign of applied field
@@ -178,7 +186,7 @@ namespace hamr{
             } // end of loop over single bit region
 
             // Print update on screen and log file
-            zlog << zTs() << "Written bit " << bit_tot+1 << " : bit " << bit_tot - track*n_bits_per_track + 1 << " on track " << track+1 <<  std::endl;
+            zlog << zTs() << "Written bit " << bit_tot+1 << " : bit " << bit_tot - written_tracks*n_bits_per_track + 1 << " on track " << track+1 <<  std::endl;
             zlog << zTs() << "Head moving to position: " << (hamr::internal::head_position_x+Deltax)*0.1 << " nm, " << hamr::internal::head_position_y*0.1 << " nm" << std::endl;
 
             bit_tot++;
@@ -194,6 +202,7 @@ namespace hamr{
             // step already simulated before the checkpoint this simulation continues from
             if(hamr::internal::resume_steps > 0) hamr::internal::skip_simulated_step();
             else{
+               track_simulated = true;
 
                // Switch off external field
                sim::H_applied = 0.0;
@@ -212,6 +221,9 @@ namespace hamr{
             tmp_track_time++;
          } // end of loop over head outside track region
          zlog << zTs() << "Head position at end of track " << track+1 << " : " << (hamr::internal::head_position_x+Deltax)*0.1 << ", " << hamr::internal::head_position_y*0.1 << " nm" << std::endl;
+
+         // state after each track (hamr:save-track-states), written once even if the simulation is continued
+         if(hamr::internal::save_track_states && track_simulated) hamr::internal::save_track_state(track);
 
          // Reset head position in downtrack once a track has been written
          hamr::internal::head_position_x = head_position_initial;

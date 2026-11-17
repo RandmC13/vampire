@@ -166,9 +166,10 @@ namespace{
 }
 
 //-----------------------------------------------------------------------------
-// Function to save checkpoint file
+// Function to save checkpoint file vampire<rank><suffix>.chk (the file loaded by
+// sim:load-checkpoint has no suffix)
 //-----------------------------------------------------------------------------
-void save_checkpoint(){
+void save_checkpoint(const std::string& suffix){
 
    // For gpu acceleration get statistics from device
    if(gpu::acceleration) gpu::stats::get();
@@ -190,7 +191,7 @@ void save_checkpoint(){
 
    // determine checkpoint file name
    std::stringstream chkfilenamess;
-   chkfilenamess << "vampire" << vmpi::my_rank << ".chk";
+   chkfilenamess << "vampire" << vmpi::my_rank << suffix << ".chk";
    std::string chkfilename = chkfilenamess.str();
 
    // open checkpoint file

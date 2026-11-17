@@ -9,12 +9,16 @@
 
 // C++ standard library headers
 #include <iostream>
+#include <sstream>
 
 // Vampire headers
+#include "config.hpp"
 #include "errors.hpp"
+#include "gpu.hpp"
 #include "hamr.hpp"
 #include "sim.hpp"
 #include "vio.hpp"
+#include "vutil.hpp"
 
 // hamr module headers
 #include "internal.hpp"
@@ -35,6 +39,23 @@ namespace hamr{
             sim::H_applied = resume_H_applied;
             zlog << zTs() << "HAMR simulation continued from checkpoint at head position " << head_position_x*0.1 << " nm" << std::endl;
          }
+      }
+
+      //------------------------------------------------------------------------
+      // Function to write the state after a track has been written
+      // (hamr:save-track-states): a spin snapshot and a copy of the checkpoint,
+      // vampire<rank>-track<n>.chk, which loads like any checkpoint once
+      // renamed to vampire<rank>.chk
+      //------------------------------------------------------------------------
+      void save_track_state(const int track){
+         config::output_snapshot();
+         // spins on the host are not kept up to date when statistics are calculated on the GPU
+         if(gpu::acceleration) gpu::transfer_spin_positions_from_gpu_to_cpu();
+         std::ostringstream suffix;
+         suffix << "-track" << track + 1;
+         ::save_checkpoint(suffix.str());
+         if(gpu::acceleration) gpu::invalidate_host_spins();
+         zlog << zTs() << "State after track " << track + 1 << " saved (spin snapshot and vampire<rank>" << suffix.str() << ".chk)" << std::endl;
       }
 
    } // end of internal namespace
