@@ -9,14 +9,14 @@
 # Viking:
 #
 #   capped-write    the write on 2 A40 nodes (6 GPUs), as SEGMENTS jobs of 3 days
-#                   (default 4), each continuing the previous one (afterany)
+#                   (default 3), each continuing the previous one (afterany)
 #   capped-read     the read-back after each of the three tracks, CPU MPI
 #                   version on 10 nodes, after the last write segment
 #
 # A write segment that starts after the write has finished does nothing. With
 # --dry-run the same jobs run on a 40 nm long film with a fast head on the
 # gpu_short (one A40) and test partitions, to check the chain first. With
-# --test they write two tracks on a 98 nm wide film, TEST_LENGTH nm long
+# --test they write two tracks on a 77.6 nm wide film, TEST_LENGTH nm long
 # (default 100), with the physics of the run (one write job of at most 4
 # hours; about 2.5 hours at 100 nm on 2 H100), on TEST_GPUS: h100:N (default
 # h100:2) or a40:N on one node, or a40:6 on two nodes.
@@ -72,7 +72,7 @@ elif [ $mode = test ]; then
 else
    write="--partition=gpu --nodes=2 --ntasks-per-node=3 --gres=gpu:3 --time=3-00:00:00"
    read="--partition=nodes --nodes=10 --ntasks-per-node=96 --time=06:00:00"
-   segments=${SEGMENTS:-4}
+   segments=${SEGMENTS:-3}
 fi
 id=$(sbatch $opts $write capped-write.job)
 echo "write segment 1: job $id"

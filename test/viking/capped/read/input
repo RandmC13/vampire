@@ -14,14 +14,14 @@ create:grain-tessellation = voronoi
 create:grain-periodic-boundaries
 create:grain-shape-output
 create:grain-statistics-output
-create:grain-size = 6.0 !nm
+create:grain-size = 5.0 !nm
 create:grain-size-distribution = normal
 create:grain-size-sd = 0.15
 create:grain-spacing = 1.0 !nm
 create:grain-structure-random-seed = 243831
-create:grain-height = 10 !nm
+create:grain-height = 12 !nm
 create:voronoi-elliptical-rounding = 0.5
-create:voronoi-elliptical-rounding-height = 0.6
+create:voronoi-elliptical-rounding-height = 0.5
 create:periodic-boundaries = xy
 # fill atoms independent of the number of processes, so that the read can load the checkpoints on any number
 create:decomposition-independent-random
@@ -30,13 +30,13 @@ exchange:interaction-range = 1.0
 exchange:function = shell
 
 #------------------------------------------------------------------------------
-# System dimensions: x down-track (1000 nm), y cross-track (3 tracks of 32 nm
-# and a 16 nm guard band on each side), z 10 nm grains + 2 nm cap + 4 nm gap +
-# 1 nm sensor
+# System dimensions: x down-track (681 nm), y cross-track (3 tracks of 21.8 nm
+# and a 16 nm guard band on each side), z 10 nm grains + 2 nm cap on each grain
+# (grain height 12 nm) + 4 nm gap + 1 nm sensor
 #------------------------------------------------------------------------------
 dimensions:unit-cell-size = 10.0 !A
-dimensions:system-size-x = 1000 !nm
-dimensions:system-size-y = 130 !nm
+dimensions:system-size-x = 681 !nm
+dimensions:system-size-y = 99.4 !nm
 dimensions:system-size-z = 17 !nm
 
 material:file = capped.mat

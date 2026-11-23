@@ -12,7 +12,7 @@
 #            the home directory (default ~/scratch/vampire-benchmarks); the files
 #            of this run go to $WORK/capped
 #   CAP_MODE full (the run), dry-run (40 nm long film, fast head) or test (two
-#            tracks on a 98 nm wide film, TEST_LENGTH nm long, default 100);
+#            tracks on a 77.6 nm wide film, TEST_LENGTH nm long, default 100);
 #            set by capped-submit.sh
 #   MODULES  modules to load instead of the defaults below
 #------------------------------------------------------------------------------
@@ -42,22 +42,26 @@ build(){
 
 # stage_dir <stage> <directory>: a new run directory with the input and material file of <stage> (write or
 # read); the dry run shortens the film to 40 nm (two bits per track), moves the head at 2000 m/s and writes
-# checkpoints and snapshots more often; the test writes two tracks on a 98 nm wide film (2 tracks of 32 nm and
-# the guard bands) of TEST_LENGTH nm (default 100: 7 bits per track), track 1 (one bit per transition) and then
-# its neighbour, track 2 (two bits per transition), with the physics of the run, and a spin snapshot every 0.25 ns
+# checkpoints and snapshots more often; the test writes two tracks on a 77.6 nm wide film (2 tracks of 21.8 nm
+# and the guard bands) of TEST_LENGTH nm (default 100: 9 bits per track), track 1 and then its neighbour, track 2,
+# each with the first bits of its sequence in the run, with the physics of the run, and a spin snapshot every 0.25 ns
 stage_dir(){
    mkdir -p $2
    cp $INPUTS/$1/* $2/
    if [ $MODE = test ]; then
       local length=${TEST_LENGTH:-100}
       # bits per track as the hamr module counts them: floor((length - 1 A)/bit size)
-      local n=$(( (length*10 - 1) / 140 )) i seq=""
-      for ((i = 0; i < n; i++)); do seq+="$(( i % 2 ? -1 : 1 )),"; done
-      for ((i = 0; i < n; i++)); do seq+="$(( i / 2 % 2 ? -1 : 1 )),"; done
-      printf '%s\n' "" "# test: two tracks of $n bits on a $length x 98 nm film" \
-         "dimensions:system-size-x = $length !nm" "dimensions:system-size-y = 98 !nm" >> $2/input
-      [ $1 = write ] && printf '%s\n' "hamr:number-of-bits = $((2*n))" "hamr:bit-sequence = ${seq%,}" \
-         "hamr:track-order = 1,2" "config:atoms-output-rate = 250000" >> $2/input
+      local n=$(( (length*10 - 1) / 100 )) per_track seq
+      printf '%s\n' "" "# test: two tracks of $n bits on a $length x 77.6 nm film" \
+         "dimensions:system-size-x = $length !nm" "dimensions:system-size-y = 77.6 !nm" >> $2/input
+      if [ $1 = write ]; then
+         # the first n bits of tracks 1 and 2 of the run's sequence
+         per_track=$(( $(sed -n 's/^hamr:number-of-bits = //p' $2/input) / 3 ))
+         seq=$(sed -n 's/^hamr:bit-sequence = //p' $2/input | awk -F, -v n=$n -v p=$per_track \
+            '{ s = $1; for(i = 2; i <= n; i++) s = s "," $i; for(i = 1; i <= n; i++) s = s "," $(p + i); print s }')
+         printf '%s\n' "hamr:number-of-bits = $((2*n))" "hamr:bit-sequence = $seq" \
+            "hamr:track-order = 1,2" "config:atoms-output-rate = 250000" >> $2/input
+      fi
    fi
    if [ $MODE = dry-run ]; then
       printf '%s\n' "" "# dry run: 40 nm long film, fast head, short equilibration" \

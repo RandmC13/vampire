@@ -1,8 +1,8 @@
 #------------------------------------------------------------------------------
-# Capped three-track HAMR write: 1000 x 130 x 17 nm granular FePt film (10 nm
-# grains, 2 nm Co3Pt-like cap, sensor layer 4 nm above the cap for the read),
-# three tracks of 71 bits written in the order 2, 1, 3 at 22 m/s, the state
-# after each track saved for the read-back (capped-read.job).
+# Capped three-track HAMR write: 681 x 99.4 x 17 nm granular FePt film (5 nm
+# grains, each with a 2 nm Co3Pt-like cap, sensor layer 4 nm above the caps for
+# the read), three tracks of 68 bits (PRBS5) written in the order 2, 1, 3 at
+# 22 m/s, the state after each track saved for the read-back (capped-read.job).
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
@@ -14,14 +14,14 @@ create:grain-tessellation = voronoi
 create:grain-periodic-boundaries
 create:grain-shape-output
 create:grain-statistics-output
-create:grain-size = 6.0 !nm
+create:grain-size = 5.0 !nm
 create:grain-size-distribution = normal
 create:grain-size-sd = 0.15
 create:grain-spacing = 1.0 !nm
 create:grain-structure-random-seed = 243831
-create:grain-height = 10 !nm
+create:grain-height = 12 !nm
 create:voronoi-elliptical-rounding = 0.5
-create:voronoi-elliptical-rounding-height = 0.6
+create:voronoi-elliptical-rounding-height = 0.5
 create:periodic-boundaries = xy
 # fill atoms independent of the number of processes, so that the read can load the checkpoints on any number
 create:decomposition-independent-random
@@ -30,13 +30,14 @@ exchange:interaction-range = 1.0
 exchange:function = shell
 
 #------------------------------------------------------------------------------
-# System dimensions: x down-track (1000 nm), y cross-track (3 tracks of 32 nm
-# and a 16 nm guard band on each side), z 10 nm grains + 2 nm cap + 4 nm gap +
-# 1 nm sensor
+# System dimensions: x down-track (681 nm: 68 bits of 10 nm), y cross-track
+# (3 tracks of 21.8 nm and a 16 nm guard band on each side), z 10 nm grains +
+# 2 nm cap (grain height 12 nm, so that the cap follows the rounded grain top) +
+# 4 nm gap + 1 nm sensor
 #------------------------------------------------------------------------------
 dimensions:unit-cell-size = 10.0 !A
-dimensions:system-size-x = 1000 !nm
-dimensions:system-size-y = 130 !nm
+dimensions:system-size-x = 681 !nm
+dimensions:system-size-y = 99.4 !nm
 dimensions:system-size-z = 17 !nm
 
 material:file = capped.mat
@@ -64,27 +65,30 @@ sim:save-checkpoint = continuous
 sim:save-checkpoint-rate = 250000
 
 #------------------------------------------------------------------------------
-# HAMR head: thermal spot 50 nm FWHM, so that with the 800 K peak the region hot
-# enough to write (within about 10 K of the FePt Tc) is about 28 nm across, as
-# wide as a track; field box 4 x the bit (56 x 128 nm) 10 nm behind the spot,
-# field rise and fall 0.1 ns, bits of 14 nm (2 grain pitches)
-# on tracks of 32 nm (4.6 grain pitches); tracks 1 and 3 single tone with two
-# bits per transition, track 2 one bit per transition
+# HAMR head: thermal spot 40 nm FWHM, so that with the 800 K peak the region
+# hot enough to write (within about 10 K of the FePt Tc) is about 22 nm across,
+# one track; field box 4 x the bit and 4 x the track (40 x 87 nm) 10 nm behind
+# the spot, field rise and fall 0.1 ns, bits of 10 nm (2 grain pitches) on
+# tracks of 21.8 nm (4.5 grain pitches). Bits: PRBS5 (x^5 + x^3 + 1), each track
+# 3 lead-in bits, two periods (62 bits) and 3 trailing bits of one continuous
+# cyclic sequence, shifted by 0, 10 and 21 bits on tracks 1, 2 and 3. Bits
+# freeze about 11 nm behind their nominal cell, so the first bit of a track
+# lands off the film; the lead-in and trailing bits are not data.
 #------------------------------------------------------------------------------
 hamr:head-speed = 22 !m/s
-hamr:laser-FWHM-x = 50 !nm
-hamr:laser-FWHM-y = 50 !nm
-hamr:head-field-x = 56 !nm
-hamr:head-field-y = 128 !nm
+hamr:laser-FWHM-x = 40 !nm
+hamr:laser-FWHM-y = 40 !nm
+hamr:head-field-x = 40 !nm
+hamr:head-field-y = 87 !nm
 hamr:NPS = 10 !nm
 hamr:field-rise-time = 1.0e-10 !s
 hamr:field-fall-time = 1.0e-10 !s
-hamr:bit-size = 14 !nm
-hamr:track-size = 32 !nm
+hamr:bit-size = 10 !nm
+hamr:track-size = 21.8 !nm
 hamr:track-padding = 16 !nm
-hamr:number-of-bits = 213
+hamr:number-of-bits = 204
 hamr:bit-sequence-type = user-defined
-hamr:bit-sequence = 1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,-1,1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1,-1,1,1,-1
+hamr:bit-sequence = 1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1,-1,1,-1,1,1,-1,-1,1,1,1,1,1,-1,-1,-1,1,1,-1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1,-1
 hamr:track-order = 2,1,3
 hamr:save-track-states
 hamr:active-window

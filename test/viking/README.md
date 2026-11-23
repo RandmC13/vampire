@@ -132,17 +132,17 @@ home, where hamrvis's viewer tests pick them up from `bundles/h3-scale-window` a
 
 ## Capped three-track HAMR run
 
-A 1000 x 130 x 17 nm granular FePt film with a 2 nm continuous Co3Pt-like cap
-and a non-magnetic sensor layer 4 nm above it (inputs in `capped/`): three
-tracks of 71 bits written in the order 2, 1, 3 at 22 m/s with the active
-window, and the read-back field in the sensor layer after each track.
+A 681 x 99.4 x 17 nm granular FePt film, each grain with a 2 nm Co3Pt-like cap,
+and a non-magnetic sensor layer 4 nm above the caps (inputs in `capped/`):
+three tracks of 68 bits (PRBS5) written in the order 2, 1, 3 at 22 m/s with
+the active window, and the read-back field in the sensor layer after each track.
 
     test/viking/capped-submit.sh --dry-run    # 40 nm film, fast head, gpu_short and test partitions
-    test/viking/capped-submit.sh --test       # two tracks on a 98 nm wide film (TEST_LENGTH nm, default 100), physics of the run, TEST_GPUS (default h100:2)
+    test/viking/capped-submit.sh --test       # two tracks on a 77.6 nm wide film (TEST_LENGTH nm, default 100), physics of the run, TEST_GPUS (default h100:2)
     test/viking/capped-submit.sh              # the run
 
 - `capped-write.job`: the write on 2 A40 nodes (6 GPUs), multi-GPU version in
-  single precision. It is submitted as `SEGMENTS` jobs of 3 days (default 4),
+  single precision. It is submitted as `SEGMENTS` jobs of 3 days (default 3),
   each depending on the previous one (`afterany`); every segment after the
   first checks that all processes' checkpoints are at the same step and
   continues from them (checkpoints every 250,000 steps). A segment that starts

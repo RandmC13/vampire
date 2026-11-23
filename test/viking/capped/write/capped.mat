@@ -6,7 +6,7 @@
 # the published simple cubic FePt model (Tc about 715 K on this lattice; the
 # earlier value 5.6e-21 J gives about 590 K), moment 2.02 muB (1.2 MA/m),
 # anisotropy 1.5e-22 J per atom.
-# Co3Pt-like continuous cap, 2 nm: exchange 1.05e-20 J (Tc about 1110 K),
+# Co3Pt-like cap, 2 nm on each grain: exchange 1.05e-20 J (Tc about 1110 K),
 # moment 2.07 muB (1.1 MA/m at 300 K), anisotropy 1.43e-23 J per atom
 # (Hk 1.2 T at 300 K), coupled to the grains with 20 % of the FePt exchange.
 # Non-magnetic fill between the grains, and a non-magnetic sensor layer
@@ -101,7 +101,6 @@ material[6]:minimum-height=0.588235
 material[6]:maximum-height=0.705882
 material[6]:unit-cell-category = 1
 material[6]:initial-spin-direction = 0,0,1
-material[6]:continuous = true
 #---------------------------------------------------
 # Material 7 cap sublattice 2
 #---------------------------------------------------
@@ -116,7 +115,6 @@ material[7]:minimum-height=0.588235
 material[7]:maximum-height=0.705882
 material[7]:unit-cell-category = 2
 material[7]:initial-spin-direction = 0,0,1
-material[7]:continuous = true
 #---------------------------------------------------
 # Material 8 cap sublattice 3
 #---------------------------------------------------
@@ -133,4 +131,3 @@ material[8]:minimum-height=0.588235
 material[8]:maximum-height=0.705882
 material[8]:unit-cell-category = 3
 material[8]:initial-spin-direction = 0,0,1
-material[8]:continuous = true
