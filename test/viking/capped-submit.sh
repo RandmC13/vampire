@@ -8,10 +8,10 @@
 # Submits the capped three-track HAMR run (inputs in test/viking/capped) on
 # Viking:
 #
-#   capped-write    the write on 2 A40 nodes (6 GPUs), as SEGMENTS jobs of 3 days
+#   capped-write    the write on one node with 2 H100, as SEGMENTS jobs of 3 days
 #                   (default 3), each continuing the previous one (afterany)
 #   capped-read     the read-back after each of the three tracks, CPU MPI
-#                   version on 10 nodes, after the last write segment
+#                   version on one node, after the last write segment
 #
 # A write segment that starts after the write has finished does nothing. With
 # --dry-run the same jobs run on a 40 nm long film with a fast head on the
@@ -70,8 +70,8 @@ elif [ $mode = test ]; then
    read="--partition=nodes --nodes=1 --ntasks-per-node=96 --time=01:00:00"
    segments=${SEGMENTS:-1}
 else
-   write="--partition=gpu --nodes=2 --ntasks-per-node=3 --gres=gpu:3 --time=3-00:00:00"
-   read="--partition=nodes --nodes=10 --ntasks-per-node=96 --time=06:00:00"
+   write="--partition=gpuplus --nodes=1 --ntasks-per-node=2 --gres=gpu:2 --time=3-00:00:00"
+   read="--partition=nodes --nodes=1 --ntasks-per-node=96 --time=06:00:00"
    segments=${SEGMENTS:-3}
 fi
 id=$(sbatch $opts $write capped-write.job)

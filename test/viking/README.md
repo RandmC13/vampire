@@ -141,7 +141,7 @@ the active window, and the read-back field in the sensor layer after each track.
     test/viking/capped-submit.sh --test       # two tracks on a 77.6 nm wide film (TEST_LENGTH nm, default 100), physics of the run, TEST_GPUS (default h100:2)
     test/viking/capped-submit.sh              # the run
 
-- `capped-write.job`: the write on 2 A40 nodes (6 GPUs), multi-GPU version in
+- `capped-write.job`: the write on one node with 2 H100 GPUs, multi-GPU version in
   single precision. It is submitted as `SEGMENTS` jobs of 3 days (default 3),
   each depending on the previous one (`afterany`); every segment after the
   first checks that all processes' checkpoints are at the same step and
@@ -150,9 +150,9 @@ the active window, and the read-back field in the sensor layer after each track.
   are kept as `output.segment<n>` and `grain.txt.segment<n>`; the state after
   each track is kept as `vampire<rank>-track<n>.chk` and a spin snapshot.
 - `capped-read.job`: for each track, the program `dipole-field` with the
-  tensor solver (periodic images, probe cells only) on 10 CPU nodes, from that
+  tensor solver (periodic images, probe cells only) on one CPU node, from that
   track's checkpoint files. Results in `read-track<n>/dipole-field.txt`.
 - `capped-collect.sh`: packs logs, time series, grain files, snapshot meta
   files and the read-back fields (not the checkpoints or spin data).
 
-Results in `$WORK/capped`; about 150 GB of scratch at the end.
+Results in `$WORK/capped`; about 30 GB of scratch at the end.
