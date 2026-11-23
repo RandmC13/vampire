@@ -14,14 +14,16 @@
 #   test/local/capped-demo-read.sh <vampire-parallel or vampire-serial> [run directory]
 #
 # Build with make parallel (or make serial). With the parallel version the read
-# runs on NP processes (default: the number of cores) with mpirun.
+# runs on NP processes (default: the number of physical cores, which is what
+# mpirun allows without oversubscribing) with mpirun.
 #------------------------------------------------------------------------------
 set -eu
 exe=$(realpath "${1:?usage: capped-demo-read.sh <vampire binary> [run directory]}")
 run=$(realpath "${2:-capped-demo}")
 inputs=$(dirname "$(realpath "$0")")/../viking/capped/read
 launch=""
-case $(basename "$exe") in *parallel*) launch="mpirun -np ${NP:-$(nproc)}";; esac
+cores=$(lscpu -p=Core,Socket 2> /dev/null | grep -v "^#" | sort -u | wc -l)
+case $(basename "$exe") in *parallel*) launch="mpirun -np ${NP:-${cores:-1}}";; esac
 found=0
 for track in 1 2 3; do
    ls "$run"/vampire*-track$track.chk > /dev/null 2>&1 || continue
