@@ -108,6 +108,8 @@ output:output-rate = 10000
 grain:real-time
 grain:temperature
 grain:magnetisation
+# per grain and material, so that the cap and the FePt of each grain can be told apart
+grain:material-magnetisation
 grain:output-rate = 10000
 
 config:atoms
